@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from './lib/supabase'
+import { processResourceImage } from './lib/imageUtils'
 
 export default function AdminDashboard({ profile, onClose }) {
   const [activeTab, setActiveTab] = useState('categories')
@@ -205,31 +206,42 @@ export default function AdminDashboard({ profile, onClose }) {
   async function handleApproveSuggestion(suggestion) {
     setLoading(true)
     
-    const { error: resourceError } = await supabase
-      .from('resources')
-      .insert({
-        procedure_id: suggestion.procedure_id,
-        title: suggestion.title,
-        url: suggestion.url,
-        description: suggestion.description,
-        resource_type: 'video',
-        curated_by: profile.id,
-        suggested_by: suggestion.suggested_by
-      })
-    
-    if (!resourceError) {
-      await supabase
-        .from('resource_suggestions')
-        .update({
-          status: 'approved',
-          reviewed_by: profile.id,
-          reviewed_at: new Date().toISOString()
+    try {
+      const { error: resourceError } = await supabase
+        .from('resources')
+        .insert({
+          procedure_id: suggestion.procedure_id,
+          title: suggestion.title,
+          url: suggestion.url,
+          description: suggestion.description,
+          resource_type: suggestion.resource_type || 'video',
+          image_url: suggestion.image_url || null, // Include image_url if available
+          keywords: suggestion.keywords || null, // Include keywords if available
+          curated_by: profile.id,
+          suggested_by: suggestion.suggested_by
         })
-        .eq('id', suggestion.id)
-      
-      loadSuggestions()
+        
+      if (!resourceError) {
+        await supabase
+          .from('resource_suggestions')
+          .update({
+            status: 'approved',
+            reviewed_by: profile.id,
+            reviewed_at: new Date().toISOString()
+          })
+          .eq('id', suggestion.id)
+        
+        loadSuggestions()
+      } else {
+        console.error('Error approving suggestion:', resourceError)
+        alert('Error approving suggestion: ' + resourceError.message)
+      }
+    } catch (error) {
+      console.error('Error approving suggestion:', error)
+      alert('Error approving suggestion: ' + error.message)
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
   
   async function handleRejectSuggestion(suggestionId) {
@@ -494,12 +506,32 @@ function SuggestionsList({ suggestions, loading, onApprove, onReject }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
       {suggestions.map(sug => (
         <div key={sug.id} className="card" style={{ cursor: 'default' }}>
+          {/* Image Preview */}
+          {sug.image_url && (
+            <div style={{ marginBottom: '12px', width: '100%', aspectRatio: '16/9', maxHeight: '225px', borderRadius: '8px', overflow: 'hidden', backgroundColor: '#f0f0f0' }}>
+              <img 
+                src={sug.image_url} 
+                alt={sug.title}
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              />
+            </div>
+          )}
+          
           <div style={{ marginBottom: '12px' }}>
             <strong>{sug.title}</strong>
             <div style={{ fontSize: '13px', color: '#666', marginTop: '4px' }}>
               Procedure: {sug.procedure?.name}<br />
               Suggested by: {sug.suggested_by?.email}<br />
+              Type: {sug.resource_type || 'video'}<br />
               URL: <a href={sug.url} target="_blank" rel="noopener noreferrer">{sug.url}</a>
+              {sug.description && (
+                <>
+                  <br />
+                  <div style={{ marginTop: '8px', padding: '8px', backgroundColor: '#f8f9fa', borderRadius: '4px' }}>
+                    {sug.description}
+                  </div>
+                </>
+              )}
             </div>
           </div>
           <div style={{ display: 'flex', gap: '12px' }}>
