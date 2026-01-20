@@ -4,8 +4,8 @@
  */
 
 const TARGET_WIDTH = 800;
-const TARGET_HEIGHT = 450;
-const TARGET_ASPECT_RATIO = TARGET_WIDTH / TARGET_HEIGHT; // 16:9
+const TARGET_HEIGHT = 800;
+const TARGET_ASPECT_RATIO = TARGET_WIDTH / TARGET_HEIGHT; // 1:1 (square)
 const MAX_FILE_SIZE_MB = 2; // Max input file size in MB
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 const TARGET_QUALITY = 0.85; // WebP quality (0-1)

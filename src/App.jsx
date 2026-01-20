@@ -784,10 +784,10 @@ function UserView({ resources, favorites, notes, showFavoritesOnly, searchTerm, 
       </div>
 
       {/* Two-column layout: Categories on left, Search & Resources on right */}
-      <div className="flex gap-6">
+      <div className="flex flex-col lg:flex-row gap-6">
         {/* Left Sidebar - Categories */}
-        <div className="w-64 flex-shrink-0">
-          <div className="glass rounded-2xl p-4 shadow-lg sticky top-4">
+        <div className="w-full lg:w-64 flex-shrink-0">
+          <div className="glass rounded-2xl p-4 shadow-lg lg:sticky lg:top-4">
             <h3 className="text-lg font-bold text-gray-900 mb-4">Categories</h3>
             {organizedCategories.length === 0 ? (
               <p className="text-sm text-gray-500">No categories available</p>
@@ -1232,17 +1232,17 @@ function ResourceCard({ resource, isFavorited, note, onToggleFavorite, onUpdateN
       style={{ animationDelay: `${index * 0.1}s` }}
     >
       {/* Image - Always shown (required field) */}
-      <div className="w-full overflow-hidden bg-gray-100" style={{ aspectRatio: '16/9' }}>
+      <div className="w-full overflow-hidden bg-gray-100" style={{ aspectRatio: '1/1' }}>
         {resource.image_url ? (
           <img 
             src={resource.image_url} 
             alt={resource.title}
             className="w-full h-full object-cover"
-            style={{ aspectRatio: '16/9', width: '100%', height: 'auto' }}
+            style={{ aspectRatio: '1/1', width: '100%', height: 'auto' }}
             loading="lazy"
           />
         ) : (
-          <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center" style={{ aspectRatio: '16/9' }}>
+          <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center" style={{ aspectRatio: '1/1' }}>
             <FileText size={32} className="text-gray-400" />
           </div>
         )}
@@ -1393,18 +1393,18 @@ function AdminResourceCard({ resource, onEdit, onDelete, index }) {
       style={{ animationDelay: `${index * 0.05}s` }}
     >
       <div className="flex gap-6">
-        {/* Image - Uniform 16:9 aspect ratio */}
-        <div className="w-48 flex-shrink-0 rounded-xl overflow-hidden bg-gray-100" style={{ aspectRatio: '16/9' }}>
+        {/* Image - Uniform 1:1 aspect ratio (square) */}
+        <div className="w-48 flex-shrink-0 rounded-xl overflow-hidden bg-gray-100" style={{ aspectRatio: '1/1' }}>
           {resource.image_url ? (
             <img 
               src={resource.image_url} 
               alt={resource.title}
               className="w-full h-full object-cover"
-              style={{ aspectRatio: '16/9' }}
+              style={{ aspectRatio: '1/1' }}
               loading="lazy"
             />
           ) : (
-            <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center" style={{ aspectRatio: '16/9' }}>
+            <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center" style={{ aspectRatio: '1/1' }}>
               <FileText size={24} className="text-gray-400" />
             </div>
           )}
@@ -1516,11 +1516,17 @@ function AddResourceModal({ currentUser, onSubmit, onClose }) {
   async function loadInitialData() {
     try {
       setLoadingData(true);
+      setImageError(''); // Clear any previous errors
+      
       // Load all specialties
-      const { data: specialtiesData } = await supabase
+      const { data: specialtiesData, error: specialtiesError } = await supabase
         .from('specialties')
         .select('*')
         .order('order');
+      
+      if (specialtiesError) {
+        throw new Error(`Failed to load specialties: ${specialtiesError.message}`);
+      }
       
       setSpecialties(specialtiesData || []);
 
@@ -1529,11 +1535,15 @@ function AddResourceModal({ currentUser, onSubmit, onClose }) {
         setSelectedSpecialty(String(currentUser.specialtyId));
         
         // Load subspecialties for this specialty
-        const { data: subspecialtiesData } = await supabase
+        const { data: subspecialtiesData, error: subspecialtiesError } = await supabase
           .from('subspecialties')
           .select('*')
           .eq('specialty_id', currentUser.specialtyId)
           .order('order');
+        
+        if (subspecialtiesError) {
+          throw new Error(`Failed to load subspecialties: ${subspecialtiesError.message}`);
+        }
         
         setSubspecialties(subspecialtiesData || []);
         
@@ -1541,19 +1551,25 @@ function AddResourceModal({ currentUser, onSubmit, onClose }) {
           setSelectedSubspecialty(String(currentUser.subspecialtyId));
           
           // Load categories for the subspecialty
-          const { data: categoriesData } = await supabase
+          const { data: categoriesData, error: categoriesError } = await supabase
             .from('categories')
             .select('*')
             .eq('subspecialty_id', currentUser.subspecialtyId)
             .is('parent_category_id', null)
             .order('order');
           
+          if (categoriesError) {
+            throw new Error(`Failed to load categories: ${categoriesError.message}`);
+          }
+          
           setCategories(categoriesData || []);
         }
       }
     } catch (error) {
       console.error('Error loading initial data:', error);
-      setImageError('Error loading form data. Please try again.');
+      const errorMessage = error.message || 'Unknown error occurred';
+      setImageError(`Error loading form data: ${errorMessage}`);
+      alert(`Error loading form data:\n\n${errorMessage}\n\nPlease check the browser console for more details.`);
     } finally {
       setLoadingData(false);
     }
@@ -1743,6 +1759,12 @@ function AddResourceModal({ currentUser, onSubmit, onClose }) {
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Add New Resource</h2>
           <p className="text-gray-600 mb-6">Add a surgical technique resource to the library</p>
           
+          {imageError && (
+            <div className="mb-4 p-4 bg-red-50 border-2 border-red-200 rounded-xl">
+              <p className="text-sm text-red-700 font-medium">{imageError}</p>
+            </div>
+          )}
+          
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* Specialty/Subspecialty Selection */}
             <div className="bg-purple-50 rounded-xl p-4 border-2 border-purple-200">
@@ -1880,16 +1902,16 @@ function AddResourceModal({ currentUser, onSubmit, onClose }) {
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Resource Image * 
-                <span className="text-xs font-normal text-gray-500 ml-2">(Max 2MB, will be resized to 800x450px - wide rectangular format)</span>
+                <span className="text-xs font-normal text-gray-500 ml-2">(Max 2MB, will be resized to 800x800px - square format)</span>
               </label>
               
               {processingImage ? (
-                <div className="flex flex-col items-center justify-center w-full border-2 border-dashed border-purple-300 rounded-xl bg-purple-50" style={{ aspectRatio: '16/9', minHeight: '180px' }}>
+                <div className="flex flex-col items-center justify-center w-full border-2 border-dashed border-purple-300 rounded-xl bg-purple-50" style={{ aspectRatio: '1/1', minHeight: '180px' }}>
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mb-2"></div>
                   <span className="text-sm text-gray-600">Processing image...</span>
                 </div>
               ) : imagePreview ? (
-                <div className="relative" style={{ aspectRatio: '16/9' }}>
+                <div className="relative" style={{ aspectRatio: '1/1' }}>
                   <img src={imagePreview} alt="Preview" className="w-full h-full object-cover rounded-xl border-2 border-gray-200" />
                   <button
                     type="button"
@@ -1906,7 +1928,7 @@ function AddResourceModal({ currentUser, onSubmit, onClose }) {
                     <X size={16} />
                   </button>
                   <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/70 text-white text-xs rounded">
-                    800x450px (16:9)
+                    800x800px (1:1)
                   </div>
                 </div>
               ) : (
@@ -1916,7 +1938,7 @@ function AddResourceModal({ currentUser, onSubmit, onClose }) {
                       ? 'border-purple-500 bg-purple-100 scale-105' 
                       : 'border-gray-300 hover:border-purple-500 bg-gray-50'
                   }`}
-                  style={{ aspectRatio: '16/9', minHeight: '180px' }}
+                  style={{ aspectRatio: '1/1', minHeight: '180px' }}
                   onDragEnter={handleDragEnter}
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
@@ -1926,7 +1948,7 @@ function AddResourceModal({ currentUser, onSubmit, onClose }) {
                   <span className={`text-sm font-medium transition-colors ${isDragging ? 'text-purple-700' : 'text-gray-600'}`}>
                     {isDragging ? 'Drop image here' : 'Click to upload or drag & drop'}
                   </span>
-                  <span className="text-xs text-gray-500 mt-1">Wide rectangular format (16:9)</span>
+                  <span className="text-xs text-gray-500 mt-1">Square format (1:1)</span>
                   <span className="text-xs text-gray-400 mt-0.5">PNG, JPG, WEBP (Max 2MB)</span>
                   <input 
                     type="file" 
@@ -2508,16 +2530,16 @@ function SuggestResourceModal({ currentUser, onSubmit, onClose }) {
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Resource Image * 
-                <span className="text-xs font-normal text-gray-500 ml-2">(Max 2MB, will be resized to 800x450px - wide rectangular format)</span>
+                <span className="text-xs font-normal text-gray-500 ml-2">(Max 2MB, will be resized to 800x800px - square format)</span>
               </label>
               
               {processingImage ? (
-                <div className="flex flex-col items-center justify-center w-full border-2 border-dashed border-purple-300 rounded-xl bg-purple-50" style={{ aspectRatio: '16/9', minHeight: '180px' }}>
+                <div className="flex flex-col items-center justify-center w-full border-2 border-dashed border-purple-300 rounded-xl bg-purple-50" style={{ aspectRatio: '1/1', minHeight: '180px' }}>
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mb-2"></div>
                   <span className="text-sm text-gray-600">Processing image...</span>
                 </div>
               ) : imagePreview ? (
-                <div className="relative" style={{ aspectRatio: '16/9' }}>
+                <div className="relative" style={{ aspectRatio: '1/1' }}>
                   <img src={imagePreview} alt="Preview" className="w-full h-full object-cover rounded-xl border-2 border-gray-200" />
                   <button
                     type="button"
@@ -2533,7 +2555,7 @@ function SuggestResourceModal({ currentUser, onSubmit, onClose }) {
                     <X size={16} />
                   </button>
                   <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/70 text-white text-xs rounded">
-                    800x450px (16:9)
+                    800x800px (1:1)
                   </div>
                 </div>
               ) : (
@@ -2543,7 +2565,7 @@ function SuggestResourceModal({ currentUser, onSubmit, onClose }) {
                       ? 'border-purple-500 bg-purple-100 scale-105' 
                       : 'border-gray-300 hover:border-purple-500 bg-gray-50'
                   }`}
-                  style={{ aspectRatio: '16/9', minHeight: '180px' }}
+                  style={{ aspectRatio: '1/1', minHeight: '180px' }}
                   onDragEnter={handleDragEnter}
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
@@ -2553,7 +2575,7 @@ function SuggestResourceModal({ currentUser, onSubmit, onClose }) {
                   <span className={`text-sm font-medium transition-colors ${isDragging ? 'text-purple-700' : 'text-gray-600'}`}>
                     {isDragging ? 'Drop image here' : 'Click to upload or drag & drop'}
                   </span>
-                  <span className="text-xs text-gray-500 mt-1">Wide rectangular format (16:9)</span>
+                  <span className="text-xs text-gray-500 mt-1">Square format (1:1)</span>
                   <span className="text-xs text-gray-400 mt-0.5">PNG, JPG, WEBP (Max 2MB)</span>
                   <input 
                     type="file" 
@@ -2803,12 +2825,12 @@ function EditResourceModal({ resource, onSubmit, onClose }) {
               </label>
               
               {processingImage ? (
-                <div className="flex flex-col items-center justify-center w-full border-2 border-dashed border-purple-300 rounded-xl bg-purple-50" style={{ aspectRatio: '16/9', minHeight: '180px' }}>
+                <div className="flex flex-col items-center justify-center w-full border-2 border-dashed border-purple-300 rounded-xl bg-purple-50" style={{ aspectRatio: '1/1', minHeight: '180px' }}>
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mb-2"></div>
                   <span className="text-sm text-gray-600">Processing image...</span>
                 </div>
               ) : imagePreview ? (
-                <div className="relative" style={{ aspectRatio: '16/9' }}>
+                <div className="relative" style={{ aspectRatio: '1/1' }}>
                   <img src={imagePreview} alt="Preview" className="w-full h-full object-cover rounded-xl border-2 border-gray-200" />
                   <button
                     type="button"
@@ -2818,7 +2840,7 @@ function EditResourceModal({ resource, onSubmit, onClose }) {
                     <X size={16} />
                   </button>
                   <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/70 text-white text-xs rounded">
-                    800x450px (16:9)
+                    800x800px (1:1)
                   </div>
                   <label className="absolute bottom-2 right-2 px-3 py-1.5 bg-purple-600 text-white text-xs rounded-lg cursor-pointer hover:bg-purple-700 transition-colors">
                     Change Image
@@ -2837,7 +2859,7 @@ function EditResourceModal({ resource, onSubmit, onClose }) {
                       ? 'border-purple-500 bg-purple-100 scale-105 shadow-lg' 
                       : 'border-gray-300 hover:border-purple-500 bg-gray-50'
                   }`}
-                  style={{ aspectRatio: '16/9', minHeight: '180px' }}
+                  style={{ aspectRatio: '1/1', minHeight: '180px' }}
                   onDragEnter={handleDragEnter}
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
@@ -2847,7 +2869,7 @@ function EditResourceModal({ resource, onSubmit, onClose }) {
                   <span className={`text-sm font-medium transition-colors ${isDragging ? 'text-purple-700' : 'text-gray-600'}`}>
                     {isDragging ? 'Drop image here' : 'Click to upload or drag & drop'}
                   </span>
-                  <span className="text-xs text-gray-500 mt-1">Wide rectangular format (16:9)</span>
+                  <span className="text-xs text-gray-500 mt-1">Square format (1:1)</span>
                   <span className="text-xs text-gray-400 mt-0.5">PNG, JPG, WEBP (Max 2MB)</span>
                   <input 
                     type="file" 
