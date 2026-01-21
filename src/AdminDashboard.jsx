@@ -217,6 +217,7 @@ export default function AdminDashboard({ profile, onClose }) {
           resource_type: suggestion.resource_type || 'video',
           image_url: suggestion.image_url || null, // Include image_url if available
           keywords: suggestion.keywords || null, // Include keywords if available
+          duration_seconds: suggestion.resource_type === 'video' ? (suggestion.duration_seconds || null) : null,
           curated_by: profile.id,
           suggested_by: suggestion.suggested_by
         })

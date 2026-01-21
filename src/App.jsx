@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Video, FileText, Link, Plus, Star, Edit, Trash2, StickyNote, ArrowRight, Sparkles, LogOut, Upload, X, Search, BarChart3, TrendingUp, GripVertical } from 'lucide-react';
+import { Video, FileText, Link, Plus, Star, Heart, Edit, Trash2, StickyNote, ArrowRight, Sparkles, LogOut, Upload, X, Search, BarChart3, TrendingUp, GripVertical } from 'lucide-react';
 import { supabase } from './lib/supabase';
 import { 
   initAnalyticsSession, 
@@ -199,6 +199,7 @@ function SurgicalTechniquesApp() {
           resource_type: resourceData.type,
           image_url: imageUrl,
           keywords: resourceData.keywords || null,
+          duration_seconds: resourceData.type === 'video' ? resourceData.duration_seconds || null : null,
           curated_by: currentUser.id,
           is_sponsored: false
         }]);
@@ -257,6 +258,7 @@ function SurgicalTechniquesApp() {
           resource_type: resourceData.type || 'video',
           image_url: imageUrl,
           keywords: resourceData.keywords || null,
+          duration_seconds: resourceData.type === 'video' ? resourceData.duration_seconds || null : null,
           suggested_by: currentUser.id,
           status: 'pending'
         }]);
@@ -309,6 +311,7 @@ function SurgicalTechniquesApp() {
           resource_type: resourceData.type,
           image_url: imageUrl,
           keywords: resourceData.keywords || null,
+          duration_seconds: resourceData.type === 'video' ? resourceData.duration_seconds || null : null,
         })
         .eq('id', resourceId);
 
@@ -586,6 +589,7 @@ function SurgicalTechniquesApp() {
             onUpdateNote={updateNote}
             onSuggestResource={() => setShowSuggestForm(true)}
             onCategorySelect={setSelectedCategoryId}
+            currentUser={currentUser}
           />
         ) : (
           <AdminView
@@ -739,7 +743,7 @@ function LoginView({ onLogin }) {
   );
 }
 
-function UserView({ resources, favorites, notes, showFavoritesOnly, searchTerm, categories, selectedCategoryId, onToggleFavorites, onSearchChange, onToggleFavorite, onUpdateNote, onSuggestResource, onCategorySelect }) {
+function UserView({ resources, favorites, notes, showFavoritesOnly, searchTerm, categories, selectedCategoryId, onToggleFavorites, onSearchChange, onToggleFavorite, onUpdateNote, onSuggestResource, onCategorySelect, currentUser }) {
   // Organize categories hierarchically
   const organizedCategories = useMemo(() => {
     if (!categories || categories.length === 0) return [];
@@ -773,11 +777,11 @@ function UserView({ resources, favorites, notes, showFavoritesOnly, searchTerm, 
             onClick={onToggleFavorites}
             className={`flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 rounded-xl font-medium transition-all text-sm sm:text-base ${
               showFavoritesOnly 
-                ? 'bg-gradient-to-r from-yellow-400 to-orange-400 text-white shadow-lg' 
+                ? 'bg-gradient-to-r from-red-500 to-pink-500 text-white shadow-lg' 
                 : 'glass border hover:border-purple-300'
             }`}
           >
-            <Star size={18} fill={showFavoritesOnly ? 'currentColor' : 'none'} />
+            <Heart size={18} fill={showFavoritesOnly ? 'currentColor' : 'none'} />
             <span>{showFavoritesOnly ? 'All Resources' : 'Favorites'}</span>
           </button>
         </div>
@@ -882,7 +886,7 @@ function UserView({ resources, favorites, notes, showFavoritesOnly, searchTerm, 
               </h3>
               <p className="text-gray-600">
                 {showFavoritesOnly 
-                  ? 'Star some resources to see them here!' 
+                  ? 'Heart some resources to see them here!' 
                   : 'Try adjusting your search or check back later!'}
               </p>
             </div>
@@ -897,6 +901,7 @@ function UserView({ resources, favorites, notes, showFavoritesOnly, searchTerm, 
               onToggleFavorite={onToggleFavorite}
               onUpdateNote={onUpdateNote}
               index={index}
+              currentUser={currentUser}
             />
           ))
         )}
@@ -1129,7 +1134,7 @@ function AnalyticsDashboard({ resources }) {
         <div className="glass rounded-2xl p-6 shadow-lg">
           <div className="flex items-center justify-between mb-2">
             <h4 className="text-sm font-semibold text-gray-600">Total Favorites</h4>
-            <Star size={20} className="text-yellow-500" />
+            <Heart size={20} className="text-red-500" fill="currentColor" />
           </div>
           <p className="text-3xl font-bold text-gray-900">{totalFavorites}</p>
           <p className="text-sm text-gray-500 mt-1">Learning signals</p>
@@ -1181,10 +1186,15 @@ function AnalyticsDashboard({ resources }) {
 
 // Continue in next message due to length...
 
-function ResourceCard({ resource, isFavorited, note, onToggleFavorite, onUpdateNote, index }) {
+function ResourceCard({ resource, isFavorited, note, onToggleFavorite, onUpdateNote, index, currentUser }) {
   const [showNoteInput, setShowNoteInput] = useState(false);
   const [noteText, setNoteText] = useState(note || '');
   const [viewTracked, setViewTracked] = useState(false);
+  const [rating, setRating] = useState(null); // Current user's rating
+  const [averageRating, setAverageRating] = useState(null);
+  const [ratingCount, setRatingCount] = useState(0);
+  const [hoveredStar, setHoveredStar] = useState(0);
+  const [loadingRating, setLoadingRating] = useState(false);
 
   // Track view when card is visible
   useEffect(() => {
@@ -1193,6 +1203,112 @@ function ResourceCard({ resource, isFavorited, note, onToggleFavorite, onUpdateN
       setViewTracked(true);
     }
   }, [resource.id, viewTracked]);
+
+  // Load ratings
+  useEffect(() => {
+    if (!resource.id) return;
+    
+    async function loadRatings() {
+      try {
+        // Load average rating and count
+        const { data: ratingsData, error: ratingsError } = await supabase
+          .from('resource_ratings')
+          .select('rating')
+          .eq('resource_id', resource.id);
+
+        if (ratingsError) throw ratingsError;
+
+        if (ratingsData && ratingsData.length > 0) {
+          const total = ratingsData.reduce((sum, r) => sum + r.rating, 0);
+          const average = total / ratingsData.length;
+          setAverageRating(average);
+          setRatingCount(ratingsData.length);
+        } else {
+          setAverageRating(0);
+          setRatingCount(0);
+        }
+
+        // Load current user's rating
+        if (currentUser?.id) {
+          const { data: userRating, error: userError } = await supabase
+            .from('resource_ratings')
+            .select('rating')
+            .eq('resource_id', resource.id)
+            .eq('user_id', currentUser.id)
+            .single();
+
+          if (userError && userError.code !== 'PGRST116') throw userError; // PGRST116 = no rows returned
+          
+          if (userRating) {
+            setRating(userRating.rating);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading ratings:', error);
+      }
+    }
+
+    loadRatings();
+  }, [resource.id, currentUser?.id]);
+
+  async function handleRateResource(starRating) {
+    if (!currentUser?.id || loadingRating) return;
+
+    try {
+      setLoadingRating(true);
+      
+      // Check if user already rated
+      const { data: existingRating, error: checkError } = await supabase
+        .from('resource_ratings')
+        .select('id')
+        .eq('resource_id', resource.id)
+        .eq('user_id', currentUser.id)
+        .single();
+
+      if (existingRating) {
+        // Update existing rating
+        const { error: updateError } = await supabase
+          .from('resource_ratings')
+          .update({ rating: starRating })
+          .eq('id', existingRating.id);
+
+        if (updateError) throw updateError;
+      } else {
+        // Insert new rating
+        const { error: insertError } = await supabase
+          .from('resource_ratings')
+          .insert([{
+            resource_id: resource.id,
+            user_id: currentUser.id,
+            rating: starRating
+          }]);
+
+        if (insertError) throw insertError;
+      }
+
+      setRating(starRating);
+      
+      // Reload average rating
+      const { data: ratingsData, error: reloadError } = await supabase
+        .from('resource_ratings')
+        .select('rating')
+        .eq('resource_id', resource.id);
+
+      if (reloadError) throw reloadError;
+
+      if (ratingsData && ratingsData.length > 0) {
+        const total = ratingsData.reduce((sum, r) => sum + r.rating, 0);
+        const average = total / ratingsData.length;
+        setAverageRating(average);
+        setRatingCount(ratingsData.length);
+      }
+    } catch (error) {
+      console.error('Error rating resource:', error);
+      alert('Error submitting rating: ' + error.message);
+    } finally {
+      setLoadingRating(false);
+    }
+  }
 
   const getTypeIcon = () => {
     switch(resource.resource_type) {
@@ -1224,31 +1340,44 @@ function ResourceCard({ resource, isFavorited, note, onToggleFavorite, onUpdateN
     setShowNoteInput(false);
   };
 
+  const formatDuration = (seconds) => {
+    if (!seconds) return '';
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    
+    if (hours > 0) {
+      return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+    return `${minutes}:${secs.toString().padStart(2, '0')}`;
+  };
+
   return (
     <div 
-      className={`glass rounded-2xl overflow-hidden shadow-lg card-hover animate-slide-up ${
+      className={`glass rounded-2xl overflow-hidden shadow-lg card-hover animate-slide-up flex flex-col sm:flex-row ${
         resource.is_sponsored ? 'border-l-4 border-yellow-400' : ''
       }`}
       style={{ animationDelay: `${index * 0.1}s` }}
     >
-      {/* Image - Always shown (required field) */}
-      <div className="w-full overflow-hidden bg-gray-100" style={{ aspectRatio: '1/1' }}>
-        {resource.image_url ? (
-          <img 
-            src={resource.image_url} 
-            alt={resource.title}
-            className="w-full h-full object-cover"
-            style={{ aspectRatio: '1/1', width: '100%', height: 'auto' }}
-            loading="lazy"
-          />
-        ) : (
-          <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center" style={{ aspectRatio: '1/1' }}>
-            <FileText size={32} className="text-gray-400" />
-          </div>
-        )}
+      {/* Image - Left side, smaller square */}
+      <div className="w-full sm:w-36 sm:h-36 sm:flex-shrink-0 overflow-hidden bg-gray-100 flex justify-center items-center">
+        <div className="w-full h-full max-w-[140px] max-h-[140px] sm:max-w-[144px] sm:max-h-[144px] mx-auto">
+          {resource.image_url ? (
+            <img 
+              src={resource.image_url} 
+              alt={resource.title}
+              className="w-full h-full object-cover"
+              loading="lazy"
+            />
+          ) : (
+            <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
+              <FileText size={20} className="text-gray-400" />
+            </div>
+          )}
+        </div>
       </div>
 
-      <div className="p-6">
+      <div className="p-4 sm:p-6 flex-1">
         {/* Sponsored Badge */}
         {resource.is_sponsored && (
           <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-700 text-xs font-medium mb-3">
@@ -1261,6 +1390,11 @@ function ResourceCard({ resource, isFavorited, note, onToggleFavorite, onUpdateN
         <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-gradient-to-r ${getTypeColor()} text-white text-sm font-medium mb-4`}>
           {getTypeIcon()}
           <span className="capitalize">{getTypeLabel()}</span>
+          {resource.resource_type === 'video' && resource.duration_seconds && (
+            <span className="ml-2 text-xs bg-white/20 px-2 py-0.5 rounded">
+              {formatDuration(resource.duration_seconds)}
+            </span>
+          )}
         </div>
 
         {/* Title */}
@@ -1268,6 +1402,48 @@ function ResourceCard({ resource, isFavorited, note, onToggleFavorite, onUpdateN
         
         {/* Description */}
         <p className="text-gray-600 text-sm mb-4 leading-relaxed">{resource.description}</p>
+
+        {/* Surgeon Rating */}
+        {currentUser && (
+          <div className="mb-4">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xs font-semibold text-gray-700">Surgeon Rating:</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-0.5">
+                {[1, 2, 3, 4, 5].map((star) => {
+                  const isFilled = hoveredStar ? star <= hoveredStar : (averageRating ? star <= Math.round(averageRating) : false);
+                  return (
+                    <button
+                      key={star}
+                      onClick={() => handleRateResource(star)}
+                      onMouseEnter={() => setHoveredStar(star)}
+                      onMouseLeave={() => setHoveredStar(0)}
+                      disabled={loadingRating}
+                      className="focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Star 
+                        size={18} 
+                        fill={isFilled ? '#FBBF24' : 'none'} 
+                        stroke={isFilled ? '#FBBF24' : '#D1D5DB'} 
+                        className={`transition-colors ${!loadingRating && currentUser ? 'hover:scale-110' : ''}`}
+                      />
+                    </button>
+                  );
+                })}
+              </div>
+              {averageRating !== null && ratingCount > 0 && (
+                <div className="flex items-center gap-1">
+                  <span className="text-sm font-semibold text-gray-900">{averageRating.toFixed(1)}</span>
+                  <span className="text-xs text-gray-500">({ratingCount})</span>
+                </div>
+              )}
+              {ratingCount === 0 && (
+                <span className="text-xs text-gray-500">No ratings yet</span>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Note Display */}
         {note && !showNoteInput && (
@@ -1345,12 +1521,12 @@ function ResourceCard({ resource, isFavorited, note, onToggleFavorite, onUpdateN
               onClick={() => onToggleFavorite(resource.id)}
               className={`p-2.5 rounded-lg transition-all ${
                 isFavorited 
-                  ? 'bg-yellow-100 text-yellow-500 hover:bg-yellow-200' 
+                  ? 'bg-red-100 text-red-500 hover:bg-red-200' 
                   : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
               }`}
               title={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
             >
-              <Star size={18} fill={isFavorited ? 'currentColor' : 'none'} />
+              <Heart size={18} fill={isFavorited ? 'currentColor' : 'none'} />
             </button>
           </div>
         </div>
@@ -1467,7 +1643,9 @@ function AddResourceModal({ currentUser, onSubmit, onClose }) {
     url: '',
     type: 'video',
     description: '',
-    procedure_id: ''
+    procedure_id: '',
+    duration_seconds: null,
+    keywords: ''
   });
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
@@ -1687,8 +1865,7 @@ function AddResourceModal({ currentUser, onSubmit, onClose }) {
     setFormData(prev => ({ ...prev, procedure_id: procedureId }));
   };
 
-  const handleImageChange = async (e) => {
-    const file = e.target.files[0];
+  const processImageFile = async (file) => {
     if (!file) {
       setImageFile(null);
       setImagePreview(null);
@@ -1722,6 +1899,41 @@ function AddResourceModal({ currentUser, onSubmit, onClose }) {
       setImagePreview(null);
     } finally {
       setProcessingImage(false);
+    }
+  };
+
+  const handleImageChange = async (e) => {
+    const file = e.target.files[0];
+    await processImageFile(file);
+  };
+
+  const handleDragEnter = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    const file = e.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) {
+      await processImageFile(file);
+    } else {
+      setImageError('Please drop an image file');
     }
   };
 
@@ -1950,6 +2162,11 @@ function AddResourceModal({ currentUser, onSubmit, onClose }) {
                   </span>
                   <span className="text-xs text-gray-500 mt-1">Square format (1:1)</span>
                   <span className="text-xs text-gray-400 mt-0.5">PNG, JPG, WEBP (Max 2MB)</span>
+                  <div className="text-xs text-gray-400 mt-2 pt-2 border-t border-gray-200">
+                    <p className="font-medium mb-1">How to screenshot:</p>
+                    <p className="mb-0.5">Windows: Press <span className="font-mono bg-gray-100 px-1 rounded">Windows + Shift + S</span> or use Snipping Tool</p>
+                    <p>Mac: Press <span className="font-mono bg-gray-100 px-1 rounded">Cmd + Shift + 4</span> to capture selected area</p>
+                  </div>
                   <input 
                     type="file" 
                     className="hidden" 
@@ -1994,7 +2211,7 @@ function AddResourceModal({ currentUser, onSubmit, onClose }) {
               <select
                 required
                 value={formData.type}
-                onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                onChange={(e) => setFormData({ ...formData, type: e.target.value, duration_seconds: e.target.value !== 'video' ? null : formData.duration_seconds })}
                 className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors"
               >
                 <option value="video">Video</option>
@@ -2003,6 +2220,66 @@ function AddResourceModal({ currentUser, onSubmit, onClose }) {
                 <option value="other">Other</option>
               </select>
             </div>
+
+            {/* Duration field - only for videos */}
+            {formData.type === 'video' && (
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Video Duration *</label>
+                <div className="flex gap-2 items-center">
+                  <input
+                    type="number"
+                    min="0"
+                    max="23"
+                    value={durationHours}
+                    onChange={(e) => {
+                      const hrs = e.target.value === '' ? '' : parseInt(e.target.value) || 0;
+                      setDurationHours(e.target.value);
+                      const totalSeconds = (hrs === '' ? 0 : hrs) * 3600 + 
+                                         (parseInt(durationMinutes) || 0) * 60 + 
+                                         (parseInt(durationSeconds) || 0);
+                      setFormData({ ...formData, duration_seconds: totalSeconds || null });
+                    }}
+                    className="w-20 px-3 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors text-center"
+                    placeholder="H"
+                  />
+                  <span className="text-gray-600 font-semibold">:</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="59"
+                    value={durationMinutes}
+                    onChange={(e) => {
+                      const mins = e.target.value === '' ? '' : parseInt(e.target.value) || 0;
+                      setDurationMinutes(e.target.value);
+                      const totalSeconds = (parseInt(durationHours) || 0) * 3600 + 
+                                         (mins === '' ? 0 : mins) * 60 + 
+                                         (parseInt(durationSeconds) || 0);
+                      setFormData({ ...formData, duration_seconds: totalSeconds || null });
+                    }}
+                    className="w-20 px-3 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors text-center"
+                    placeholder="MM"
+                  />
+                  <span className="text-gray-600 font-semibold">:</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="59"
+                    value={durationSeconds}
+                    onChange={(e) => {
+                      const secs = e.target.value === '' ? '' : parseInt(e.target.value) || 0;
+                      setDurationSeconds(e.target.value);
+                      const totalSeconds = (parseInt(durationHours) || 0) * 3600 + 
+                                         (parseInt(durationMinutes) || 0) * 60 + 
+                                         (secs === '' ? 0 : secs);
+                      setFormData({ ...formData, duration_seconds: totalSeconds || null });
+                    }}
+                    className="w-20 px-3 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors text-center"
+                    placeholder="SS"
+                  />
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Format: H:MM:SS (e.g., 0:05:30 for 5 minutes 30 seconds)</p>
+              </div>
+            )}
 
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">Description *</label>
@@ -2038,7 +2315,7 @@ function AddResourceModal({ currentUser, onSubmit, onClose }) {
               </button>
               <button
                 type="submit"
-                disabled={!selectedProcedure || !imageFile}
+                disabled={!selectedProcedure || !imageFile || (formData.type === 'video' && !formData.duration_seconds)}
                 className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-medium glow-button disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Add Resource
@@ -2057,7 +2334,9 @@ function SuggestResourceModal({ currentUser, onSubmit, onClose }) {
     title: '',
     url: '',
     type: 'video',
-    description: ''
+    description: '',
+    duration_seconds: null,
+    keywords: ''
   });
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
@@ -2577,6 +2856,11 @@ function SuggestResourceModal({ currentUser, onSubmit, onClose }) {
                   </span>
                   <span className="text-xs text-gray-500 mt-1">Square format (1:1)</span>
                   <span className="text-xs text-gray-400 mt-0.5">PNG, JPG, WEBP (Max 2MB)</span>
+                  <div className="text-xs text-gray-400 mt-2 pt-2 border-t border-gray-200">
+                    <p className="font-medium mb-1">How to screenshot:</p>
+                    <p className="mb-0.5">Windows: Press <span className="font-mono bg-gray-100 px-1 rounded">Windows + Shift + S</span> or use Snipping Tool</p>
+                    <p>Mac: Press <span className="font-mono bg-gray-100 px-1 rounded">Cmd + Shift + 4</span> to capture selected area</p>
+                  </div>
                   <input 
                     type="file" 
                     className="hidden" 
@@ -2621,7 +2905,7 @@ function SuggestResourceModal({ currentUser, onSubmit, onClose }) {
               <select
                 required
                 value={formData.type}
-                onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                onChange={(e) => setFormData({ ...formData, type: e.target.value, duration_seconds: e.target.value !== 'video' ? null : formData.duration_seconds })}
                 className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors"
               >
                 <option value="video">Video</option>
@@ -2630,6 +2914,66 @@ function SuggestResourceModal({ currentUser, onSubmit, onClose }) {
                 <option value="other">Other</option>
               </select>
             </div>
+
+            {/* Duration field - only for videos */}
+            {formData.type === 'video' && (
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Video Duration *</label>
+                <div className="flex gap-2 items-center">
+                  <input
+                    type="number"
+                    min="0"
+                    max="23"
+                    value={durationHours}
+                    onChange={(e) => {
+                      const hrs = e.target.value === '' ? '' : parseInt(e.target.value) || 0;
+                      setDurationHours(e.target.value);
+                      const totalSeconds = (hrs === '' ? 0 : hrs) * 3600 + 
+                                         (parseInt(durationMinutes) || 0) * 60 + 
+                                         (parseInt(durationSeconds) || 0);
+                      setFormData({ ...formData, duration_seconds: totalSeconds || null });
+                    }}
+                    className="w-20 px-3 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors text-center"
+                    placeholder="H"
+                  />
+                  <span className="text-gray-600 font-semibold">:</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="59"
+                    value={durationMinutes}
+                    onChange={(e) => {
+                      const mins = e.target.value === '' ? '' : parseInt(e.target.value) || 0;
+                      setDurationMinutes(e.target.value);
+                      const totalSeconds = (parseInt(durationHours) || 0) * 3600 + 
+                                         (mins === '' ? 0 : mins) * 60 + 
+                                         (parseInt(durationSeconds) || 0);
+                      setFormData({ ...formData, duration_seconds: totalSeconds || null });
+                    }}
+                    className="w-20 px-3 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors text-center"
+                    placeholder="MM"
+                  />
+                  <span className="text-gray-600 font-semibold">:</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="59"
+                    value={durationSeconds}
+                    onChange={(e) => {
+                      const secs = e.target.value === '' ? '' : parseInt(e.target.value) || 0;
+                      setDurationSeconds(e.target.value);
+                      const totalSeconds = (parseInt(durationHours) || 0) * 3600 + 
+                                         (parseInt(durationMinutes) || 0) * 60 + 
+                                         (secs === '' ? 0 : secs);
+                      setFormData({ ...formData, duration_seconds: totalSeconds || null });
+                    }}
+                    className="w-20 px-3 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors text-center"
+                    placeholder="SS"
+                  />
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Format: H:MM:SS (e.g., 0:05:30 for 5 minutes 30 seconds)</p>
+              </div>
+            )}
 
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">Description *</label>
@@ -2666,7 +3010,7 @@ function SuggestResourceModal({ currentUser, onSubmit, onClose }) {
               </button>
               <button
                 type="submit"
-                disabled={submitting || !imageFile || !selectedProcedure}
+                disabled={submitting || !imageFile || !selectedProcedure || (formData.type === 'video' && !formData.duration_seconds)}
                 className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-medium glow-button disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {submitting ? 'Submitting...' : 'Submit Suggestion'}
@@ -2680,13 +3024,28 @@ function SuggestResourceModal({ currentUser, onSubmit, onClose }) {
 }
 
 function EditResourceModal({ resource, onSubmit, onClose }) {
+  // Parse duration_seconds into hours, minutes, seconds
+  const parseDuration = (seconds) => {
+    if (!seconds) return { hours: '', minutes: '', seconds: '' };
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    return { hours: hrs.toString(), minutes: mins.toString(), seconds: secs.toString() };
+  };
+
+  const initialDuration = parseDuration(resource.duration_seconds);
+  
   const [formData, setFormData] = useState({
     title: resource.title || '',
     url: resource.url || '',
     type: resource.resource_type || 'video',
     description: resource.description || '',
-    keywords: resource.keywords || ''
+    keywords: resource.keywords || '',
+    duration_seconds: resource.duration_seconds || null
   });
+  const [durationHours, setDurationHours] = useState(initialDuration.hours);
+  const [durationMinutes, setDurationMinutes] = useState(initialDuration.minutes);
+  const [durationSeconds, setDurationSeconds] = useState(initialDuration.seconds);
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const [processingImage, setProcessingImage] = useState(false);
@@ -2871,6 +3230,11 @@ function EditResourceModal({ resource, onSubmit, onClose }) {
                   </span>
                   <span className="text-xs text-gray-500 mt-1">Square format (1:1)</span>
                   <span className="text-xs text-gray-400 mt-0.5">PNG, JPG, WEBP (Max 2MB)</span>
+                  <div className="text-xs text-gray-400 mt-2 pt-2 border-t border-gray-200">
+                    <p className="font-medium mb-1">How to screenshot:</p>
+                    <p className="mb-0.5">Windows: Press <span className="font-mono bg-gray-100 px-1 rounded">Windows + Shift + S</span> or use Snipping Tool</p>
+                    <p>Mac: Press <span className="font-mono bg-gray-100 px-1 rounded">Cmd + Shift + 4</span> to capture selected area</p>
+                  </div>
                   <input 
                     type="file" 
                     className="hidden" 
@@ -2914,7 +3278,7 @@ function EditResourceModal({ resource, onSubmit, onClose }) {
               <select
                 required
                 value={formData.type}
-                onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                onChange={(e) => setFormData({ ...formData, type: e.target.value, duration_seconds: e.target.value !== 'video' ? null : formData.duration_seconds })}
                 className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors"
               >
                 <option value="video">Video</option>
@@ -2923,6 +3287,66 @@ function EditResourceModal({ resource, onSubmit, onClose }) {
                 <option value="other">Other</option>
               </select>
             </div>
+
+            {/* Duration field - only for videos */}
+            {formData.type === 'video' && (
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Video Duration *</label>
+                <div className="flex gap-2 items-center">
+                  <input
+                    type="number"
+                    min="0"
+                    max="23"
+                    value={durationHours}
+                    onChange={(e) => {
+                      const hrs = e.target.value === '' ? '' : parseInt(e.target.value) || 0;
+                      setDurationHours(e.target.value);
+                      const totalSeconds = (hrs === '' ? 0 : hrs) * 3600 + 
+                                         (parseInt(durationMinutes) || 0) * 60 + 
+                                         (parseInt(durationSeconds) || 0);
+                      setFormData({ ...formData, duration_seconds: totalSeconds || null });
+                    }}
+                    className="w-20 px-3 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors text-center"
+                    placeholder="H"
+                  />
+                  <span className="text-gray-600 font-semibold">:</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="59"
+                    value={durationMinutes}
+                    onChange={(e) => {
+                      const mins = e.target.value === '' ? '' : parseInt(e.target.value) || 0;
+                      setDurationMinutes(e.target.value);
+                      const totalSeconds = (parseInt(durationHours) || 0) * 3600 + 
+                                         (mins === '' ? 0 : mins) * 60 + 
+                                         (parseInt(durationSeconds) || 0);
+                      setFormData({ ...formData, duration_seconds: totalSeconds || null });
+                    }}
+                    className="w-20 px-3 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors text-center"
+                    placeholder="MM"
+                  />
+                  <span className="text-gray-600 font-semibold">:</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="59"
+                    value={durationSeconds}
+                    onChange={(e) => {
+                      const secs = e.target.value === '' ? '' : parseInt(e.target.value) || 0;
+                      setDurationSeconds(e.target.value);
+                      const totalSeconds = (parseInt(durationHours) || 0) * 3600 + 
+                                         (parseInt(durationMinutes) || 0) * 60 + 
+                                         (secs === '' ? 0 : secs);
+                      setFormData({ ...formData, duration_seconds: totalSeconds || null });
+                    }}
+                    className="w-20 px-3 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors text-center"
+                    placeholder="SS"
+                  />
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Format: H:MM:SS (e.g., 0:05:30 for 5 minutes 30 seconds)</p>
+              </div>
+            )}
 
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">Description *</label>
@@ -2959,7 +3383,7 @@ function EditResourceModal({ resource, onSubmit, onClose }) {
               </button>
               <button
                 type="submit"
-                disabled={submitting}
+                disabled={submitting || (formData.type === 'video' && !formData.duration_seconds)}
                 className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-medium glow-button disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {submitting ? 'Updating...' : 'Update Resource'}
