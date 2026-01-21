@@ -173,18 +173,18 @@ function SurgicalTechniquesApp() {
       
       // Upload processed image
       const fileName = `resource-${Date.now()}.webp`;
-      const filePath = `resource-images/${fileName}`;
+        const filePath = `resource-images/${fileName}`;
 
-      const { error: uploadError } = await supabase.storage
-        .from('resources')
+        const { error: uploadError } = await supabase.storage
+          .from('resources')
         .upload(filePath, processedImage);
 
-      if (uploadError) throw uploadError;
+        if (uploadError) throw uploadError;
 
-      // Get public URL
-      const { data: { publicUrl } } = supabase.storage
-        .from('resources')
-        .getPublicUrl(filePath);
+        // Get public URL
+        const { data: { publicUrl } } = supabase.storage
+          .from('resources')
+          .getPublicUrl(filePath);
 
       const imageUrl = publicUrl;
 
@@ -312,6 +312,7 @@ function SurgicalTechniquesApp() {
           image_url: imageUrl,
           keywords: resourceData.keywords || null,
           duration_seconds: resourceData.type === 'video' ? resourceData.duration_seconds || null : null,
+          procedure_id: resourceData.procedure_id || resource.procedure_id,
         })
         .eq('id', resourceId);
 
@@ -773,17 +774,17 @@ function UserView({ resources, favorites, notes, showFavoritesOnly, searchTerm, 
             <Plus size={18} />
             <span>Suggest Resource</span>
           </button>
-          <button
-            onClick={onToggleFavorites}
+        <button
+          onClick={onToggleFavorites}
             className={`flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 rounded-xl font-medium transition-all text-sm sm:text-base ${
-              showFavoritesOnly 
+            showFavoritesOnly 
                 ? 'bg-gradient-to-r from-red-500 to-pink-500 text-white shadow-lg' 
-                : 'glass border hover:border-purple-300'
-            }`}
-          >
+              : 'glass border hover:border-purple-300'
+          }`}
+        >
             <Heart size={18} fill={showFavoritesOnly ? 'currentColor' : 'none'} />
-            <span>{showFavoritesOnly ? 'All Resources' : 'Favorites'}</span>
-          </button>
+          <span>{showFavoritesOnly ? 'All Resources' : 'Favorites'}</span>
+        </button>
         </div>
       </div>
 
@@ -859,24 +860,24 @@ function UserView({ resources, favorites, notes, showFavoritesOnly, searchTerm, 
 
         {/* Right Side - Search & Resources */}
         <div className="flex-1 min-w-0">
-          {/* Search */}
-          <div className="glass rounded-2xl p-6 mb-6 shadow-lg">
-            <div className="relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => onSearchChange(e.target.value)}
-                placeholder="Search resources..."
-                className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors"
-              />
-            </div>
-          </div>
+      {/* Search */}
+      <div className="glass rounded-2xl p-6 mb-6 shadow-lg">
+        <div className="relative">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => onSearchChange(e.target.value)}
+            placeholder="Search resources..."
+            className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors"
+          />
+        </div>
+      </div>
 
-          {/* Resources Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {/* Resources List */}
+      <div className="space-y-4">
         {resources.length === 0 ? (
-          <div className="col-span-full glass rounded-2xl p-16 text-center shadow-lg">
+          <div className="glass rounded-2xl p-16 text-center shadow-lg">
             <div className="max-w-md mx-auto">
               <div className="w-20 h-20 mx-auto mb-6 bg-gradient-to-br from-purple-100 to-pink-100 rounded-full flex items-center justify-center">
                 <FileText size={32} className="text-purple-600" />
@@ -905,7 +906,7 @@ function UserView({ resources, favorites, notes, showFavoritesOnly, searchTerm, 
             />
           ))
         )}
-          </div>
+      </div>
         </div>
       </div>
     </div>
@@ -989,13 +990,13 @@ function ResourcesManagement({ resources, searchTerm, setSearchTerm, onAddResour
             <Edit size={20} />
             Edit Categories
           </button>
-          <button
-            onClick={onAddResource}
-            className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-medium glow-button"
-          >
-            <Plus size={20} />
-            Add Resource
-          </button>
+        <button
+          onClick={onAddResource}
+          className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-medium glow-button"
+        >
+          <Plus size={20} />
+          Add Resource
+        </button>
         </div>
       </div>
 
@@ -1354,54 +1355,62 @@ function ResourceCard({ resource, isFavorited, note, onToggleFavorite, onUpdateN
 
   return (
     <div 
-      className={`glass rounded-2xl overflow-hidden shadow-lg card-hover animate-slide-up flex flex-col sm:flex-row ${
+      className={`glass rounded-2xl p-6 shadow-lg card-hover animate-slide-up ${
         resource.is_sponsored ? 'border-l-4 border-yellow-400' : ''
       }`}
       style={{ animationDelay: `${index * 0.1}s` }}
     >
-      {/* Image - Left side, smaller square */}
-      <div className="w-full sm:w-36 sm:h-36 sm:flex-shrink-0 overflow-hidden bg-gray-100 flex justify-center items-center">
-        <div className="w-full h-full max-w-[140px] max-h-[140px] sm:max-w-[144px] sm:max-h-[144px] mx-auto">
+      <div className="flex gap-6">
+        {/* Image - Uniform 1:1 aspect ratio (square) */}
+        <div className="w-48 flex-shrink-0 rounded-xl overflow-hidden bg-gray-100" style={{ aspectRatio: '1/1' }}>
           {resource.image_url ? (
             <img 
               src={resource.image_url} 
               alt={resource.title}
               className="w-full h-full object-cover"
+              style={{ aspectRatio: '1/1' }}
               loading="lazy"
             />
           ) : (
-            <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
-              <FileText size={20} className="text-gray-400" />
+            <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center" style={{ aspectRatio: '1/1' }}>
+              <FileText size={24} className="text-gray-400" />
             </div>
           )}
         </div>
-      </div>
 
-      <div className="p-4 sm:p-6 flex-1">
-        {/* Sponsored Badge */}
-        {resource.is_sponsored && (
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-700 text-xs font-medium mb-3">
-            <Sparkles size={12} />
-            <span className="mono">Sponsored</span>
+        {/* Content */}
+        <div className="flex-1">
+          {/* Badges */}
+          <div className="flex gap-2 mb-3">
+            {resource.is_sponsored && (
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-700 text-xs font-medium">
+                <Sparkles size={12} />
+                <span className="mono">Sponsored</span>
+              </div>
+            )}
+            <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-gradient-to-r ${getTypeColor()} text-white text-sm font-medium`}>
+              {getTypeIcon()}
+              <span className="capitalize">{getTypeLabel()}</span>
+              {resource.resource_type === 'video' && resource.duration_seconds && (
+                <span className="ml-2 text-xs bg-white/20 px-2 py-0.5 rounded">
+                  {formatDuration(resource.duration_seconds)}
+                </span>
+              )}
+            </div>
           </div>
-        )}
 
-        {/* Type Badge */}
-        <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-gradient-to-r ${getTypeColor()} text-white text-sm font-medium mb-4`}>
-          {getTypeIcon()}
-          <span className="capitalize">{getTypeLabel()}</span>
-          {resource.resource_type === 'video' && resource.duration_seconds && (
-            <span className="ml-2 text-xs bg-white/20 px-2 py-0.5 rounded">
-              {formatDuration(resource.duration_seconds)}
-            </span>
-          )}
-        </div>
-
-        {/* Title */}
-        <h3 className="font-bold text-gray-900 mb-2 text-lg leading-tight">{resource.title}</h3>
-        
-        {/* Description */}
-        <p className="text-gray-600 text-sm mb-4 leading-relaxed">{resource.description}</p>
+          <h4 className="font-bold text-xl text-gray-900 mb-2">{resource.title}</h4>
+          <p className="text-gray-600 mb-3">{resource.description}</p>
+          
+          <a 
+            href={resource.url} 
+            target="_blank" 
+            rel="noopener noreferrer" 
+            className="text-purple-600 hover:text-purple-700 text-sm break-all flex items-center gap-1 mb-4"
+          >
+            <span>{resource.url}</span>
+            <ArrowRight size={14} />
+          </a>
 
         {/* Surgeon Rating */}
         {currentUser && (
@@ -1494,17 +1503,7 @@ function ResourceCard({ resource, isFavorited, note, onToggleFavorite, onUpdateN
         )}
 
         {/* Actions */}
-        <div className="flex items-center justify-between pt-4 border-t border-gray-100">
-          <a
-            href={resource.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-2 text-purple-600 hover:text-purple-700 font-medium text-sm transition-colors group"
-          >
-            <span>View Resource</span>
-            <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
-          </a>
-          
+        <div className="flex items-center justify-end pt-4 border-t border-gray-100">
           <div className="flex gap-2">
             <button
               onClick={() => setShowNoteInput(!showNoteInput)}
@@ -1530,6 +1529,7 @@ function ResourceCard({ resource, isFavorited, note, onToggleFavorite, onUpdateN
             </button>
           </div>
         </div>
+      </div>
       </div>
     </div>
   );
@@ -1582,8 +1582,8 @@ function AdminResourceCard({ resource, onEdit, onDelete, index }) {
           ) : (
             <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center" style={{ aspectRatio: '1/1' }}>
               <FileText size={24} className="text-gray-400" />
-            </div>
-          )}
+          </div>
+        )}
         </div>
 
         {/* Content */}
@@ -1647,6 +1647,9 @@ function AddResourceModal({ currentUser, onSubmit, onClose }) {
     duration_seconds: null,
     keywords: ''
   });
+  const [durationHours, setDurationHours] = useState('');
+  const [durationMinutes, setDurationMinutes] = useState('');
+  const [durationSeconds, setDurationSeconds] = useState('');
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const [processingImage, setProcessingImage] = useState(false);
@@ -2338,6 +2341,9 @@ function SuggestResourceModal({ currentUser, onSubmit, onClose }) {
     duration_seconds: null,
     keywords: ''
   });
+  const [durationHours, setDurationHours] = useState('');
+  const [durationMinutes, setDurationMinutes] = useState('');
+  const [durationSeconds, setDurationSeconds] = useState('');
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const [processingImage, setProcessingImage] = useState(false);
@@ -2362,7 +2368,9 @@ function SuggestResourceModal({ currentUser, onSubmit, onClose }) {
 
   // Initialize with user's specialty/subspecialty
   useEffect(() => {
-    loadInitialData();
+    if (currentUser) {
+      loadInitialData();
+    }
   }, [currentUser]);
 
   useEffect(() => {
@@ -2387,11 +2395,17 @@ function SuggestResourceModal({ currentUser, onSubmit, onClose }) {
   async function loadInitialData() {
     try {
       setLoadingData(true);
+      setImageError(''); // Clear any previous errors
+      
       // Load all specialties
-      const { data: specialtiesData } = await supabase
+      const { data: specialtiesData, error: specialtiesError } = await supabase
         .from('specialties')
         .select('*')
         .order('order');
+      
+      if (specialtiesError) {
+        throw new Error(`Failed to load specialties: ${specialtiesError.message}`);
+      }
       
       setSpecialties(specialtiesData || []);
 
@@ -2400,11 +2414,15 @@ function SuggestResourceModal({ currentUser, onSubmit, onClose }) {
         setSelectedSpecialty(String(currentUser.specialtyId));
         
         // Load subspecialties for this specialty
-        const { data: subspecialtiesData } = await supabase
+        const { data: subspecialtiesData, error: subspecialtiesError } = await supabase
           .from('subspecialties')
           .select('*')
           .eq('specialty_id', currentUser.specialtyId)
           .order('order');
+        
+        if (subspecialtiesError) {
+          throw new Error(`Failed to load subspecialties: ${subspecialtiesError.message}`);
+        }
         
         setSubspecialties(subspecialtiesData || []);
         
@@ -2412,19 +2430,25 @@ function SuggestResourceModal({ currentUser, onSubmit, onClose }) {
           setSelectedSubspecialty(String(currentUser.subspecialtyId));
           
           // Load categories for the subspecialty
-          const { data: categoriesData } = await supabase
+          const { data: categoriesData, error: categoriesError } = await supabase
             .from('categories')
             .select('*')
             .eq('subspecialty_id', currentUser.subspecialtyId)
             .is('parent_category_id', null)
             .order('order');
           
+          if (categoriesError) {
+            throw new Error(`Failed to load categories: ${categoriesError.message}`);
+          }
+          
           setCategories(categoriesData || []);
         }
       }
     } catch (error) {
       console.error('Error loading initial data:', error);
-      setImageError('Error loading form data. Please try again.');
+      const errorMessage = error.message || 'Unknown error occurred';
+      setImageError(`Error loading form data: ${errorMessage}`);
+      alert(`Error loading form data:\n\n${errorMessage}\n\nPlease check the browser console for more details.`);
     } finally {
       setLoadingData(false);
     }
@@ -3041,7 +3065,8 @@ function EditResourceModal({ resource, onSubmit, onClose }) {
     type: resource.resource_type || 'video',
     description: resource.description || '',
     keywords: resource.keywords || '',
-    duration_seconds: resource.duration_seconds || null
+    duration_seconds: resource.duration_seconds || null,
+    procedure_id: resource.procedure_id || ''
   });
   const [durationHours, setDurationHours] = useState(initialDuration.hours);
   const [durationMinutes, setDurationMinutes] = useState(initialDuration.minutes);
@@ -3053,12 +3078,204 @@ function EditResourceModal({ resource, onSubmit, onClose }) {
   const [submitting, setSubmitting] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
 
+  // Category/Procedure selection
+  const [specialties, setSpecialties] = useState([]);
+  const [subspecialties, setSubspecialties] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [procedures, setProcedures] = useState([]);
+  const [selectedSpecialty, setSelectedSpecialty] = useState(null);
+  const [selectedSubspecialty, setSelectedSubspecialty] = useState(null);
+  const [selectedCategory, setSelectedCategory] = useState(null);
+  const [selectedProcedure, setSelectedProcedure] = useState(resource.procedure_id || null);
+  const [loadingData, setLoadingData] = useState(true);
+
+  // Load initial data - get procedure, category, subspecialty hierarchy
+  useEffect(() => {
+    loadInitialData();
+  }, [resource.procedure_id]);
+
+  useEffect(() => {
+    if (selectedSpecialty) {
+      loadSubspecialties(selectedSpecialty);
+    }
+  }, [selectedSpecialty]);
+
+  useEffect(() => {
+    if (selectedSubspecialty) {
+      loadCategories(selectedSubspecialty);
+    }
+  }, [selectedSubspecialty]);
+
+  useEffect(() => {
+    if (selectedCategory) {
+      loadProcedures(selectedCategory);
+    }
+  }, [selectedCategory]);
+
   // Initialize preview with existing image if available
   useEffect(() => {
     if (resource.image_url && !imagePreview && !imageFile) {
       setImagePreview(resource.image_url);
     }
   }, [resource.image_url]);
+
+  async function loadInitialData() {
+    try {
+      setLoadingData(true);
+      
+      // Load all specialties
+      const { data: specialtiesData } = await supabase
+        .from('specialties')
+        .select('*')
+        .order('order');
+      setSpecialties(specialtiesData || []);
+
+      // If resource has a procedure_id, load its hierarchy (procedure -> category -> subspecialty -> specialty)
+      if (resource.procedure_id) {
+        // Ensure procedure is selected in the UI + form
+        setSelectedProcedure(resource.procedure_id);
+        setFormData(prev => ({ ...prev, procedure_id: resource.procedure_id }));
+
+        const { data: procedureRow, error: procErr } = await supabase
+          .from('procedures')
+          .select('id, category_id')
+          .eq('id', resource.procedure_id)
+          .single();
+        if (procErr) throw procErr;
+
+        const { data: categoryRow, error: catErr } = await supabase
+          .from('categories')
+          .select('id, subspecialty_id')
+          .eq('id', procedureRow.category_id)
+          .single();
+        if (catErr) throw catErr;
+
+        const { data: subspecialtyRow, error: subErr } = await supabase
+          .from('subspecialties')
+          .select('id, specialty_id')
+          .eq('id', categoryRow.subspecialty_id)
+          .single();
+        if (subErr) throw subErr;
+
+        // Pre-populate selections (still editable) - convert to strings to match option values
+        setSelectedSpecialty(String(subspecialtyRow.specialty_id));
+        setSelectedSubspecialty(String(subspecialtyRow.id));
+        setSelectedCategory(String(categoryRow.id));
+
+        // Load option lists for the dropdowns
+        const [
+          { data: subspecialtiesData, error: subsErr },
+          { data: categoriesData, error: catsErr },
+          { data: proceduresData, error: procsErr },
+        ] = await Promise.all([
+          supabase
+            .from('subspecialties')
+            .select('*')
+            .eq('specialty_id', subspecialtyRow.specialty_id)
+            .order('order'),
+          supabase
+            .from('categories')
+            .select('*')
+            .eq('subspecialty_id', subspecialtyRow.id)
+            .is('parent_category_id', null)
+            .order('order'),
+          supabase
+            .from('procedures')
+            .select('*')
+            .eq('category_id', categoryRow.id)
+            .order('name'),
+        ]);
+
+        if (subsErr) throw subsErr;
+        if (catsErr) throw catsErr;
+        if (procsErr) throw procsErr;
+
+        setSubspecialties(subspecialtiesData || []);
+        setCategories(categoriesData || []);
+        setProcedures(proceduresData || []);
+      }
+    } catch (error) {
+      console.error('Error loading initial data:', error);
+      alert('Error loading category data: ' + error.message);
+    } finally {
+      setLoadingData(false);
+    }
+  }
+
+  async function loadSubspecialties(specialtyId) {
+    if (!specialtyId) return;
+    const { data } = await supabase
+      .from('subspecialties')
+      .select('*')
+      .eq('specialty_id', specialtyId)
+      .order('order');
+    setSubspecialties(data || []);
+    if (selectedSubspecialty && !data?.find(s => s.id === selectedSubspecialty)) {
+      setSelectedSubspecialty(null);
+      setSelectedCategory(null);
+      setSelectedProcedure(null);
+      setFormData(prev => ({ ...prev, procedure_id: '' }));
+    }
+  }
+
+  async function loadCategories(subspecialtyId) {
+    if (!subspecialtyId) return;
+    const { data } = await supabase
+      .from('categories')
+      .select('*')
+      .eq('subspecialty_id', subspecialtyId)
+      .is('parent_category_id', null)
+      .order('order');
+    setCategories(data || []);
+    if (selectedCategory && !data?.find(c => c.id === selectedCategory)) {
+      setSelectedCategory(null);
+      setSelectedProcedure(null);
+      setFormData(prev => ({ ...prev, procedure_id: '' }));
+    }
+  }
+
+  async function loadProcedures(categoryId) {
+    if (!categoryId) return;
+    const { data } = await supabase
+      .from('procedures')
+      .select('*')
+      .eq('category_id', categoryId)
+      .order('name');
+    setProcedures(data || []);
+    if (selectedProcedure && !data?.find(p => p.id === selectedProcedure)) {
+      setSelectedProcedure(null);
+      setFormData(prev => ({ ...prev, procedure_id: '' }));
+    }
+  }
+
+  const handleSpecialtyChange = (specialtyId) => {
+    setSelectedSpecialty(specialtyId);
+    setSelectedSubspecialty(null);
+    setSelectedCategory(null);
+    setSelectedProcedure(null);
+    setFormData(prev => ({ ...prev, procedure_id: '' }));
+    loadSubspecialties(specialtyId);
+  };
+
+  const handleSubspecialtyChange = (subspecialtyId) => {
+    setSelectedSubspecialty(subspecialtyId);
+    setSelectedCategory(null);
+    setSelectedProcedure(null);
+    setFormData(prev => ({ ...prev, procedure_id: '' }));
+    loadCategories(subspecialtyId);
+  };
+
+  const handleCategoryChange = (categoryId) => {
+    setSelectedCategory(categoryId);
+    setSelectedProcedure(null);
+    setFormData(prev => ({ ...prev, procedure_id: '' }));
+    loadProcedures(categoryId);
+  };
+
+  const handleProcedureChange = (procedureId) => {
+    setSelectedProcedure(procedureId);
+    setFormData(prev => ({ ...prev, procedure_id: procedureId }));
+  };
 
   const processImageFile = async (file) => {
     if (!file) {
@@ -3249,6 +3466,90 @@ function EditResourceModal({ resource, onSubmit, onClose }) {
               )}
             </div>
 
+            {/* Specialty/Subspecialty/Category/Procedure Selection */}
+            {loadingData ? (
+              <div className="text-center py-4">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto"></div>
+                <p className="text-sm text-gray-500 mt-2">Loading categories...</p>
+              </div>
+            ) : (
+              <>
+                <div className="bg-purple-50 rounded-xl p-4 border-2 border-purple-200">
+                  <label className="block text-sm font-semibold text-gray-700 mb-3">
+                    Specialty & Subspecialty
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Specialty */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1.5">Specialty</label>
+                      <select
+                        value={selectedSpecialty || ''}
+                        onChange={(e) => handleSpecialtyChange(e.target.value)}
+                        className="w-full px-3 py-2 text-sm border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none transition-colors"
+                      >
+                        <option value="">Select specialty...</option>
+                        {specialties.map(s => (
+                          <option key={s.id} value={s.id}>{s.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Subspecialty */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1.5">Subspecialty</label>
+                      <select
+                        value={selectedSubspecialty || ''}
+                        onChange={(e) => handleSubspecialtyChange(e.target.value)}
+                        disabled={!selectedSpecialty}
+                        className="w-full px-3 py-2 text-sm border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      >
+                        <option value="">Select subspecialty...</option>
+                        {subspecialties.map(s => (
+                          <option key={s.id} value={s.id}>{s.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Category Selection */}
+                {selectedSubspecialty && (
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Category *</label>
+                    <select
+                      required
+                      value={selectedCategory || ''}
+                      onChange={(e) => handleCategoryChange(e.target.value)}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors"
+                    >
+                      <option value="">Select category...</option>
+                      {categories.map(cat => (
+                        <option key={cat.id} value={cat.id}>{cat.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Procedure Selection */}
+                {selectedCategory && (
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Procedure *</label>
+                    <select
+                      required
+                      value={selectedProcedure || ''}
+                      onChange={(e) => handleProcedureChange(e.target.value)}
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors"
+                    >
+                      <option value="">Select procedure...</option>
+                      {procedures.map(proc => (
+                        <option key={proc.id} value={proc.id}>{proc.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </>
+            )}
+
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">Resource Title *</label>
               <input
@@ -3383,7 +3684,7 @@ function EditResourceModal({ resource, onSubmit, onClose }) {
               </button>
               <button
                 type="submit"
-                disabled={submitting || (formData.type === 'video' && !formData.duration_seconds)}
+                disabled={submitting || !selectedProcedure || (formData.type === 'video' && !formData.duration_seconds)}
                 className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-medium glow-button disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {submitting ? 'Updating...' : 'Update Resource'}
