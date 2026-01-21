@@ -511,26 +511,26 @@ function SurgicalTechniquesApp() {
         </div>
         
         <div className="relative max-w-7xl mx-auto px-6 py-6">
-          <div className="flex justify-between items-center">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
             <div>
-              <h1 className="text-2xl font-bold text-white tracking-tight">Surgical Techniques</h1>
-              <p className="text-purple-200 text-sm mono">Educational Resource Hub</p>
+              <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">Surgical Techniques</h1>
+              <p className="text-purple-200 text-xs sm:text-sm mono">Educational Resource Hub</p>
             </div>
 
-            <div className="flex gap-4 items-center">
-              <span className="text-white text-sm">{currentUser.email}</span>
+            <div className="flex flex-wrap gap-3 sm:gap-4 items-center">
+              <span className="text-white text-xs sm:text-sm">{currentUser.email}</span>
               
               {currentView === 'user' && (
                 <div className="flex gap-2 glass-dark rounded-full p-1">
                   <button
                     onClick={() => setCurrentView('user')}
-                    className="px-6 py-2 rounded-full font-medium bg-white text-purple-900 shadow-lg"
+                    className="px-4 sm:px-6 py-1.5 sm:py-2 rounded-full font-medium bg-white text-purple-900 shadow-lg text-sm sm:text-base"
                   >
                     Browse
                   </button>
                   <button
                     onClick={() => setCurrentView('admin')}
-                    className="px-6 py-2 rounded-full font-medium text-white hover:bg-white/10 transition-all"
+                    className="px-4 sm:px-6 py-1.5 sm:py-2 rounded-full font-medium text-white hover:bg-white/10 transition-all text-sm sm:text-base"
                   >
                     Admin
                   </button>
@@ -541,13 +541,13 @@ function SurgicalTechniquesApp() {
                 <div className="flex gap-2 glass-dark rounded-full p-1">
                   <button
                     onClick={() => setCurrentView('user')}
-                    className="px-6 py-2 rounded-full font-medium text-white hover:bg-white/10 transition-all"
+                    className="px-4 sm:px-6 py-1.5 sm:py-2 rounded-full font-medium text-white hover:bg-white/10 transition-all text-sm sm:text-base"
                   >
                     Browse
                   </button>
                   <button
                     onClick={() => setCurrentView('admin')}
-                    className="px-6 py-2 rounded-full font-medium bg-white text-purple-900 shadow-lg"
+                    className="px-4 sm:px-6 py-1.5 sm:py-2 rounded-full font-medium bg-white text-purple-900 shadow-lg text-sm sm:text-base"
                   >
                     Admin
                   </button>
@@ -756,22 +756,22 @@ function UserView({ resources, favorites, notes, showFavoritesOnly, searchTerm, 
 
   return (
     <div className="animate-slide-up">
-      <div className="flex justify-between items-start mb-8">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-8 gap-4">
         <div>
-          <h2 className="text-3xl font-bold text-gray-900 mb-2">Resource Library</h2>
-          <p className="text-gray-600">Curated surgical techniques and educational materials</p>
+          <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">Resource Library</h2>
+          <p className="text-gray-600 text-sm sm:text-base">Curated surgical techniques and educational materials</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-col sm:flex-row gap-3">
           <button
             onClick={onSuggestResource}
-            className="flex items-center gap-2 px-5 py-3 rounded-xl font-medium transition-all glass border hover:border-purple-300 text-purple-700 hover:bg-purple-50"
+            className="flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 rounded-xl font-medium transition-all glass border hover:border-purple-300 text-purple-700 hover:bg-purple-50 text-sm sm:text-base"
           >
             <Plus size={18} />
             <span>Suggest Resource</span>
           </button>
           <button
             onClick={onToggleFavorites}
-            className={`flex items-center gap-2 px-5 py-3 rounded-xl font-medium transition-all ${
+            className={`flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 rounded-xl font-medium transition-all text-sm sm:text-base ${
               showFavoritesOnly 
                 ? 'bg-gradient-to-r from-yellow-400 to-orange-400 text-white shadow-lg' 
                 : 'glass border hover:border-purple-300'
@@ -1787,7 +1787,7 @@ function AddResourceModal({ currentUser, onSubmit, onClose }) {
               {loadingData ? (
                 <p className="text-sm text-gray-500">Loading...</p>
               ) : (
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {/* Specialty */}
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1.5">Specialty</label>
@@ -2415,7 +2415,7 @@ function SuggestResourceModal({ currentUser, onSubmit, onClose }) {
               {loadingData ? (
                 <p className="text-sm text-gray-500">Loading...</p>
               ) : (
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {/* Specialty */}
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1.5">Specialty</label>
