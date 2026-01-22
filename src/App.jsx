@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Video, FileText, Link, Plus, Star, Heart, Edit, Trash2, StickyNote, ArrowRight, Sparkles, LogOut, Upload, X, Search, BarChart3, TrendingUp, GripVertical } from 'lucide-react';
 import { supabase } from './lib/supabase';
 import { 
@@ -192,7 +192,6 @@ function SurgicalTechniquesApp() {
       const { error } = await supabase
         .from('resources')
         .insert([{
-          procedure_id: resourceData.procedure_id,
           title: resourceData.title,
           url: resourceData.url,
           description: resourceData.description,
@@ -222,11 +221,6 @@ function SurgicalTechniquesApp() {
         return;
       }
 
-      if (!resourceData.procedure_id) {
-        alert('Please select a procedure');
-        return;
-      }
-
       // Process image (resize and compress)
       const processedImage = await processResourceImage(imageFile);
       
@@ -251,7 +245,6 @@ function SurgicalTechniquesApp() {
       const { error } = await supabase
         .from('resource_suggestions')
         .insert([{
-          procedure_id: resourceData.procedure_id,
           title: resourceData.title,
           url: resourceData.url,
           description: resourceData.description,
@@ -312,7 +305,6 @@ function SurgicalTechniquesApp() {
           image_url: imageUrl,
           keywords: resourceData.keywords || null,
           duration_seconds: resourceData.type === 'video' ? resourceData.duration_seconds || null : null,
-          procedure_id: resourceData.procedure_id || resource.procedure_id,
         })
         .eq('id', resourceId);
 
@@ -628,6 +620,7 @@ function SurgicalTechniquesApp() {
       {editingResource && (
         <EditResourceModal
           resource={editingResource}
+          currentUser={currentUser}
           onSubmit={(resourceData, imageFile) => handleEditResource(editingResource.id, resourceData, imageFile)}
           onClose={() => setEditingResource(null)}
         />
@@ -1191,9 +1184,7 @@ function ResourceCard({ resource, isFavorited, note, onToggleFavorite, onUpdateN
   const [showNoteInput, setShowNoteInput] = useState(false);
   const [noteText, setNoteText] = useState(note || '');
   const [viewTracked, setViewTracked] = useState(false);
-  const [rating, setRating] = useState(null); // Current user's rating
-  const [averageRating, setAverageRating] = useState(null);
-  const [ratingCount, setRatingCount] = useState(0);
+  const [rating, setRating] = useState(null); // Current user's rating (private)
   const [hoveredStar, setHoveredStar] = useState(0);
   const [loadingRating, setLoadingRating] = useState(false);
 
@@ -1212,24 +1203,7 @@ function ResourceCard({ resource, isFavorited, note, onToggleFavorite, onUpdateN
     async function loadRatings() {
       try {
         // Load average rating and count
-        const { data: ratingsData, error: ratingsError } = await supabase
-          .from('resource_ratings')
-          .select('rating')
-          .eq('resource_id', resource.id);
-
-        if (ratingsError) throw ratingsError;
-
-        if (ratingsData && ratingsData.length > 0) {
-          const total = ratingsData.reduce((sum, r) => sum + r.rating, 0);
-          const average = total / ratingsData.length;
-          setAverageRating(average);
-          setRatingCount(ratingsData.length);
-        } else {
-          setAverageRating(0);
-          setRatingCount(0);
-        }
-
-        // Load current user's rating
+        // Load current user's rating (private, only visible to this user)
         if (currentUser?.id) {
           const { data: userRating, error: userError } = await supabase
             .from('resource_ratings')
@@ -1288,21 +1262,6 @@ function ResourceCard({ resource, isFavorited, note, onToggleFavorite, onUpdateN
       }
 
       setRating(starRating);
-      
-      // Reload average rating
-      const { data: ratingsData, error: reloadError } = await supabase
-        .from('resource_ratings')
-        .select('rating')
-        .eq('resource_id', resource.id);
-
-      if (reloadError) throw reloadError;
-
-      if (ratingsData && ratingsData.length > 0) {
-        const total = ratingsData.reduce((sum, r) => sum + r.rating, 0);
-        const average = total / ratingsData.length;
-        setAverageRating(average);
-        setRatingCount(ratingsData.length);
-      }
     } catch (error) {
       console.error('Error rating resource:', error);
       alert('Error submitting rating: ' + error.message);
@@ -1360,44 +1319,44 @@ function ResourceCard({ resource, isFavorited, note, onToggleFavorite, onUpdateN
       }`}
       style={{ animationDelay: `${index * 0.1}s` }}
     >
-      <div className="flex gap-6">
-        {/* Image - Uniform 1:1 aspect ratio (square) */}
-        <div className="w-48 flex-shrink-0 rounded-xl overflow-hidden bg-gray-100" style={{ aspectRatio: '1/1' }}>
+      <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
+        {/* Image - Smaller on mobile (96px), full size on desktop (192px) */}
+        <div className="w-24 h-24 sm:w-48 sm:h-48 flex-shrink-0 rounded-xl overflow-hidden bg-gray-100 mx-auto sm:mx-0" style={{ aspectRatio: '1/1' }}>
           {resource.image_url ? (
-            <img 
-              src={resource.image_url} 
-              alt={resource.title}
-              className="w-full h-full object-cover"
+          <img 
+            src={resource.image_url} 
+            alt={resource.title}
+            className="w-full h-full object-cover"
               style={{ aspectRatio: '1/1' }}
               loading="lazy"
-            />
+          />
           ) : (
             <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center" style={{ aspectRatio: '1/1' }}>
-              <FileText size={24} className="text-gray-400" />
-            </div>
-          )}
+              <FileText size={24} className="text-gray-400 sm:text-gray-400 text-sm sm:text-base" />
+        </div>
+      )}
         </div>
 
         {/* Content */}
         <div className="flex-1">
           {/* Badges */}
           <div className="flex gap-2 mb-3">
-            {resource.is_sponsored && (
+        {resource.is_sponsored && (
               <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-700 text-xs font-medium">
-                <Sparkles size={12} />
-                <span className="mono">Sponsored</span>
-              </div>
-            )}
+            <Sparkles size={12} />
+            <span className="mono">Sponsored</span>
+          </div>
+        )}
             <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-gradient-to-r ${getTypeColor()} text-white text-sm font-medium`}>
-              {getTypeIcon()}
-              <span className="capitalize">{getTypeLabel()}</span>
+          {getTypeIcon()}
+          <span className="capitalize">{getTypeLabel()}</span>
               {resource.resource_type === 'video' && resource.duration_seconds && (
                 <span className="ml-2 text-xs bg-white/20 px-2 py-0.5 rounded">
                   {formatDuration(resource.duration_seconds)}
                 </span>
               )}
             </div>
-          </div>
+        </div>
 
           <h4 className="font-bold text-xl text-gray-900 mb-2">{resource.title}</h4>
           <p className="text-gray-600 mb-3">{resource.description}</p>
@@ -1412,16 +1371,16 @@ function ResourceCard({ resource, isFavorited, note, onToggleFavorite, onUpdateN
             <ArrowRight size={14} />
           </a>
 
-        {/* Surgeon Rating */}
+        {/* Personal Rating (Private - only visible to this user) */}
         {currentUser && (
           <div className="mb-4">
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-xs font-semibold text-gray-700">Surgeon Rating:</span>
+              <span className="text-xs font-semibold text-gray-700">My Rating:</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-0.5">
                 {[1, 2, 3, 4, 5].map((star) => {
-                  const isFilled = hoveredStar ? star <= hoveredStar : (averageRating ? star <= Math.round(averageRating) : false);
+                  const isFilled = hoveredStar ? star <= hoveredStar : (rating ? star <= rating : false);
                   return (
                     <button
                       key={star}
@@ -1441,15 +1400,6 @@ function ResourceCard({ resource, isFavorited, note, onToggleFavorite, onUpdateN
                   );
                 })}
               </div>
-              {averageRating !== null && ratingCount > 0 && (
-                <div className="flex items-center gap-1">
-                  <span className="text-sm font-semibold text-gray-900">{averageRating.toFixed(1)}</span>
-                  <span className="text-xs text-gray-500">({ratingCount})</span>
-                </div>
-              )}
-              {ratingCount === 0 && (
-                <span className="text-xs text-gray-500">No ratings yet</span>
-              )}
             </div>
           </div>
         )}
@@ -1494,7 +1444,7 @@ function ResourceCard({ resource, isFavorited, note, onToggleFavorite, onUpdateN
                   setShowNoteInput(false);
                   setNoteText(note || '');
                 }}
-                className="px-4 py-2 border-2 border-gray-200 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
+                className="px-4 py-2 border-2 border-gray-200 rounded-lg text-sm font-medium text-gray-900 hover:bg-gray-50 transition-colors"
               >
                 Cancel
               </button>
@@ -1528,8 +1478,8 @@ function ResourceCard({ resource, isFavorited, note, onToggleFavorite, onUpdateN
               <Heart size={18} fill={isFavorited ? 'currentColor' : 'none'} />
             </button>
           </div>
+          </div>
         </div>
-      </div>
       </div>
     </div>
   );
@@ -1643,7 +1593,6 @@ function AddResourceModal({ currentUser, onSubmit, onClose }) {
     url: '',
     type: 'video',
     description: '',
-    procedure_id: '',
     duration_seconds: null,
     keywords: ''
   });
@@ -1656,20 +1605,19 @@ function AddResourceModal({ currentUser, onSubmit, onClose }) {
   const [imageError, setImageError] = useState('');
   const [isDragging, setIsDragging] = useState(false);
   
-  // Specialty/Subspecialty/Category/Procedure selection
+  // Specialty/Subspecialty/Category selection (Procedure removed per user request)
   const [specialties, setSpecialties] = useState([]);
   const [subspecialties, setSubspecialties] = useState([]);
   const [categories, setCategories] = useState([]);
-  const [procedures, setProcedures] = useState([]);
   const [selectedSpecialty, setSelectedSpecialty] = useState(null);
   const [selectedSubspecialty, setSelectedSubspecialty] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState(null);
-  const [selectedProcedure, setSelectedProcedure] = useState(null);
   const [canEditSpecialty, setCanEditSpecialty] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
   const [showNewCategoryInput, setShowNewCategoryInput] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [addingCategory, setAddingCategory] = useState(false);
+  const isInitialLoad = useRef(true);
 
   // Initialize with user's specialty/subspecialty
   useEffect(() => {
@@ -1677,22 +1625,17 @@ function AddResourceModal({ currentUser, onSubmit, onClose }) {
   }, [currentUser]);
 
   useEffect(() => {
-    if (selectedSpecialty) {
+    if (selectedSpecialty && !isInitialLoad.current) {
       loadSubspecialties(selectedSpecialty);
     }
   }, [selectedSpecialty]);
 
   useEffect(() => {
-    if (selectedSubspecialty) {
+    if (selectedSubspecialty && !isInitialLoad.current) {
       loadCategories(selectedSubspecialty);
     }
   }, [selectedSubspecialty]);
 
-  useEffect(() => {
-    if (selectedCategory) {
-      loadProcedures(selectedCategory);
-    }
-  }, [selectedCategory]);
 
   async function loadInitialData() {
     try {
@@ -1713,9 +1656,7 @@ function AddResourceModal({ currentUser, onSubmit, onClose }) {
 
       // Pre-populate with user's specialty/subspecialty if available
       if (currentUser?.specialtyId) {
-        setSelectedSpecialty(String(currentUser.specialtyId));
-        
-        // Load subspecialties for this specialty
+        // Load subspecialties for this specialty first
         const { data: subspecialtiesData, error: subspecialtiesError } = await supabase
           .from('subspecialties')
           .select('*')
@@ -1728,10 +1669,11 @@ function AddResourceModal({ currentUser, onSubmit, onClose }) {
         
         setSubspecialties(subspecialtiesData || []);
         
+        // Now set the specialty (this will trigger useEffect, but we've already loaded subspecialties)
+        setSelectedSpecialty(String(currentUser.specialtyId));
+        
         if (currentUser?.subspecialtyId) {
-          setSelectedSubspecialty(String(currentUser.subspecialtyId));
-          
-          // Load categories for the subspecialty
+          // Load categories for the subspecialty first
           const { data: categoriesData, error: categoriesError } = await supabase
             .from('categories')
             .select('*')
@@ -1744,8 +1686,14 @@ function AddResourceModal({ currentUser, onSubmit, onClose }) {
           }
           
           setCategories(categoriesData || []);
+          
+          // Now set the subspecialty (this will trigger useEffect, but we've already loaded categories)
+          setSelectedSubspecialty(String(currentUser.subspecialtyId));
         }
       }
+      
+      // Mark initial load as complete
+      isInitialLoad.current = false;
     } catch (error) {
       console.error('Error loading initial data:', error);
       const errorMessage = error.message || 'Unknown error occurred';
@@ -1753,6 +1701,7 @@ function AddResourceModal({ currentUser, onSubmit, onClose }) {
       alert(`Error loading form data:\n\n${errorMessage}\n\nPlease check the browser console for more details.`);
     } finally {
       setLoadingData(false);
+      isInitialLoad.current = false;
     }
   }
 
@@ -1768,8 +1717,6 @@ function AddResourceModal({ currentUser, onSubmit, onClose }) {
     // Only clear if specialty actually changed (not on initial load)
     if (selectedSpecialty && selectedSpecialty !== String(specialtyId)) {
       setSelectedCategory(null);
-      setSelectedProcedure(null);
-      setFormData(prev => ({ ...prev, procedure_id: '' }));
     }
   }
 
@@ -1782,35 +1729,19 @@ function AddResourceModal({ currentUser, onSubmit, onClose }) {
       .order('order');
     
     setCategories(data || []);
-    // Clear procedure when category changes
-    setSelectedProcedure(null);
-    setFormData(prev => ({ ...prev, procedure_id: '' }));
   }
 
-  async function loadProcedures(categoryId) {
-    const { data } = await supabase
-      .from('procedures')
-      .select('*')
-      .eq('category_id', categoryId)
-      .order('name');
-    
-    setProcedures(data || []);
-  }
 
   const handleSpecialtyChange = (specialtyId) => {
     setSelectedSpecialty(specialtyId);
     setSelectedSubspecialty(null);
     setSelectedCategory(null);
-    setSelectedProcedure(null);
-    setFormData(prev => ({ ...prev, procedure_id: '' }));
     loadSubspecialties(specialtyId);
   };
 
   const handleSubspecialtyChange = (subspecialtyId) => {
     setSelectedSubspecialty(subspecialtyId);
     setSelectedCategory(null);
-    setSelectedProcedure(null);
-    setFormData(prev => ({ ...prev, procedure_id: '' }));
     loadCategories(subspecialtyId);
   };
 
@@ -1822,9 +1753,6 @@ function AddResourceModal({ currentUser, onSubmit, onClose }) {
     }
     setShowNewCategoryInput(false);
     setSelectedCategory(categoryId);
-    setSelectedProcedure(null);
-    setFormData(prev => ({ ...prev, procedure_id: '' }));
-    loadProcedures(categoryId);
   };
 
   async function handleAddNewCategory() {
@@ -1854,7 +1782,6 @@ function AddResourceModal({ currentUser, onSubmit, onClose }) {
       setSelectedCategory(data.id);
       setShowNewCategoryInput(false);
       setNewCategoryName('');
-      loadProcedures(data.id);
     } catch (error) {
       console.error('Error adding category:', error);
       alert('Error adding category: ' + error.message);
@@ -1863,10 +1790,6 @@ function AddResourceModal({ currentUser, onSubmit, onClose }) {
     }
   }
 
-  const handleProcedureChange = (procedureId) => {
-    setSelectedProcedure(procedureId);
-    setFormData(prev => ({ ...prev, procedure_id: procedureId }));
-  };
 
   const processImageFile = async (file) => {
     if (!file) {
@@ -1948,11 +1871,6 @@ function AddResourceModal({ currentUser, onSubmit, onClose }) {
       return;
     }
 
-    if (!selectedProcedure) {
-      alert('Please select a procedure');
-      return;
-    }
-
     setImageError('');
     onSubmit(formData, imageFile);
   };
@@ -2010,7 +1928,7 @@ function AddResourceModal({ currentUser, onSubmit, onClose }) {
                       value={selectedSpecialty || ''}
                       onChange={(e) => handleSpecialtyChange(e.target.value)}
                       disabled={!canEditSpecialty && !!selectedSpecialty}
-                      className="w-full px-3 py-2 text-sm border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      className="w-full px-3 py-2 text-sm bg-white text-gray-900 border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none transition-colors disabled:bg-gray-100 disabled:text-gray-700 disabled:cursor-not-allowed"
                       required
                     >
                       <option value="">Select specialty...</option>
@@ -2027,7 +1945,7 @@ function AddResourceModal({ currentUser, onSubmit, onClose }) {
                       value={selectedSubspecialty || ''}
                       onChange={(e) => handleSubspecialtyChange(e.target.value)}
                       disabled={(!canEditSpecialty && !!selectedSubspecialty) || !selectedSpecialty}
-                      className="w-full px-3 py-2 text-sm border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      className="w-full px-3 py-2 text-sm bg-white text-gray-900 border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none transition-colors disabled:bg-gray-100 disabled:text-gray-700 disabled:cursor-not-allowed"
                       required
                     >
                       <option value="">Select subspecialty...</option>
@@ -2070,7 +1988,7 @@ function AddResourceModal({ currentUser, onSubmit, onClose }) {
                           setShowNewCategoryInput(false);
                           setNewCategoryName('');
                         }}
-                        className="px-4 py-2 border-2 border-gray-200 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+                        className="px-4 py-2 border-2 border-gray-200 rounded-lg font-medium text-gray-900 hover:bg-gray-50 transition-colors"
                       >
                         Cancel
                       </button>
@@ -2095,23 +2013,6 @@ function AddResourceModal({ currentUser, onSubmit, onClose }) {
               </div>
             )}
 
-            {/* Procedure Selection */}
-            {selectedCategory && (
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Procedure *</label>
-                <select
-                  required
-                  value={selectedProcedure || ''}
-                  onChange={(e) => handleProcedureChange(e.target.value)}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors"
-                >
-                  <option value="">Select procedure...</option>
-                  {procedures.map(proc => (
-                    <option key={proc.id} value={proc.id}>{proc.name}</option>
-                  ))}
-                </select>
-              </div>
-            )}
 
             {/* Image Upload */}
             <div>
@@ -2312,13 +2213,13 @@ function AddResourceModal({ currentUser, onSubmit, onClose }) {
               <button
                 type="button"
                 onClick={onClose}
-                className="px-6 py-3 border-2 border-gray-200 rounded-xl font-medium hover:bg-gray-50 transition-colors"
+                className="px-6 py-3 border-2 border-gray-200 rounded-xl font-medium text-gray-900 hover:bg-gray-50 transition-colors"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                disabled={!selectedProcedure || !imageFile || (formData.type === 'video' && !formData.duration_seconds)}
+                disabled={!imageFile || (formData.type === 'video' && !formData.duration_seconds)}
                 className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-medium glow-button disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Add Resource
@@ -2333,7 +2234,6 @@ function AddResourceModal({ currentUser, onSubmit, onClose }) {
 
 function SuggestResourceModal({ currentUser, onSubmit, onClose }) {
   const [formData, setFormData] = useState({
-    procedure_id: '',
     title: '',
     url: '',
     type: 'video',
@@ -2351,20 +2251,19 @@ function SuggestResourceModal({ currentUser, onSubmit, onClose }) {
   const [submitting, setSubmitting] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   
-  // Specialty/Subspecialty/Category/Procedure selection
+  // Specialty/Subspecialty/Category selection (Procedure removed per user request)
   const [specialties, setSpecialties] = useState([]);
   const [subspecialties, setSubspecialties] = useState([]);
   const [categories, setCategories] = useState([]);
-  const [procedures, setProcedures] = useState([]);
   const [selectedSpecialty, setSelectedSpecialty] = useState(null);
   const [selectedSubspecialty, setSelectedSubspecialty] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState(null);
-  const [selectedProcedure, setSelectedProcedure] = useState(null);
   const [canEditSpecialty, setCanEditSpecialty] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
   const [showNewCategoryInput, setShowNewCategoryInput] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [addingCategory, setAddingCategory] = useState(false);
+  const isInitialLoad = useRef(true);
 
   // Initialize with user's specialty/subspecialty
   useEffect(() => {
@@ -2374,23 +2273,18 @@ function SuggestResourceModal({ currentUser, onSubmit, onClose }) {
   }, [currentUser]);
 
   useEffect(() => {
-    if (selectedSpecialty) {
+    if (selectedSpecialty && !isInitialLoad.current) {
       // Load subspecialties when specialty is selected
       loadSubspecialties(selectedSpecialty);
     }
   }, [selectedSpecialty]);
 
   useEffect(() => {
-    if (selectedSubspecialty) {
+    if (selectedSubspecialty && !isInitialLoad.current) {
       loadCategories(selectedSubspecialty);
     }
   }, [selectedSubspecialty]);
 
-  useEffect(() => {
-    if (selectedCategory) {
-      loadProcedures(selectedCategory);
-    }
-  }, [selectedCategory]);
 
   async function loadInitialData() {
     try {
@@ -2411,9 +2305,7 @@ function SuggestResourceModal({ currentUser, onSubmit, onClose }) {
 
       // Pre-populate with user's specialty/subspecialty if available
       if (currentUser?.specialtyId) {
-        setSelectedSpecialty(String(currentUser.specialtyId));
-        
-        // Load subspecialties for this specialty
+        // Load subspecialties for this specialty first
         const { data: subspecialtiesData, error: subspecialtiesError } = await supabase
           .from('subspecialties')
           .select('*')
@@ -2426,10 +2318,11 @@ function SuggestResourceModal({ currentUser, onSubmit, onClose }) {
         
         setSubspecialties(subspecialtiesData || []);
         
+        // Now set the specialty (this will trigger useEffect, but we've already loaded subspecialties)
+        setSelectedSpecialty(String(currentUser.specialtyId));
+        
         if (currentUser?.subspecialtyId) {
-          setSelectedSubspecialty(String(currentUser.subspecialtyId));
-          
-          // Load categories for the subspecialty
+          // Load categories for the subspecialty first
           const { data: categoriesData, error: categoriesError } = await supabase
             .from('categories')
             .select('*')
@@ -2442,8 +2335,14 @@ function SuggestResourceModal({ currentUser, onSubmit, onClose }) {
           }
           
           setCategories(categoriesData || []);
+          
+          // Now set the subspecialty (this will trigger useEffect, but we've already loaded categories)
+          setSelectedSubspecialty(String(currentUser.subspecialtyId));
         }
       }
+      
+      // Mark initial load as complete
+      isInitialLoad.current = false;
     } catch (error) {
       console.error('Error loading initial data:', error);
       const errorMessage = error.message || 'Unknown error occurred';
@@ -2451,6 +2350,7 @@ function SuggestResourceModal({ currentUser, onSubmit, onClose }) {
       alert(`Error loading form data:\n\n${errorMessage}\n\nPlease check the browser console for more details.`);
     } finally {
       setLoadingData(false);
+      isInitialLoad.current = false;
     }
   }
 
@@ -2462,10 +2362,8 @@ function SuggestResourceModal({ currentUser, onSubmit, onClose }) {
       .order('order');
     
     setSubspecialties(data || []);
-    // Clear category/procedure when specialty changes
+    // Clear category when specialty changes
     setSelectedCategory(null);
-    setSelectedProcedure(null);
-    setFormData(prev => ({ ...prev, procedure_id: '' }));
   }
 
   async function loadCategories(subspecialtyId) {
@@ -2477,35 +2375,19 @@ function SuggestResourceModal({ currentUser, onSubmit, onClose }) {
       .order('order');
     
     setCategories(data || []);
-    // Clear procedure when category changes
-    setSelectedProcedure(null);
-    setFormData(prev => ({ ...prev, procedure_id: '' }));
   }
 
-  async function loadProcedures(categoryId) {
-    const { data } = await supabase
-      .from('procedures')
-      .select('*')
-      .eq('category_id', categoryId)
-      .order('name');
-    
-    setProcedures(data || []);
-  }
 
   const handleSpecialtyChange = (specialtyId) => {
     setSelectedSpecialty(specialtyId);
     setSelectedSubspecialty(null);
     setSelectedCategory(null);
-    setSelectedProcedure(null);
-    setFormData(prev => ({ ...prev, procedure_id: '' }));
     loadSubspecialties(specialtyId);
   };
 
   const handleSubspecialtyChange = (subspecialtyId) => {
     setSelectedSubspecialty(subspecialtyId);
     setSelectedCategory(null);
-    setSelectedProcedure(null);
-    setFormData(prev => ({ ...prev, procedure_id: '' }));
     loadCategories(subspecialtyId);
   };
 
@@ -2517,9 +2399,6 @@ function SuggestResourceModal({ currentUser, onSubmit, onClose }) {
     }
     setShowNewCategoryInput(false);
     setSelectedCategory(categoryId);
-    setSelectedProcedure(null);
-    setFormData(prev => ({ ...prev, procedure_id: '' }));
-    loadProcedures(categoryId);
   };
 
   async function handleAddNewCategory() {
@@ -2549,7 +2428,6 @@ function SuggestResourceModal({ currentUser, onSubmit, onClose }) {
       setSelectedCategory(data.id);
       setShowNewCategoryInput(false);
       setNewCategoryName('');
-      loadProcedures(data.id);
     } catch (error) {
       console.error('Error adding category:', error);
       alert('Error adding category: ' + error.message);
@@ -2558,10 +2436,6 @@ function SuggestResourceModal({ currentUser, onSubmit, onClose }) {
     }
   }
 
-  const handleProcedureChange = (procedureId) => {
-    setSelectedProcedure(procedureId);
-    setFormData(prev => ({ ...prev, procedure_id: procedureId }));
-  };
 
   const processImageFile = async (file) => {
     if (!file) {
@@ -2643,24 +2517,13 @@ function SuggestResourceModal({ currentUser, onSubmit, onClose }) {
       return;
     }
 
-    if (!selectedProcedure) {
-      alert('Please select a procedure');
-      return;
-    }
-
     setImageError('');
     setSubmitting(true);
     
     try {
-      // Make sure procedure_id is set in formData
-      const submitData = {
-        ...formData,
-        procedure_id: selectedProcedure
-      };
-      await onSubmit(submitData, imageFile);
+      await onSubmit(formData, imageFile);
       // Reset form
       setFormData({
-        procedure_id: '',
         title: '',
         url: '',
         type: 'video',
@@ -2668,7 +2531,6 @@ function SuggestResourceModal({ currentUser, onSubmit, onClose }) {
       });
       setImageFile(null);
       setImagePreview(null);
-      setSelectedProcedure(null);
       setSelectedCategory(null);
       setSelectedSubspecialty(null);
       setSelectedSpecialty(null);
@@ -2726,7 +2588,7 @@ function SuggestResourceModal({ currentUser, onSubmit, onClose }) {
                       value={selectedSpecialty || ''}
                       onChange={(e) => handleSpecialtyChange(e.target.value)}
                       disabled={!canEditSpecialty && !!selectedSpecialty}
-                      className="w-full px-3 py-2 text-sm border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      className="w-full px-3 py-2 text-sm bg-white text-gray-900 border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none transition-colors disabled:bg-gray-100 disabled:text-gray-700 disabled:cursor-not-allowed"
                       required
                     >
                       <option value="">Select specialty...</option>
@@ -2743,7 +2605,7 @@ function SuggestResourceModal({ currentUser, onSubmit, onClose }) {
                       value={selectedSubspecialty || ''}
                       onChange={(e) => handleSubspecialtyChange(e.target.value)}
                       disabled={(!canEditSpecialty && !!selectedSubspecialty) || !selectedSpecialty}
-                      className="w-full px-3 py-2 text-sm border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed"
+                      className="w-full px-3 py-2 text-sm bg-white text-gray-900 border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none transition-colors disabled:bg-gray-100 disabled:text-gray-700 disabled:cursor-not-allowed"
                       required
                     >
                       <option value="">Select subspecialty...</option>
@@ -2786,7 +2648,7 @@ function SuggestResourceModal({ currentUser, onSubmit, onClose }) {
                           setShowNewCategoryInput(false);
                           setNewCategoryName('');
                         }}
-                        className="px-4 py-2 border-2 border-gray-200 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+                        className="px-4 py-2 border-2 border-gray-200 rounded-lg font-medium text-gray-900 hover:bg-gray-50 transition-colors"
                       >
                         Cancel
                       </button>
@@ -2811,23 +2673,6 @@ function SuggestResourceModal({ currentUser, onSubmit, onClose }) {
               </div>
             )}
 
-            {/* Procedure Selection */}
-            {selectedCategory && (
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Procedure *</label>
-                <select
-                  required
-                  value={selectedProcedure || ''}
-                  onChange={(e) => handleProcedureChange(e.target.value)}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors"
-                >
-                  <option value="">Select procedure...</option>
-                  {procedures.map(proc => (
-                    <option key={proc.id} value={proc.id}>{proc.name}</option>
-                  ))}
-                </select>
-              </div>
-            )}
 
             {/* Image Upload */}
             <div>
@@ -3034,7 +2879,7 @@ function SuggestResourceModal({ currentUser, onSubmit, onClose }) {
               </button>
               <button
                 type="submit"
-                disabled={submitting || !imageFile || !selectedProcedure || (formData.type === 'video' && !formData.duration_seconds)}
+                disabled={submitting || !imageFile || (formData.type === 'video' && !formData.duration_seconds)}
                 className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-medium glow-button disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {submitting ? 'Submitting...' : 'Submit Suggestion'}
@@ -3047,7 +2892,7 @@ function SuggestResourceModal({ currentUser, onSubmit, onClose }) {
   );
 }
 
-function EditResourceModal({ resource, onSubmit, onClose }) {
+function EditResourceModal({ resource, currentUser, onSubmit, onClose }) {
   // Parse duration_seconds into hours, minutes, seconds
   const parseDuration = (seconds) => {
     if (!seconds) return { hours: '', minutes: '', seconds: '' };
@@ -3065,8 +2910,7 @@ function EditResourceModal({ resource, onSubmit, onClose }) {
     type: resource.resource_type || 'video',
     description: resource.description || '',
     keywords: resource.keywords || '',
-    duration_seconds: resource.duration_seconds || null,
-    procedure_id: resource.procedure_id || ''
+    duration_seconds: resource.duration_seconds || null
   });
   const [durationHours, setDurationHours] = useState(initialDuration.hours);
   const [durationMinutes, setDurationMinutes] = useState(initialDuration.minutes);
@@ -3078,39 +2922,33 @@ function EditResourceModal({ resource, onSubmit, onClose }) {
   const [submitting, setSubmitting] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
 
-  // Category/Procedure selection
+  // Specialty/Subspecialty/Category selection
   const [specialties, setSpecialties] = useState([]);
   const [subspecialties, setSubspecialties] = useState([]);
   const [categories, setCategories] = useState([]);
-  const [procedures, setProcedures] = useState([]);
   const [selectedSpecialty, setSelectedSpecialty] = useState(null);
   const [selectedSubspecialty, setSelectedSubspecialty] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState(null);
-  const [selectedProcedure, setSelectedProcedure] = useState(resource.procedure_id || null);
   const [loadingData, setLoadingData] = useState(true);
+  const isInitialLoad = useRef(true);
 
-  // Load initial data - get procedure, category, subspecialty hierarchy
+  // Load initial data - get category, subspecialty hierarchy for prepopulation
   useEffect(() => {
     loadInitialData();
-  }, [resource.procedure_id]);
+  }, [resource.id]);
 
   useEffect(() => {
-    if (selectedSpecialty) {
+    if (selectedSpecialty && !isInitialLoad.current) {
       loadSubspecialties(selectedSpecialty);
     }
   }, [selectedSpecialty]);
 
   useEffect(() => {
-    if (selectedSubspecialty) {
+    if (selectedSubspecialty && !isInitialLoad.current) {
       loadCategories(selectedSubspecialty);
     }
   }, [selectedSubspecialty]);
 
-  useEffect(() => {
-    if (selectedCategory) {
-      loadProcedures(selectedCategory);
-    }
-  }, [selectedCategory]);
 
   // Initialize preview with existing image if available
   useEffect(() => {
@@ -3121,6 +2959,7 @@ function EditResourceModal({ resource, onSubmit, onClose }) {
 
   async function loadInitialData() {
     try {
+      isInitialLoad.current = true;
       setLoadingData(true);
       
       // Load all specialties
@@ -3130,75 +2969,114 @@ function EditResourceModal({ resource, onSubmit, onClose }) {
         .order('order');
       setSpecialties(specialtiesData || []);
 
-      // If resource has a procedure_id, load its hierarchy (procedure -> category -> subspecialty -> specialty)
-      if (resource.procedure_id) {
-        // Ensure procedure is selected in the UI + form
-        setSelectedProcedure(resource.procedure_id);
-        setFormData(prev => ({ ...prev, procedure_id: resource.procedure_id }));
+      let didPrepopulate = false;
 
+      // 1) If resource has procedure_id, use procedure -> category -> subspecialty -> specialty
+      if (resource.procedure_id) {
         const { data: procedureRow, error: procErr } = await supabase
           .from('procedures')
           .select('id, category_id')
           .eq('id', resource.procedure_id)
           .single();
-        if (procErr) throw procErr;
+        
+        if (!procErr && procedureRow) {
+          const { data: categoryRow, error: catErr } = await supabase
+            .from('categories')
+            .select('id, subspecialty_id')
+            .eq('id', procedureRow.category_id)
+            .single();
+          
+          if (!catErr && categoryRow) {
+            const { data: subspecialtyRow, error: subErr } = await supabase
+              .from('subspecialties')
+              .select('id, specialty_id')
+              .eq('id', categoryRow.subspecialty_id)
+              .single();
+            
+            if (!subErr && subspecialtyRow) {
+              didPrepopulate = true;
+              const [
+                { data: subspecialtiesData, error: subsErr },
+                { data: categoriesData, error: catsErr },
+              ] = await Promise.all([
+                supabase.from('subspecialties').select('*').eq('specialty_id', subspecialtyRow.specialty_id).order('order'),
+                supabase.from('categories').select('*').eq('subspecialty_id', subspecialtyRow.id).is('parent_category_id', null).order('order'),
+              ]);
+              if (subsErr || catsErr) throw subsErr || catsErr;
+              setSubspecialties(subspecialtiesData || []);
+              setCategories(categoriesData || []);
+              setSelectedSpecialty(String(subspecialtyRow.specialty_id));
+              setSelectedSubspecialty(String(subspecialtyRow.id));
+              setSelectedCategory(String(categoryRow.id));
+            }
+          }
+        }
+      }
 
+      // 2) Else if resource has category_id, use category -> subspecialty -> specialty
+      if (!didPrepopulate && resource.category_id) {
         const { data: categoryRow, error: catErr } = await supabase
           .from('categories')
           .select('id, subspecialty_id')
-          .eq('id', procedureRow.category_id)
+          .eq('id', resource.category_id)
           .single();
-        if (catErr) throw catErr;
-
-        const { data: subspecialtyRow, error: subErr } = await supabase
-          .from('subspecialties')
-          .select('id, specialty_id')
-          .eq('id', categoryRow.subspecialty_id)
-          .single();
-        if (subErr) throw subErr;
-
-        // Pre-populate selections (still editable) - convert to strings to match option values
-        setSelectedSpecialty(String(subspecialtyRow.specialty_id));
-        setSelectedSubspecialty(String(subspecialtyRow.id));
-        setSelectedCategory(String(categoryRow.id));
-
-        // Load option lists for the dropdowns
-        const [
-          { data: subspecialtiesData, error: subsErr },
-          { data: categoriesData, error: catsErr },
-          { data: proceduresData, error: procsErr },
-        ] = await Promise.all([
-          supabase
+        if (!catErr && categoryRow) {
+          const { data: subspecialtyRow, error: subErr } = await supabase
             .from('subspecialties')
-            .select('*')
-            .eq('specialty_id', subspecialtyRow.specialty_id)
-            .order('order'),
-          supabase
-            .from('categories')
-            .select('*')
-            .eq('subspecialty_id', subspecialtyRow.id)
-            .is('parent_category_id', null)
-            .order('order'),
-          supabase
-            .from('procedures')
-            .select('*')
-            .eq('category_id', categoryRow.id)
-            .order('name'),
-        ]);
-
-        if (subsErr) throw subsErr;
-        if (catsErr) throw catsErr;
-        if (procsErr) throw procsErr;
-
-        setSubspecialties(subspecialtiesData || []);
-        setCategories(categoriesData || []);
-        setProcedures(proceduresData || []);
+            .select('id, specialty_id')
+            .eq('id', categoryRow.subspecialty_id)
+            .single();
+          if (!subErr && subspecialtyRow) {
+            didPrepopulate = true;
+            const [
+              { data: subspecialtiesData, error: subsErr },
+              { data: categoriesData, error: catsErr },
+            ] = await Promise.all([
+              supabase.from('subspecialties').select('*').eq('specialty_id', subspecialtyRow.specialty_id).order('order'),
+              supabase.from('categories').select('*').eq('subspecialty_id', subspecialtyRow.id).is('parent_category_id', null).order('order'),
+            ]);
+            if (subsErr || catsErr) throw subsErr || catsErr;
+            setSubspecialties(subspecialtiesData || []);
+            setCategories(categoriesData || []);
+            setSelectedSpecialty(String(subspecialtyRow.specialty_id));
+            setSelectedSubspecialty(String(subspecialtyRow.id));
+            setSelectedCategory(String(categoryRow.id));
+          }
+        }
       }
+
+      // 3) Else use currentUser's specialty/subspecialty (admin profile)
+      if (!didPrepopulate && currentUser?.specialtyId) {
+        const { data: subspecialtiesData, error: subsErr } = await supabase
+          .from('subspecialties')
+          .select('*')
+          .eq('specialty_id', currentUser.specialtyId)
+          .order('order');
+        if (!subsErr && subspecialtiesData?.length) {
+          setSubspecialties(subspecialtiesData);
+          setSelectedSpecialty(String(currentUser.specialtyId));
+          if (currentUser.subspecialtyId) {
+            const { data: categoriesData, error: catsErr } = await supabase
+              .from('categories')
+              .select('*')
+              .eq('subspecialty_id', currentUser.subspecialtyId)
+              .is('parent_category_id', null)
+              .order('order');
+            if (!catsErr) {
+              setCategories(categoriesData || []);
+              setSelectedSubspecialty(String(currentUser.subspecialtyId));
+            }
+          }
+        }
+      }
+      
+      isInitialLoad.current = false;
     } catch (error) {
       console.error('Error loading initial data:', error);
       alert('Error loading category data: ' + error.message);
     } finally {
       setLoadingData(false);
+      isInitialLoad.current = false;
     }
   }
 
@@ -3210,11 +3088,9 @@ function EditResourceModal({ resource, onSubmit, onClose }) {
       .eq('specialty_id', specialtyId)
       .order('order');
     setSubspecialties(data || []);
-    if (selectedSubspecialty && !data?.find(s => s.id === selectedSubspecialty)) {
+    if (selectedSubspecialty && !data?.find(s => String(s.id) === String(selectedSubspecialty))) {
       setSelectedSubspecialty(null);
       setSelectedCategory(null);
-      setSelectedProcedure(null);
-      setFormData(prev => ({ ...prev, procedure_id: '' }));
     }
   }
 
@@ -3227,24 +3103,8 @@ function EditResourceModal({ resource, onSubmit, onClose }) {
       .is('parent_category_id', null)
       .order('order');
     setCategories(data || []);
-    if (selectedCategory && !data?.find(c => c.id === selectedCategory)) {
+    if (selectedCategory && !data?.find(c => String(c.id) === String(selectedCategory))) {
       setSelectedCategory(null);
-      setSelectedProcedure(null);
-      setFormData(prev => ({ ...prev, procedure_id: '' }));
-    }
-  }
-
-  async function loadProcedures(categoryId) {
-    if (!categoryId) return;
-    const { data } = await supabase
-      .from('procedures')
-      .select('*')
-      .eq('category_id', categoryId)
-      .order('name');
-    setProcedures(data || []);
-    if (selectedProcedure && !data?.find(p => p.id === selectedProcedure)) {
-      setSelectedProcedure(null);
-      setFormData(prev => ({ ...prev, procedure_id: '' }));
     }
   }
 
@@ -3252,30 +3112,19 @@ function EditResourceModal({ resource, onSubmit, onClose }) {
     setSelectedSpecialty(specialtyId);
     setSelectedSubspecialty(null);
     setSelectedCategory(null);
-    setSelectedProcedure(null);
-    setFormData(prev => ({ ...prev, procedure_id: '' }));
     loadSubspecialties(specialtyId);
   };
 
   const handleSubspecialtyChange = (subspecialtyId) => {
     setSelectedSubspecialty(subspecialtyId);
     setSelectedCategory(null);
-    setSelectedProcedure(null);
-    setFormData(prev => ({ ...prev, procedure_id: '' }));
     loadCategories(subspecialtyId);
   };
 
   const handleCategoryChange = (categoryId) => {
     setSelectedCategory(categoryId);
-    setSelectedProcedure(null);
-    setFormData(prev => ({ ...prev, procedure_id: '' }));
-    loadProcedures(categoryId);
   };
 
-  const handleProcedureChange = (procedureId) => {
-    setSelectedProcedure(procedureId);
-    setFormData(prev => ({ ...prev, procedure_id: procedureId }));
-  };
 
   const processImageFile = async (file) => {
     if (!file) {
@@ -3466,7 +3315,7 @@ function EditResourceModal({ resource, onSubmit, onClose }) {
               )}
             </div>
 
-            {/* Specialty/Subspecialty/Category/Procedure Selection */}
+            {/* Specialty/Subspecialty/Category Selection */}
             {loadingData ? (
               <div className="text-center py-4">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto"></div>
@@ -3485,11 +3334,11 @@ function EditResourceModal({ resource, onSubmit, onClose }) {
                       <select
                         value={selectedSpecialty || ''}
                         onChange={(e) => handleSpecialtyChange(e.target.value)}
-                        className="w-full px-3 py-2 text-sm border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none transition-colors"
+                        className="w-full px-3 py-2 text-sm bg-white text-gray-900 border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none transition-colors"
                       >
                         <option value="">Select specialty...</option>
                         {specialties.map(s => (
-                          <option key={s.id} value={s.id}>{s.name}</option>
+                          <option key={s.id} value={String(s.id)}>{s.name}</option>
                         ))}
                       </select>
                     </div>
@@ -3501,11 +3350,11 @@ function EditResourceModal({ resource, onSubmit, onClose }) {
                         value={selectedSubspecialty || ''}
                         onChange={(e) => handleSubspecialtyChange(e.target.value)}
                         disabled={!selectedSpecialty}
-                        className="w-full px-3 py-2 text-sm border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none transition-colors disabled:bg-gray-100 disabled:cursor-not-allowed"
+                        className="w-full px-3 py-2 text-sm bg-white text-gray-900 border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none transition-colors disabled:bg-gray-100 disabled:text-gray-700 disabled:cursor-not-allowed"
                       >
                         <option value="">Select subspecialty...</option>
                         {subspecialties.map(s => (
-                          <option key={s.id} value={s.id}>{s.name}</option>
+                          <option key={s.id} value={String(s.id)}>{s.name}</option>
                         ))}
                       </select>
                     </div>
@@ -3515,38 +3364,20 @@ function EditResourceModal({ resource, onSubmit, onClose }) {
                 {/* Category Selection */}
                 {selectedSubspecialty && (
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">Category *</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Category</label>
                     <select
-                      required
                       value={selectedCategory || ''}
                       onChange={(e) => handleCategoryChange(e.target.value)}
-                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors"
+                      className="w-full px-4 py-3 bg-white text-gray-900 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors"
                     >
                       <option value="">Select category...</option>
                       {categories.map(cat => (
-                        <option key={cat.id} value={cat.id}>{cat.name}</option>
+                        <option key={cat.id} value={String(cat.id)}>{cat.name}</option>
                       ))}
                     </select>
                   </div>
                 )}
 
-                {/* Procedure Selection */}
-                {selectedCategory && (
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">Procedure *</label>
-                    <select
-                      required
-                      value={selectedProcedure || ''}
-                      onChange={(e) => handleProcedureChange(e.target.value)}
-                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors"
-                    >
-                      <option value="">Select procedure...</option>
-                      {procedures.map(proc => (
-                        <option key={proc.id} value={proc.id}>{proc.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
               </>
             )}
 
@@ -3677,14 +3508,14 @@ function EditResourceModal({ resource, onSubmit, onClose }) {
               <button
                 type="button"
                 onClick={onClose}
-                className="px-6 py-3 border-2 border-gray-200 rounded-xl font-medium hover:bg-gray-50 transition-colors"
+                className="px-6 py-3 border-2 border-gray-200 rounded-xl font-medium text-gray-900 hover:bg-gray-50 transition-colors"
                 disabled={submitting}
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                disabled={submitting || !selectedProcedure || (formData.type === 'video' && !formData.duration_seconds)}
+                disabled={submitting || (formData.type === 'video' && !formData.duration_seconds)}
                 className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-medium glow-button disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {submitting ? 'Updating...' : 'Update Resource'}
