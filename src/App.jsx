@@ -188,20 +188,31 @@ function SurgicalTechniquesApp() {
 
       const imageUrl = publicUrl;
 
-      // Insert resource
+      // Insert resource - only include duration_seconds for videos
+      const insertData = {
+        title: resourceData.title,
+        url: resourceData.url,
+        description: resourceData.description,
+        resource_type: resourceData.type,
+        image_url: imageUrl,
+        keywords: resourceData.keywords || null,
+        curated_by: currentUser.id,
+        is_sponsored: false
+      };
+      
+      // Only add category_id if provided (column may not exist yet)
+      if (resourceData.category_id) {
+        insertData.category_id = resourceData.category_id;
+      }
+      
+      // Only add duration_seconds if it's a video and has a value
+      if (resourceData.type === 'video' && resourceData.duration_seconds) {
+        insertData.duration_seconds = resourceData.duration_seconds;
+      }
+      
       const { error } = await supabase
         .from('resources')
-        .insert([{
-          title: resourceData.title,
-          url: resourceData.url,
-          description: resourceData.description,
-          resource_type: resourceData.type,
-          image_url: imageUrl,
-          keywords: resourceData.keywords || null,
-          duration_seconds: resourceData.type === 'video' ? resourceData.duration_seconds || null : null,
-          curated_by: currentUser.id,
-          is_sponsored: false
-        }]);
+        .insert([insertData]);
 
       if (error) throw error;
 
@@ -241,20 +252,31 @@ function SurgicalTechniquesApp() {
 
       const imageUrl = publicUrl;
 
-      // Insert suggestion
+      // Insert suggestion - only include duration_seconds for videos
+      const insertData = {
+        title: resourceData.title,
+        url: resourceData.url,
+        description: resourceData.description,
+        resource_type: resourceData.type || 'video',
+        image_url: imageUrl,
+        keywords: resourceData.keywords || null,
+        suggested_by: currentUser.id,
+        status: 'pending'
+      };
+      
+      // Only add category_id if provided (column may not exist yet)
+      if (resourceData.category_id) {
+        insertData.category_id = resourceData.category_id;
+      }
+      
+      // Only add duration_seconds if it's a video and has a value
+      if (resourceData.type === 'video' && resourceData.duration_seconds) {
+        insertData.duration_seconds = resourceData.duration_seconds;
+      }
+      
       const { error } = await supabase
         .from('resource_suggestions')
-        .insert([{
-          title: resourceData.title,
-          url: resourceData.url,
-          description: resourceData.description,
-          resource_type: resourceData.type || 'video',
-          image_url: imageUrl,
-          keywords: resourceData.keywords || null,
-          duration_seconds: resourceData.type === 'video' ? resourceData.duration_seconds || null : null,
-          suggested_by: currentUser.id,
-          status: 'pending'
-        }]);
+        .insert([insertData]);
 
       if (error) throw error;
 
@@ -294,21 +316,49 @@ function SurgicalTechniquesApp() {
       }
       // If imageFile is null and resourceData.image_url is null, imageUrl stays null (removed)
 
-      // Update resource
-      const { error } = await supabase
+      // Update resource - only include optional columns if they exist and have values
+      const updateData = {
+        title: resourceData.title,
+        url: resourceData.url,
+        description: resourceData.description,
+        resource_type: resourceData.type,
+        image_url: imageUrl,
+        keywords: resourceData.keywords || null,
+      };
+      
+      // Always include category_id if provided (even if null to clear it)
+      // Only skip if column doesn't exist (will be handled by defensive check)
+      if (resourceData.category_id !== undefined) {
+        updateData.category_id = resourceData.category_id;
+      }
+      
+      // Only add duration_seconds if it's a video AND has a value (column may not exist yet - migration needed)
+      // Don't include it at all if null or not a video to avoid schema errors
+      if (resourceData.type === 'video' && resourceData.duration_seconds) {
+        updateData.duration_seconds = resourceData.duration_seconds;
+      }
+      // Note: We don't set duration_seconds to null for non-videos to avoid errors if column doesn't exist
+      
+      console.log('Updating resource with data:', updateData); // Debug log
+      console.log('Category ID being saved:', updateData.category_id);
+      
+      const { error, data } = await supabase
         .from('resources')
-        .update({
-          title: resourceData.title,
-          url: resourceData.url,
-          description: resourceData.description,
-          resource_type: resourceData.type,
-          image_url: imageUrl,
-          keywords: resourceData.keywords || null,
-          duration_seconds: resourceData.type === 'video' ? resourceData.duration_seconds || null : null,
-        })
-        .eq('id', resourceId);
+        .update(updateData)
+        .eq('id', resourceId)
+        .select();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Error updating resource:', error);
+        // Check if error is about missing column
+        if (error.message && error.message.includes('category_id')) {
+          alert('Error: The category_id column does not exist in the database. Please run the SQL migration "add_category_id_column.sql" in your Supabase SQL editor first.');
+        }
+        throw error;
+      }
+      
+      console.log('Resource updated successfully:', data);
+      console.log('Updated resource category_id:', data?.[0]?.category_id);
 
       setEditingResource(null);
       loadAllData();
@@ -449,7 +499,7 @@ function SurgicalTechniquesApp() {
       filtered = filtered.filter(r => favorites.includes(r.id));
     }
 
-    // Filter by category (via procedures)
+    // Filter by category - support both category_id (new) and procedure_id (legacy)
     if (selectedCategoryId) {
       // Get all category IDs to include (category + its subcategories)
       const categoryIds = [selectedCategoryId];
@@ -458,15 +508,21 @@ function SurgicalTechniquesApp() {
         .map(c => c.id);
       const allCategoryIds = [...categoryIds, ...subcategoryIds];
 
-      // Get procedure IDs for these categories
-      const procedureIds = procedures
-        .filter(p => allCategoryIds.includes(p.category_id))
-        .map(p => p.id);
-
-      // Filter resources by procedure IDs
-      filtered = filtered.filter(r => 
-        r.procedure_id && procedureIds.includes(r.procedure_id)
-      );
+      // Filter resources by category_id (new way) OR procedure_id (legacy)
+      filtered = filtered.filter(r => {
+        // New resources have category_id directly
+        if (r.category_id && allCategoryIds.includes(r.category_id)) {
+          return true;
+        }
+        // Legacy resources have procedure_id - check if procedure belongs to selected category
+        if (r.procedure_id) {
+          const procedureIds = procedures
+            .filter(p => allCategoryIds.includes(p.category_id))
+            .map(p => p.id);
+          return procedureIds.includes(r.procedure_id);
+        }
+        return false;
+      });
     }
 
     if (searchTerm) {
@@ -566,7 +622,7 @@ function SurgicalTechniquesApp() {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-6 py-12">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-12">
         {currentView === 'user' ? (
           <UserView 
             resources={displayedResources}
@@ -917,16 +973,16 @@ function AdminView({ resources, adminTab, setAdminTab, onAddResource, onEditReso
 
   return (
     <div className="animate-slide-up">
-      <div className="mb-8">
-        <h2 className="text-3xl font-bold text-gray-900 mb-2">Admin Dashboard</h2>
-        <p className="text-gray-600">Manage content and view insights</p>
+      <div className="mb-6 sm:mb-8">
+        <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">Admin Dashboard</h2>
+        <p className="text-sm sm:text-base text-gray-600">Manage content and view insights</p>
       </div>
 
       {/* Tabs */}
-      <div className="glass rounded-2xl p-2 mb-8 shadow-lg inline-flex gap-2">
+      <div className="glass rounded-2xl p-1.5 sm:p-2 mb-6 sm:mb-8 shadow-lg inline-flex gap-1 sm:gap-2 w-full sm:w-auto">
         <button
           onClick={() => setAdminTab('resources')}
-          className={`px-6 py-3 rounded-xl font-medium transition-all ${
+          className={`flex-1 sm:flex-none px-4 sm:px-6 py-2.5 sm:py-3 rounded-xl text-sm sm:text-base font-medium transition-all ${
             adminTab === 'resources' 
               ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg' 
               : 'text-gray-700 hover:bg-gray-100'
@@ -936,14 +992,15 @@ function AdminView({ resources, adminTab, setAdminTab, onAddResource, onEditReso
         </button>
         <button
           onClick={() => setAdminTab('analytics')}
-          className={`flex items-center gap-2 px-6 py-3 rounded-xl font-medium transition-all ${
+          className={`flex items-center justify-center gap-2 flex-1 sm:flex-none px-4 sm:px-6 py-2.5 sm:py-3 rounded-xl text-sm sm:text-base font-medium transition-all ${
             adminTab === 'analytics' 
               ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg' 
               : 'text-gray-700 hover:bg-gray-100'
           }`}
         >
-          <BarChart3 size={18} />
-          Analytics
+          <BarChart3 size={16} className="sm:w-[18px] sm:h-[18px]" />
+          <span className="hidden xs:inline">Analytics</span>
+          <span className="xs:hidden">Stats</span>
         </button>
       </div>
 
@@ -970,53 +1027,54 @@ function AdminView({ resources, adminTab, setAdminTab, onAddResource, onEditReso
 function ResourcesManagement({ resources, searchTerm, setSearchTerm, onAddResource, onEditResource, onDeleteResource, onEditCategories }) {
   return (
     <>
-      <div className="flex justify-between items-start mb-6">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-4 sm:mb-6 gap-4">
         <div>
-          <h3 className="text-2xl font-bold text-gray-900 mb-2">Manage Resources</h3>
-          <p className="text-gray-600">Add, edit, or remove resources from the library</p>
+          <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">Manage Resources</h3>
+          <p className="text-sm sm:text-base text-gray-600">Add, edit, or remove resources from the library</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
           <button
             onClick={onEditCategories}
-            className="flex items-center gap-2 px-5 py-3 glass border-2 border-purple-300 text-purple-700 rounded-xl font-medium hover:bg-purple-50 transition-colors"
+            className="flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 glass border-2 border-purple-300 text-purple-700 rounded-xl text-sm sm:text-base font-medium hover:bg-purple-50 transition-colors"
           >
-            <Edit size={20} />
-            Edit Categories
+            <Edit size={18} className="sm:w-5 sm:h-5" />
+            <span className="hidden sm:inline">Edit Categories</span>
+            <span className="sm:hidden">Categories</span>
           </button>
-        <button
-          onClick={onAddResource}
-          className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-medium glow-button"
-        >
-          <Plus size={20} />
-          Add Resource
-        </button>
+          <button
+            onClick={onAddResource}
+            className="flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl text-sm sm:text-base font-medium glow-button"
+          >
+            <Plus size={18} className="sm:w-5 sm:h-5" />
+            Add Resource
+          </button>
         </div>
       </div>
 
       {/* Search */}
-      <div className="glass rounded-2xl p-6 mb-6 shadow-lg">
+      <div className="glass rounded-2xl p-4 sm:p-6 mb-4 sm:mb-6 shadow-lg">
         <div className="relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+          <Search className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
           <input
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Search resources..."
-            className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors"
+            className="w-full pl-10 sm:pl-12 pr-4 py-2.5 sm:py-3 border-2 border-gray-200 rounded-xl text-sm sm:text-base focus:border-purple-500 focus:outline-none transition-colors"
           />
         </div>
       </div>
 
       {/* Resources List */}
-      <div className="space-y-4">
+      <div className="space-y-3 sm:space-y-4">
         {resources.length === 0 ? (
-          <div className="glass rounded-2xl p-16 text-center shadow-lg">
+          <div className="glass rounded-2xl p-8 sm:p-16 text-center shadow-lg">
             <div className="max-w-md mx-auto">
-              <div className="w-20 h-20 mx-auto mb-6 bg-gradient-to-br from-purple-100 to-pink-100 rounded-full flex items-center justify-center">
-                <FileText size={32} className="text-purple-600" />
+              <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-4 sm:mb-6 bg-gradient-to-br from-purple-100 to-pink-100 rounded-full flex items-center justify-center">
+                <FileText size={24} className="text-purple-600 sm:w-8 sm:h-8" />
               </div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">No resources found</h3>
-              <p className="text-gray-600">Click "Add Resource" to get started!</p>
+              <h3 className="text-lg sm:text-xl font-semibold text-gray-900 mb-2">No resources found</h3>
+              <p className="text-sm sm:text-base text-gray-600">Click "Add Resource" to get started!</p>
             </div>
           </div>
         ) : (
@@ -1513,14 +1571,14 @@ function AdminResourceCard({ resource, onEdit, onDelete, index }) {
 
   return (
     <div 
-      className={`glass rounded-2xl p-6 shadow-lg card-hover animate-slide-up ${
+      className={`glass rounded-2xl p-4 sm:p-6 shadow-lg card-hover animate-slide-up ${
         resource.is_sponsored ? 'border-l-4 border-yellow-400' : ''
       }`}
       style={{ animationDelay: `${index * 0.05}s` }}
     >
-      <div className="flex gap-6">
-        {/* Image - Uniform 1:1 aspect ratio (square) */}
-        <div className="w-48 flex-shrink-0 rounded-xl overflow-hidden bg-gray-100" style={{ aspectRatio: '1/1' }}>
+      <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
+        {/* Image - Smaller on mobile (96px), full size on desktop (192px) - Square */}
+        <div className="w-24 h-24 sm:w-48 sm:h-48 flex-shrink-0 rounded-xl overflow-hidden bg-gray-100 mx-auto sm:mx-0" style={{ aspectRatio: '1/1' }}>
           {resource.image_url ? (
             <img 
               src={resource.image_url} 
@@ -1531,51 +1589,51 @@ function AdminResourceCard({ resource, onEdit, onDelete, index }) {
             />
           ) : (
             <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center" style={{ aspectRatio: '1/1' }}>
-              <FileText size={24} className="text-gray-400" />
-          </div>
-        )}
+              <FileText size={20} className="text-gray-400 sm:text-gray-400" />
+            </div>
+          )}
         </div>
 
         {/* Content */}
-        <div className="flex-1">
+        <div className="flex-1 min-w-0">
           {/* Badges */}
-          <div className="flex gap-2 mb-3">
+          <div className="flex flex-wrap gap-2 mb-3">
             {resource.is_sponsored && (
               <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-700 text-xs font-medium">
                 <Sparkles size={12} />
                 <span className="mono">Sponsored</span>
               </div>
             )}
-            <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-gradient-to-r ${getTypeColor()} text-white text-sm font-medium`}>
+            <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-gradient-to-r ${getTypeColor()} text-white text-xs sm:text-sm font-medium`}>
               {getTypeIcon()}
               <span className="capitalize">{getTypeLabel()}</span>
             </div>
           </div>
 
-          <h4 className="font-bold text-xl text-gray-900 mb-2">{resource.title}</h4>
-          <p className="text-gray-600 mb-3">{resource.description}</p>
+          <h4 className="font-bold text-lg sm:text-xl text-gray-900 mb-2 break-words">{resource.title}</h4>
+          <p className="text-gray-600 mb-3 text-sm sm:text-base break-words">{resource.description}</p>
           
           <a 
             href={resource.url} 
             target="_blank" 
             rel="noopener noreferrer" 
-            className="text-purple-600 hover:text-purple-700 text-sm break-all flex items-center gap-1 mb-4"
+            className="text-purple-600 hover:text-purple-700 text-xs sm:text-sm break-all flex items-center gap-1 mb-4"
           >
-            <span>{resource.url}</span>
-            <ArrowRight size={14} />
+            <span className="truncate">{resource.url}</span>
+            <ArrowRight size={14} className="flex-shrink-0" />
           </a>
 
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button
               onClick={() => onEdit(resource)}
-              className="flex items-center gap-2 px-4 py-2 bg-purple-100 text-purple-700 rounded-lg font-medium hover:bg-purple-200 transition-colors"
+              className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-purple-100 text-purple-700 rounded-lg text-sm sm:text-base font-medium hover:bg-purple-200 transition-colors"
             >
               <Edit size={16} />
               Edit
             </button>
             <button
               onClick={() => onDelete(resource.id)}
-              className="flex items-center gap-2 px-4 py-2 bg-red-100 text-red-700 rounded-lg font-medium hover:bg-red-200 transition-colors"
+              className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-red-100 text-red-700 rounded-lg text-sm sm:text-base font-medium hover:bg-red-200 transition-colors"
             >
               <Trash2 size={16} />
               Delete
@@ -1736,12 +1794,16 @@ function AddResourceModal({ currentUser, onSubmit, onClose }) {
     setSelectedSpecialty(specialtyId);
     setSelectedSubspecialty(null);
     setSelectedCategory(null);
+    setSelectedSubcategory(null);
+    setSubcategories([]);
     loadSubspecialties(specialtyId);
   };
 
   const handleSubspecialtyChange = (subspecialtyId) => {
     setSelectedSubspecialty(subspecialtyId);
     setSelectedCategory(null);
+    setSelectedSubcategory(null);
+    setSubcategories([]);
     loadCategories(subspecialtyId);
   };
 
@@ -1872,7 +1934,8 @@ function AddResourceModal({ currentUser, onSubmit, onClose }) {
     }
 
     setImageError('');
-    onSubmit(formData, imageFile);
+    // Include category_id in the submission
+    onSubmit({ ...formData, category_id: selectedCategory }, imageFile);
   };
 
   if (!currentUser) {
@@ -2382,12 +2445,16 @@ function SuggestResourceModal({ currentUser, onSubmit, onClose }) {
     setSelectedSpecialty(specialtyId);
     setSelectedSubspecialty(null);
     setSelectedCategory(null);
+    setSelectedSubcategory(null);
+    setSubcategories([]);
     loadSubspecialties(specialtyId);
   };
 
   const handleSubspecialtyChange = (subspecialtyId) => {
     setSelectedSubspecialty(subspecialtyId);
     setSelectedCategory(null);
+    setSelectedSubcategory(null);
+    setSubcategories([]);
     loadCategories(subspecialtyId);
   };
 
@@ -2521,7 +2588,8 @@ function SuggestResourceModal({ currentUser, onSubmit, onClose }) {
     setSubmitting(true);
     
     try {
-      await onSubmit(formData, imageFile);
+      // Include category_id in the submission
+      await onSubmit({ ...formData, category_id: selectedCategory }, imageFile);
       // Reset form
       setFormData({
         title: '',
@@ -2929,6 +2997,8 @@ function EditResourceModal({ resource, currentUser, onSubmit, onClose }) {
   const [selectedSpecialty, setSelectedSpecialty] = useState(null);
   const [selectedSubspecialty, setSelectedSubspecialty] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState(null);
+  const [selectedSubcategory, setSelectedSubcategory] = useState(null);
+  const [subcategories, setSubcategories] = useState([]);
   const [loadingData, setLoadingData] = useState(true);
   const isInitialLoad = useRef(true);
 
@@ -3017,7 +3087,7 @@ function EditResourceModal({ resource, currentUser, onSubmit, onClose }) {
       if (!didPrepopulate && resource.category_id) {
         const { data: categoryRow, error: catErr } = await supabase
           .from('categories')
-          .select('id, subspecialty_id')
+          .select('id, subspecialty_id, parent_category_id')
           .eq('id', resource.category_id)
           .single();
         if (!catErr && categoryRow) {
@@ -3040,7 +3110,19 @@ function EditResourceModal({ resource, currentUser, onSubmit, onClose }) {
             setCategories(categoriesData || []);
             setSelectedSpecialty(String(subspecialtyRow.specialty_id));
             setSelectedSubspecialty(String(subspecialtyRow.id));
-            setSelectedCategory(String(categoryRow.id));
+            
+            // Check if the selected category is a subcategory
+            const isSubcategory = categoryRow.parent_category_id !== null;
+            if (isSubcategory) {
+              // It's a subcategory - set parent category and load subcategories
+              setSelectedCategory(String(categoryRow.parent_category_id));
+              await loadSubcategories(categoryRow.parent_category_id);
+              setSelectedSubcategory(String(categoryRow.id));
+            } else {
+              // It's a top-level category
+              setSelectedCategory(String(categoryRow.id));
+              await loadSubcategories(categoryRow.id);
+            }
           }
         }
       }
@@ -3060,7 +3142,7 @@ function EditResourceModal({ resource, currentUser, onSubmit, onClose }) {
               .from('categories')
               .select('*')
               .eq('subspecialty_id', currentUser.subspecialtyId)
-              .is('parent_category_id', null)
+              .order('depth')
               .order('order');
             if (!catsErr) {
               setCategories(categoriesData || []);
@@ -3096,6 +3178,7 @@ function EditResourceModal({ resource, currentUser, onSubmit, onClose }) {
 
   async function loadCategories(subspecialtyId) {
     if (!subspecialtyId) return;
+    // Load ONLY top-level categories (no subcategories)
     const { data } = await supabase
       .from('categories')
       .select('*')
@@ -3103,8 +3186,37 @@ function EditResourceModal({ resource, currentUser, onSubmit, onClose }) {
       .is('parent_category_id', null)
       .order('order');
     setCategories(data || []);
-    if (selectedCategory && !data?.find(c => String(c.id) === String(selectedCategory))) {
-      setSelectedCategory(null);
+    // Clear subcategories when subspecialty changes
+    setSubcategories([]);
+    setSelectedSubcategory(null);
+    // Only clear selectedCategory if it doesn't belong to this subspecialty
+    if (selectedCategory && data) {
+      const categoryExists = data.some(c => String(c.id) === String(selectedCategory));
+      if (!categoryExists) {
+        setSelectedCategory(null);
+      }
+    }
+  }
+
+  async function loadSubcategories(categoryId) {
+    if (!categoryId) {
+      setSubcategories([]);
+      setSelectedSubcategory(null);
+      return;
+    }
+    // Load subcategories for the selected category
+    const { data } = await supabase
+      .from('categories')
+      .select('*')
+      .eq('parent_category_id', categoryId)
+      .order('order');
+    setSubcategories(data || []);
+    // Clear selected subcategory if it's not in the new list
+    if (selectedSubcategory && data) {
+      const subcategoryExists = data.some(c => String(c.id) === String(selectedSubcategory));
+      if (!subcategoryExists) {
+        setSelectedSubcategory(null);
+      }
     }
   }
 
@@ -3112,17 +3224,30 @@ function EditResourceModal({ resource, currentUser, onSubmit, onClose }) {
     setSelectedSpecialty(specialtyId);
     setSelectedSubspecialty(null);
     setSelectedCategory(null);
+    setSelectedSubcategory(null);
+    setSubcategories([]);
     loadSubspecialties(specialtyId);
   };
 
   const handleSubspecialtyChange = (subspecialtyId) => {
     setSelectedSubspecialty(subspecialtyId);
     setSelectedCategory(null);
+    setSelectedSubcategory(null);
+    setSubcategories([]);
     loadCategories(subspecialtyId);
   };
 
   const handleCategoryChange = (categoryId) => {
-    setSelectedCategory(categoryId);
+    console.log('EditResourceModal handleCategoryChange called with:', categoryId);
+    const newCategoryId = categoryId && categoryId !== '' ? categoryId : null;
+    setSelectedCategory(newCategoryId);
+    setSelectedSubcategory(null); // Clear subcategory when category changes
+    loadSubcategories(newCategoryId);
+  };
+
+  const handleSubcategoryChange = (subcategoryId) => {
+    console.log('EditResourceModal handleSubcategoryChange called with:', subcategoryId);
+    setSelectedSubcategory(subcategoryId && subcategoryId !== '' ? subcategoryId : null);
   };
 
 
@@ -3221,10 +3346,18 @@ function EditResourceModal({ resource, currentUser, onSubmit, onClose }) {
         imageUrl = null;
       }
       
+      // Use subcategory if selected, otherwise use category
+      const finalCategoryId = selectedSubcategory && selectedSubcategory !== '' 
+        ? selectedSubcategory 
+        : (selectedCategory && selectedCategory !== '' ? selectedCategory : null);
+      
       const resourceData = {
         ...formData,
-        image_url: imageUrl
+        image_url: imageUrl,
+        category_id: finalCategoryId
       };
+      
+      console.log('EditResourceModal submitting - selectedCategory:', selectedCategory, 'category_id:', resourceData.category_id);
       
       await onSubmit(resourceData, imageFile); // imageFile will be null if not changed
     } catch (error) {
@@ -3373,6 +3506,23 @@ function EditResourceModal({ resource, currentUser, onSubmit, onClose }) {
                       <option value="">Select category...</option>
                       {categories.map(cat => (
                         <option key={cat.id} value={String(cat.id)}>{cat.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Subcategory Selection - only show if category has subcategories */}
+                {selectedCategory && subcategories.length > 0 && (
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Subcategory (Optional)</label>
+                    <select
+                      value={selectedSubcategory || ''}
+                      onChange={(e) => handleSubcategoryChange(e.target.value)}
+                      className="w-full px-4 py-3 bg-white text-gray-900 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors"
+                    >
+                      <option value="">No subcategory</option>
+                      {subcategories.map(subcat => (
+                        <option key={subcat.id} value={String(subcat.id)}>{subcat.name}</option>
                       ))}
                     </select>
                   </div>
