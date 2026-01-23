@@ -152,6 +152,73 @@ export function trackSponsoredClick(resourceId) {
   }]).then();
 }
 
+// Track search query
+export function trackSearchQuery(userId, query, resultCount) {
+  supabase.from('search_queries').insert([{
+    user_id: userId,
+    session_id: sessionId,
+    query_text: query,
+    result_count: resultCount,
+    searched_at: new Date()
+  }]).then();
+}
+
+// Track upcoming case event
+export function trackUpcomingCaseEvent(userId, action, resourceId, categoryId) {
+  supabase.from('upcoming_case_events').insert([{
+    user_id: userId,
+    session_id: sessionId,
+    action: action, // 'add', 'remove', 'reorder'
+    resource_id: resourceId,
+    category_id: categoryId,
+    event_at: new Date()
+  }]).then();
+}
+
+// Track rating event
+export function trackRatingEvent(userId, resourceId, rating, categoryId) {
+  supabase.from('rating_events').insert([{
+    user_id: userId,
+    session_id: sessionId,
+    resource_id: resourceId,
+    rating: rating,
+    category_id: categoryId,
+    rated_at: new Date()
+  }]).then();
+}
+
+// Track category selection
+export function trackCategorySelection(userId, categoryId) {
+  supabase.from('category_selections').insert([{
+    user_id: userId,
+    session_id: sessionId,
+    category_id: categoryId,
+    selected_at: new Date()
+  }]).then();
+}
+
+// Track resource suggestion
+export function trackResourceSuggestion(userId, resourceTitle, categoryId) {
+  supabase.from('resource_suggestion_events').insert([{
+    user_id: userId,
+    session_id: sessionId,
+    resource_title: resourceTitle,
+    category_id: categoryId,
+    suggested_at: new Date()
+  }]).then();
+}
+
+// Track sponsored engagement
+export function trackSponsoredEngagement(userId, resourceId, engagementType) {
+  supabase.from('sponsored_engagement').insert([{
+    user_id: userId,
+    session_id: sessionId,
+    resource_id: resourceId,
+    engagement_type: engagementType, // 'view', 'click', 'favorite', etc.
+    engaged_at: new Date()
+  }]).then();
+}
+
 // End session
 export function endAnalyticsSession() {
   if (!sessionId || !sessionStart) return;

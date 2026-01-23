@@ -8,17 +8,27 @@ import {
   trackFavoriteEvent, 
   trackUnfavoriteEvent,
   trackResourceCoview,
+  trackSearchQuery,
+  trackUpcomingCaseEvent,
+  trackRatingEvent,
+  trackCategorySelection,
+  trackResourceSuggestion,
+  trackSponsoredEngagement,
   endAnalyticsSession 
 } from './lib/analytics';
 import { processResourceImage, createImagePreview, validateImageFile } from './lib/imageUtils';
+import OnboardingFlow from './OnboardingFlow';
 
 function SurgicalTechniquesApp() {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const [currentView, setCurrentView] = useState('user');
   const [adminTab, setAdminTab] = useState('resources'); // 'resources', 'analytics'
   const [resources, setResources] = useState([]);
   const [favorites, setFavorites] = useState([]);
+  const [upcomingCases, setUpcomingCases] = useState([]); // Array of {resource_id, display_order}
+  const [showUpcomingCases, setShowUpcomingCases] = useState(false);
   const [notes, setNotes] = useState({});
   const [showAddForm, setShowAddForm] = useState(false);
   const [showSuggestForm, setShowSuggestForm] = useState(false);
@@ -29,6 +39,8 @@ function SurgicalTechniquesApp() {
   const [categories, setCategories] = useState([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState(null);
   const [procedures, setProcedures] = useState([]); // For filtering resources by category
+  const [draggedResourceId, setDraggedResourceId] = useState(null); // For drag and drop
+  const [draggedUpcomingCaseId, setDraggedUpcomingCaseId] = useState(null); // For upcoming cases drag and drop
 
   useEffect(() => {
     checkUser();
@@ -75,31 +87,105 @@ function SurgicalTechniquesApp() {
         .eq('id', userId)
         .single();
 
-      if (error) throw error;
+      if (error) {
+        // If profile doesn't exist, create it (for Google OAuth users)
+        if (error.code === 'PGRST116') {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            const { error: createError } = await supabase
+              .from('profiles')
+              .insert({
+                id: user.id,
+                email: user.email,
+                role: 'user',
+                onboarding_completed: false,
+                terms_accepted: false
+              });
+            
+            if (createError) throw createError;
+            
+            // Reload profile
+            const { data: newProfile } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', userId)
+              .single();
+            
+            if (newProfile && !newProfile.onboarding_completed) {
+              setCurrentUser({
+                id: newProfile.id,
+                email: newProfile.email || '',
+                role: newProfile.role || 'user'
+              });
+              setShowOnboarding(true);
+              setLoading(false);
+              return;
+            }
+          }
+        } else {
+          throw error;
+        }
+      }
+
+      // Check if onboarding is completed
+      if (profile && !profile.onboarding_completed) {
+        // Set a minimal user object for onboarding
+        setCurrentUser({
+          id: profile.id,
+          email: profile.email || '',
+          role: profile.role || 'user'
+        });
+        setShowOnboarding(true);
+        setLoading(false);
+        return;
+      }
+
+      // Calculate experience bucket from residency completion year
+      let experienceBucket = 'unknown';
+      if (profile.residency_completion_year) {
+        const yearsOut = new Date().getFullYear() - profile.residency_completion_year;
+        if (yearsOut <= 5) experienceBucket = '0-5';
+        else if (yearsOut <= 19) experienceBucket = '6-19';
+        else experienceBucket = '20+';
+      }
 
       const userData = {
         id: profile.id,
         email: profile.email,
         role: profile.role,
         specialtyId: profile.primary_specialty_id,
-        subspecialtyId: profile.primary_subspecialty_id
+        subspecialtyId: profile.primary_subspecialty_id,
+        userRole: profile.user_role, // surgeon, student, other
+        primaryState: profile.primary_state_of_practice,
+        residencyYear: profile.residency_completion_year,
+        practiceModel: profile.practice_model,
+        supervisesResidents: profile.supervises_residents
       };
 
       setCurrentUser(userData);
       
-      // Initialize analytics session
+      // Initialize analytics session with complete profile data (critical for segmented analytics)
       initAnalyticsSession(userData.id, {
         specialtyId: userData.specialtyId,
         subspecialtyId: userData.subspecialtyId,
-        experienceBucket: '6-10', // TODO: Add to profile
-        practiceType: 'private', // TODO: Add to profile
-        region: 'west' // TODO: Add to profile
+        experienceBucket: experienceBucket,
+        practiceType: profile.practice_model || 'unknown',
+        region: profile.primary_state_of_practice || 'unknown',
+        userRole: profile.user_role || 'unknown'
       });
       
       setLoading(false);
     } catch (error) {
       console.error('Error loading profile:', error);
       setLoading(false);
+    }
+  }
+
+  async function handleOnboardingComplete() {
+    // Reload profile after onboarding
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user) {
+      await loadUserProfile(session.user.id);
     }
   }
 
@@ -117,6 +203,13 @@ function SurgicalTechniquesApp() {
         .select('resource_id')
         .eq('user_id', currentUser.id);
 
+      // Load user upcoming cases (ordered by display_order)
+      const { data: upcomingCasesData } = await supabase
+        .from('upcoming_cases')
+        .select('resource_id, display_order, id')
+        .eq('user_id', currentUser.id)
+        .order('display_order', { ascending: true });
+
       // Load user notes
       const { data: notesData } = await supabase
         .from('notes')
@@ -125,6 +218,7 @@ function SurgicalTechniquesApp() {
 
       setResources(resourcesData || []);
       setFavorites(favoritesData?.map(f => f.resource_id) || []);
+      setUpcomingCases(upcomingCasesData || []);
       
       // Convert notes array to object
       const notesObj = {};
@@ -190,14 +284,14 @@ function SurgicalTechniquesApp() {
 
       // Insert resource - only include duration_seconds for videos
       const insertData = {
-        title: resourceData.title,
-        url: resourceData.url,
-        description: resourceData.description,
-        resource_type: resourceData.type,
-        image_url: imageUrl,
+          title: resourceData.title,
+          url: resourceData.url,
+          description: resourceData.description,
+          resource_type: resourceData.type,
+          image_url: imageUrl,
         keywords: resourceData.keywords || null,
-        curated_by: currentUser.id,
-        is_sponsored: false
+          curated_by: currentUser.id,
+          is_sponsored: false
       };
       
       // Only add category_id if provided (column may not exist yet)
@@ -423,6 +517,85 @@ function SurgicalTechniquesApp() {
     }
   }
 
+  async function toggleUpcomingCase(resourceId) {
+    try {
+      const existingCase = upcomingCases.find(uc => uc.resource_id === resourceId);
+
+      if (existingCase) {
+        // Remove from upcoming cases
+        const { error } = await supabase
+          .from('upcoming_cases')
+          .delete()
+          .eq('id', existingCase.id);
+
+        if (error) throw error;
+        setUpcomingCases(upcomingCases.filter(uc => uc.id !== existingCase.id));
+        
+        // Track removal event (critical for case volume insights)
+        const resource = resources.find(r => r.id === resourceId);
+        trackUpcomingCaseEvent(currentUser.id, 'remove', resourceId, resource?.category_id);
+      } else {
+        // Add to upcoming cases - get max order and add 1
+        const maxOrder = upcomingCases.length > 0 
+          ? Math.max(...upcomingCases.map(uc => uc.display_order || 0))
+          : -1;
+
+        const { data, error } = await supabase
+          .from('upcoming_cases')
+          .insert([{
+            user_id: currentUser.id,
+            resource_id: resourceId,
+            display_order: maxOrder + 1
+          }])
+          .select()
+          .single();
+
+        if (error) throw error;
+        setUpcomingCases([...upcomingCases, data]);
+        
+        // Track add event (critical for case volume insights)
+        const resource = resources.find(r => r.id === resourceId);
+        trackUpcomingCaseEvent(currentUser.id, 'add', resourceId, resource?.category_id);
+      }
+    } catch (error) {
+      console.error('Error toggling upcoming case:', error);
+      alert('Error updating upcoming cases: ' + error.message);
+    }
+  }
+
+  async function reorderUpcomingCases(newOrder) {
+    try {
+      // Update all display_order values
+      const updates = newOrder.map((caseItem, index) => 
+        supabase
+          .from('upcoming_cases')
+          .update({ display_order: index })
+          .eq('id', caseItem.id)
+      );
+
+      await Promise.all(updates);
+      setUpcomingCases(newOrder);
+      
+      // Track reorder event
+      trackUpcomingCaseEvent(currentUser.id, 'reorder', null, null);
+    } catch (error) {
+      console.error('Error reordering upcoming cases:', error);
+      alert('Error reordering upcoming cases: ' + error.message);
+    }
+  }
+
+  async function reorderResources(newOrder) {
+    try {
+      // Update resource order in database (if you have an order column)
+      // For now, we'll just update the local state
+      // You may want to add an 'display_order' column to resources table for admin reordering
+      setResources(newOrder);
+    } catch (error) {
+      console.error('Error reordering resources:', error);
+      alert('Error reordering resources: ' + error.message);
+    }
+  }
+
   async function updateNote(resourceId, noteText) {
     try {
       if (!noteText || noteText.trim() === '') {
@@ -549,6 +722,16 @@ function SurgicalTechniquesApp() {
     );
   }
 
+  // Show onboarding if not completed
+  if (showOnboarding && currentUser) {
+    return (
+      <OnboardingFlow 
+        user={currentUser} 
+        onComplete={handleOnboardingComplete} 
+      />
+    );
+  }
+
   if (!currentUser) {
     return <LoginView onLogin={checkUser} />;
   }
@@ -606,6 +789,25 @@ function SurgicalTechniquesApp() {
                 </div>
               )}
 
+              {currentView === 'user' && (
+                <button
+                  onClick={() => setShowUpcomingCases(!showUpcomingCases)}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors text-sm sm:text-base ${
+                    showUpcomingCases 
+                      ? 'bg-white text-purple-900 shadow-lg' 
+                      : 'text-white hover:bg-white/10'
+                  }`}
+                >
+                  <Plus size={18} />
+                  Upcoming Cases
+                  {upcomingCases.length > 0 && (
+                    <span className="bg-purple-600 text-white text-xs px-2 py-0.5 rounded-full">
+                      {upcomingCases.length}
+                    </span>
+                  )}
+                </button>
+              )}
+
               <button
                 onClick={async () => {
                   await supabase.auth.signOut();
@@ -627,17 +829,36 @@ function SurgicalTechniquesApp() {
           <UserView 
             resources={displayedResources}
             favorites={favorites}
+            upcomingCases={upcomingCases}
+            showUpcomingCases={showUpcomingCases}
+            onToggleUpcomingCases={() => setShowUpcomingCases(!showUpcomingCases)}
             notes={notes}
             showFavoritesOnly={showFavoritesOnly}
             searchTerm={searchTerm}
             categories={categories}
             selectedCategoryId={selectedCategoryId}
             onToggleFavorites={() => setShowFavoritesOnly(!showFavoritesOnly)}
-            onSearchChange={setSearchTerm}
+            onSearchChange={(term) => {
+              setSearchTerm(term);
+              // Track search queries (critical for trend analysis)
+              if (term && term.trim().length > 0 && currentUser) {
+                const resultCount = getFilteredResources().length;
+                trackSearchQuery(term, currentUser.id, resultCount);
+              }
+            }}
             onToggleFavorite={toggleFavorite}
+            onToggleUpcomingCase={toggleUpcomingCase}
+            onReorderUpcomingCases={reorderUpcomingCases}
             onUpdateNote={updateNote}
             onSuggestResource={() => setShowSuggestForm(true)}
-            onCategorySelect={setSelectedCategoryId}
+            onCategorySelect={(categoryId) => {
+              setSelectedCategoryId(categoryId);
+              // Track category selection (for implant preference analysis)
+              if (categoryId && currentUser) {
+                const category = categories.find(c => c.id === categoryId);
+                trackCategorySelection(currentUser.id, categoryId, null);
+              }
+            }}
             currentUser={currentUser}
           />
         ) : (
@@ -722,6 +943,7 @@ function LoginView({ onLogin }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState('');
 
   async function handleLogin(e) {
@@ -743,11 +965,54 @@ function LoginView({ onLogin }) {
     }
   }
 
+  async function handleGoogleLogin() {
+    setGoogleLoading(true);
+    setError('');
+
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}`
+        }
+      });
+
+      if (error) throw error;
+    } catch (error) {
+      setError(error.message);
+      setGoogleLoading(false);
+    }
+  }
+
   return (
     <div className="min-h-screen gradient-bg flex items-center justify-center p-4">
       <div className="glass rounded-2xl p-8 max-w-md w-full shadow-2xl">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Surgical Techniques</h1>
         <p className="text-gray-600 mb-8">Sign in to access the resource library</p>
+
+        {/* Google Sign In Button */}
+        <button
+          onClick={handleGoogleLogin}
+          disabled={googleLoading || loading}
+          className="w-full px-6 py-3 mb-6 bg-white border-2 border-gray-300 rounded-xl font-medium text-gray-700 hover:bg-gray-50 transition-all disabled:opacity-50 flex items-center justify-center gap-3 shadow-sm"
+        >
+          <svg className="w-5 h-5" viewBox="0 0 24 24">
+            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+          </svg>
+          {googleLoading ? 'Signing in with Google...' : 'Continue with Google'}
+        </button>
+
+        <div className="relative my-6">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-gray-300"></div>
+          </div>
+          <div className="relative flex justify-center text-sm">
+            <span className="px-2 bg-white text-gray-500">Or</span>
+          </div>
+        </div>
 
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
@@ -793,7 +1058,7 @@ function LoginView({ onLogin }) {
   );
 }
 
-function UserView({ resources, favorites, notes, showFavoritesOnly, searchTerm, categories, selectedCategoryId, onToggleFavorites, onSearchChange, onToggleFavorite, onUpdateNote, onSuggestResource, onCategorySelect, currentUser }) {
+function UserView({ resources, favorites, upcomingCases, showUpcomingCases, onToggleUpcomingCases, notes, showFavoritesOnly, searchTerm, categories, selectedCategoryId, onToggleFavorites, onSearchChange, onToggleFavorite, onToggleUpcomingCase, onReorderUpcomingCases, onUpdateNote, onSuggestResource, onCategorySelect, currentUser }) {
   // Organize categories hierarchically
   const organizedCategories = useMemo(() => {
     if (!categories || categories.length === 0) return [];
@@ -807,6 +1072,103 @@ function UserView({ resources, favorites, notes, showFavoritesOnly, searchTerm, 
   }, [categories]);
 
   const [expandedCategories, setExpandedCategories] = useState({});
+  const [draggedUpcomingCaseId, setDraggedUpcomingCaseId] = useState(null);
+
+  // Get resources for upcoming cases (ordered)
+  const upcomingCaseResources = useMemo(() => {
+    if (!showUpcomingCases || !upcomingCases.length) return [];
+    const sortedCases = [...upcomingCases].sort((a, b) => (a.display_order || 0) - (b.display_order || 0));
+    return sortedCases.map(uc => {
+      const resource = resources.find(r => r.id === uc.resource_id);
+      return resource ? { ...resource, upcomingCaseId: uc.id } : null;
+    }).filter(Boolean);
+  }, [showUpcomingCases, upcomingCases, resources]);
+
+  // Handle drag and drop for upcoming cases
+  const handleUpcomingCaseDragStart = (e, caseId) => {
+    setDraggedUpcomingCaseId(caseId);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleUpcomingCaseDragOver = (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleUpcomingCaseDrop = (e, targetCaseId) => {
+    e.preventDefault();
+    if (!draggedUpcomingCaseId || draggedUpcomingCaseId === targetCaseId) return;
+
+    const newOrder = [...upcomingCases];
+    const draggedIndex = newOrder.findIndex(uc => uc.id === draggedUpcomingCaseId);
+    const targetIndex = newOrder.findIndex(uc => uc.id === targetCaseId);
+
+    if (draggedIndex === -1 || targetIndex === -1) return;
+
+    const [removed] = newOrder.splice(draggedIndex, 1);
+    newOrder.splice(targetIndex, 0, removed);
+
+    onReorderUpcomingCases(newOrder);
+    setDraggedUpcomingCaseId(null);
+  };
+
+  // Show upcoming cases view if toggled
+  if (showUpcomingCases) {
+  return (
+    <div className="animate-slide-up">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-8 gap-4">
+        <div>
+            <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">Upcoming Cases</h2>
+            <p className="text-gray-600 text-sm sm:text-base">Drag and drop to reorder your resources</p>
+        </div>
+          <button
+            onClick={onToggleUpcomingCases}
+            className="flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 rounded-xl font-medium transition-all glass border hover:border-purple-300 text-purple-700 hover:bg-purple-50 text-sm sm:text-base"
+          >
+            Back to Browse
+          </button>
+        </div>
+
+        {upcomingCaseResources.length === 0 ? (
+          <div className="text-center py-12 bg-gray-50 rounded-xl border-2 border-dashed border-gray-300">
+            <p className="text-gray-500 text-lg mb-2">No upcoming cases yet</p>
+            <p className="text-gray-400 text-sm">Add resources to your upcoming cases by clicking "+ upcoming case" on any resource</p>
+          </div>
+        ) : (
+          <div className="space-y-3 sm:space-y-4">
+            {upcomingCaseResources.map((resource, index) => (
+              <div
+                key={resource.id}
+                draggable
+                onDragStart={(e) => handleUpcomingCaseDragStart(e, resource.upcomingCaseId)}
+                onDragOver={handleUpcomingCaseDragOver}
+                onDrop={(e) => handleUpcomingCaseDrop(e, resource.upcomingCaseId)}
+                className={`bg-white rounded-xl shadow-sm border-2 border-gray-200 p-4 sm:p-6 hover:shadow-md transition-all cursor-move ${
+                  draggedUpcomingCaseId === resource.upcomingCaseId ? 'opacity-50' : ''
+                }`}
+              >
+                <div className="flex items-start gap-3 sm:gap-4">
+                  <GripVertical className="text-gray-400 mt-1 flex-shrink-0 cursor-grab active:cursor-grabbing" size={20} />
+                  <div className="flex-1 min-w-0">
+                    <ResourceCard
+                      resource={resource}
+                      isFavorited={favorites.includes(resource.id)}
+                      note={notes[resource.id] || ''}
+                      onToggleFavorite={onToggleFavorite}
+                      onUpdateNote={onUpdateNote}
+                      onToggleUpcomingCase={onToggleUpcomingCase}
+                      isUpcomingCase={true}
+                      currentUser={currentUser}
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="animate-slide-up">
@@ -950,6 +1312,8 @@ function UserView({ resources, favorites, notes, showFavoritesOnly, searchTerm, 
               note={notes[resource.id]}
               onToggleFavorite={onToggleFavorite}
               onUpdateNote={onUpdateNote}
+              onToggleUpcomingCase={onToggleUpcomingCase}
+              isUpcomingCase={upcomingCases.some(uc => uc.resource_id === resource.id)}
               index={index}
               currentUser={currentUser}
             />
@@ -1014,6 +1378,7 @@ function AdminView({ resources, adminTab, setAdminTab, onAddResource, onEditReso
           onEditResource={onEditResource}
           onDeleteResource={onDeleteResource}
           onEditCategories={onEditCategories}
+          onReorderResources={reorderResources}
         />
       )}
 
@@ -1024,7 +1389,37 @@ function AdminView({ resources, adminTab, setAdminTab, onAddResource, onEditReso
   );
 }
 
-function ResourcesManagement({ resources, searchTerm, setSearchTerm, onAddResource, onEditResource, onDeleteResource, onEditCategories }) {
+function ResourcesManagement({ resources, searchTerm, setSearchTerm, onAddResource, onEditResource, onDeleteResource, onEditCategories, onReorderResources }) {
+  const [draggedResourceId, setDraggedResourceId] = useState(null);
+
+  const handleDragStart = (e, resourceId) => {
+    setDraggedResourceId(resourceId);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handleDrop = (e, targetResourceId) => {
+    e.preventDefault();
+    if (!draggedResourceId || draggedResourceId === targetResourceId) return;
+
+    const newOrder = [...resources];
+    const draggedIndex = newOrder.findIndex(r => r.id === draggedResourceId);
+    const targetIndex = newOrder.findIndex(r => r.id === targetResourceId);
+
+    if (draggedIndex === -1 || targetIndex === -1) return;
+
+    const [removed] = newOrder.splice(draggedIndex, 1);
+    newOrder.splice(targetIndex, 0, removed);
+
+    if (onReorderResources) {
+      onReorderResources(newOrder);
+    }
+    setDraggedResourceId(null);
+  };
   return (
     <>
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-4 sm:mb-6 gap-4">
@@ -1041,13 +1436,13 @@ function ResourcesManagement({ resources, searchTerm, setSearchTerm, onAddResour
             <span className="hidden sm:inline">Edit Categories</span>
             <span className="sm:hidden">Categories</span>
           </button>
-          <button
-            onClick={onAddResource}
+        <button
+          onClick={onAddResource}
             className="flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl text-sm sm:text-base font-medium glow-button"
-          >
+        >
             <Plus size={18} className="sm:w-5 sm:h-5" />
-            Add Resource
-          </button>
+          Add Resource
+        </button>
         </div>
       </div>
 
@@ -1085,6 +1480,10 @@ function ResourcesManagement({ resources, searchTerm, setSearchTerm, onAddResour
               onEdit={onEditResource}
               onDelete={onDeleteResource}
               index={index}
+              onDragStart={handleDragStart}
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
+              isDragging={draggedResourceId === resource.id}
             />
           ))
         )}
@@ -1238,7 +1637,7 @@ function AnalyticsDashboard({ resources }) {
 
 // Continue in next message due to length...
 
-function ResourceCard({ resource, isFavorited, note, onToggleFavorite, onUpdateNote, index, currentUser }) {
+function ResourceCard({ resource, isFavorited, note, onToggleFavorite, onUpdateNote, onToggleUpcomingCase, isUpcomingCase, index, currentUser }) {
   const [showNoteInput, setShowNoteInput] = useState(false);
   const [noteText, setNoteText] = useState(note || '');
   const [viewTracked, setViewTracked] = useState(false);
@@ -1320,6 +1719,9 @@ function ResourceCard({ resource, isFavorited, note, onToggleFavorite, onUpdateN
       }
 
       setRating(starRating);
+      
+      // Track rating event (private ratings, aggregate visible to admin)
+      trackRatingEvent(currentUser.id, resource.id, starRating, resource.category_id);
     } catch (error) {
       console.error('Error rating resource:', error);
       alert('Error submitting rating: ' + error.message);
@@ -1520,7 +1922,8 @@ function ResourceCard({ resource, isFavorited, note, onToggleFavorite, onUpdateN
                   ? 'bg-yellow-100 text-yellow-600 hover:bg-yellow-200' 
                   : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
               }`}
-              title={note ? 'Edit note' : 'Add note'}
+              title={note ? 'Edit Note' : 'Add Note'}
+              aria-label={note ? 'Edit Note' : 'Add Note'}
             >
               <StickyNote size={18} fill={note ? 'currentColor' : 'none'} />
             </button>
@@ -1531,10 +1934,25 @@ function ResourceCard({ resource, isFavorited, note, onToggleFavorite, onUpdateN
                   ? 'bg-red-100 text-red-500 hover:bg-red-200' 
                   : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
               }`}
-              title={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
+              title={isFavorited ? 'Remove from Favorites' : 'Add to Favorites'}
+              aria-label={isFavorited ? 'Remove from Favorites' : 'Add to Favorites'}
             >
               <Heart size={18} fill={isFavorited ? 'currentColor' : 'none'} />
             </button>
+            {onToggleUpcomingCase && (
+              <button
+                onClick={() => onToggleUpcomingCase(resource.id)}
+                className={`p-2.5 rounded-lg transition-all ${
+                  isUpcomingCase 
+                    ? 'bg-blue-100 text-blue-600 hover:bg-blue-200' 
+                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                }`}
+                title={isUpcomingCase ? 'Remove from Upcoming Cases' : 'Add to Upcoming Cases'}
+                aria-label={isUpcomingCase ? 'Remove from Upcoming Cases' : 'Add to Upcoming Cases'}
+              >
+                <Plus size={18} className={isUpcomingCase ? 'rotate-45' : ''} />
+              </button>
+            )}
           </div>
           </div>
         </div>
@@ -1543,7 +1961,7 @@ function ResourceCard({ resource, isFavorited, note, onToggleFavorite, onUpdateN
   );
 }
 
-function AdminResourceCard({ resource, onEdit, onDelete, index }) {
+function AdminResourceCard({ resource, onEdit, onDelete, index, onDragStart, onDragOver, onDrop, isDragging }) {
   const getTypeIcon = () => {
     switch(resource.resource_type) {
       case 'video': return <Video size={20} />;
@@ -1571,11 +1989,21 @@ function AdminResourceCard({ resource, onEdit, onDelete, index }) {
 
   return (
     <div 
-      className={`glass rounded-2xl p-4 sm:p-6 shadow-lg card-hover animate-slide-up ${
+      draggable={onDragStart !== undefined}
+      onDragStart={onDragStart ? (e) => onDragStart(e, resource.id) : undefined}
+      onDragOver={onDragOver || undefined}
+      onDrop={onDrop ? (e) => onDrop(e, resource.id) : undefined}
+      className={`glass rounded-2xl p-4 sm:p-6 shadow-lg card-hover animate-slide-up cursor-move ${
         resource.is_sponsored ? 'border-l-4 border-yellow-400' : ''
-      }`}
+      } ${isDragging ? 'opacity-50' : ''}`}
       style={{ animationDelay: `${index * 0.05}s` }}
     >
+      {onDragStart && (
+        <div className="flex items-center gap-2 mb-2 text-gray-400 text-xs">
+          <GripVertical size={16} className="cursor-grab active:cursor-grabbing" />
+          <span>Drag to reorder</span>
+        </div>
+      )}
       <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
         {/* Image - Smaller on mobile (96px), full size on desktop (192px) - Square */}
         <div className="w-24 h-24 sm:w-48 sm:h-48 flex-shrink-0 rounded-xl overflow-hidden bg-gray-100 mx-auto sm:mx-0" style={{ aspectRatio: '1/1' }}>
@@ -1590,8 +2018,8 @@ function AdminResourceCard({ resource, onEdit, onDelete, index }) {
           ) : (
             <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center" style={{ aspectRatio: '1/1' }}>
               <FileText size={20} className="text-gray-400 sm:text-gray-400" />
-            </div>
-          )}
+          </div>
+        )}
         </div>
 
         {/* Content */}
