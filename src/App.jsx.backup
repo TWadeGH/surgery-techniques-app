@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Video, FileText, Link, Plus, Star, Heart, Edit, Trash2, StickyNote, ArrowRight, Sparkles, LogOut, Upload, X, Search, BarChart3, TrendingUp, GripVertical, Settings, Moon, Sun } from 'lucide-react';
+import { Video, FileText, Link, Plus, Star, Heart, Edit, Trash2, StickyNote, ArrowRight, Sparkles, LogOut, Upload, X, Search, BarChart3, TrendingUp, GripVertical } from 'lucide-react';
 import { supabase } from './lib/supabase';
 import { 
   initAnalyticsSession, 
@@ -19,31 +19,13 @@ import {
 import { processResourceImage, createImagePreview, validateImageFile } from './lib/imageUtils';
 import OnboardingFlow from './OnboardingFlow';
 
-// Helper function to check if user is an admin
-function isAdmin(user) {
-  if (!user || !user.role) return false;
-  const adminRoles = ['super_admin', 'specialty_admin', 'subspecialty_admin', 'admin'];
-  return adminRoles.includes(user.role);
-}
-
 function SurgicalTechniquesApp() {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [currentView, setCurrentView] = useState('user');
-  const [showSettings, setShowSettings] = useState(false);
-  const [darkMode, setDarkMode] = useState(() => {
-    // Check localStorage for dark mode preference
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('darkMode');
-      return saved === 'true';
-    }
-    return false;
-  });
   const [adminTab, setAdminTab] = useState('resources'); // 'resources', 'analytics'
   const [resources, setResources] = useState([]);
-  const [suggestedResources, setSuggestedResources] = useState([]);
-  const [showSuggestedResources, setShowSuggestedResources] = useState(false);
   const [favorites, setFavorites] = useState([]);
   const [upcomingCases, setUpcomingCases] = useState([]); // Array of {resource_id, display_order}
   const [showUpcomingCases, setShowUpcomingCases] = useState(false);
@@ -60,75 +42,19 @@ function SurgicalTechniquesApp() {
   const [draggedResourceId, setDraggedResourceId] = useState(null); // For drag and drop
   const [draggedUpcomingCaseId, setDraggedUpcomingCaseId] = useState(null); // For upcoming cases drag and drop
 
-  // Apply dark mode on mount and when it changes
   useEffect(() => {
-    if (darkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  }, [darkMode]);
-
-  useEffect(() => {
-    // Safety timeout to prevent infinite loading (reduced to 5 seconds)
-    const safetyTimeout = setTimeout(() => {
-      console.warn('Loading timeout reached, forcing loading to false');
-      setLoading(false);
-    }, 5000); // 5 second timeout
-
-    // Check for OAuth callback in URL
-    const handleAuthCallback = async () => {
-      try {
-        const hashParams = new URLSearchParams(window.location.hash.substring(1));
-        const accessToken = hashParams.get('access_token');
-        const error = hashParams.get('error');
-        
-        if (error) {
-          console.error('OAuth error:', error);
-          clearTimeout(safetyTimeout);
-          setLoading(false);
-          return;
-        }
-        
-        if (accessToken) {
-          // OAuth callback detected, wait a moment for session to be established
-          setTimeout(async () => {
-            await checkUser();
-            clearTimeout(safetyTimeout);
-          }, 500);
-        } else {
-          // Fast path: check session quickly, don't wait for full profile load if no user
-          await checkUser();
-          clearTimeout(safetyTimeout);
-        }
-      } catch (err) {
-        console.error('Error in handleAuthCallback:', err);
-        clearTimeout(safetyTimeout);
-        setLoading(false);
-      }
-    };
+    checkUser();
     
-    handleAuthCallback();
-    
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('Auth state changed:', event, session?.user?.id);
-      try {
-        if (session?.user) {
-          await loadUserProfile(session.user.id);
-        } else {
-          setCurrentUser(null);
-          setLoading(false);
-        }
-        clearTimeout(safetyTimeout);
-      } catch (err) {
-        console.error('Error in auth state change:', err);
-        clearTimeout(safetyTimeout);
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session?.user) {
+        loadUserProfile(session.user.id);
+      } else {
+        setCurrentUser(null);
         setLoading(false);
       }
     });
 
     return () => {
-      clearTimeout(safetyTimeout);
       authListener.subscription.unsubscribe();
     };
   }, []);
@@ -141,23 +67,10 @@ function SurgicalTechniquesApp() {
 
   async function checkUser() {
     try {
-      console.log('checkUser called');
-      // Fast check: if getSession takes too long, fail fast and show login
-      const sessionCheck = supabase.auth.getSession();
-      const timeout = new Promise((resolve) => 
-        setTimeout(() => resolve({ data: { session: null }, error: null }), 2000)
-      );
-      
-      const result = await Promise.race([sessionCheck, timeout]);
-      const { data: { session }, error: sessionError } = result;
-      
-      console.log('Session check:', { hasSession: !!session, userId: session?.user?.id, error: sessionError });
-      
+      const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
-        console.log('User found, loading profile...');
         await loadUserProfile(session.user.id);
       } else {
-        console.log('No user session, setting loading to false');
         setLoading(false);
       }
     } catch (error) {
@@ -168,163 +81,50 @@ function SurgicalTechniquesApp() {
 
   async function loadUserProfile(userId) {
     try {
-      console.log('loadUserProfile called for userId:', userId);
-      
-      // First, try to get the profile
-      let { data: profile, error } = await supabase
+      const { data: profile, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
-        .maybeSingle(); // Use maybeSingle() instead of single() to avoid "Cannot coerce" error
-      
-      console.log('Profile query result:', { hasProfile: !!profile, error: error?.message });
+        .single();
 
-      // If profile exists, use it (will fall through to profile processing below)
-      if (!profile && error) {
-        // Check if it's a "not found" error
-        const isNotFoundError = error.code === 'PGRST116' || 
-                                error.message?.includes('No rows') || 
-                                error.message?.includes('not found') ||
-                                error.message?.includes('Cannot coerce');
-        
-        if (isNotFoundError) {
-          console.log('Profile not found, checking if we should create it...');
-          
-          // Double-check by trying to get user info
+      if (error) {
+        // If profile doesn't exist, create it (for Google OAuth users)
+        if (error.code === 'PGRST116') {
           const { data: { user } } = await supabase.auth.getUser();
-          if (!user || user.id !== userId) {
-            console.error('User mismatch or no user found');
-            setLoading(false);
-            return;
-          }
-          
-          // Check if profile actually exists (maybe the query had an issue)
-          const { data: existingProfile } = await supabase
-            .from('profiles')
-            .select('id')
-            .eq('id', userId)
-            .maybeSingle();
-          
-          if (existingProfile) {
-            console.log('Profile actually exists, retrying load...');
-            // Profile exists, retry the full query
-            const { data: retryProfile, error: retryError } = await supabase
-              .from('profiles')
-              .select('*')
-              .eq('id', userId)
-              .maybeSingle();
-            
-            if (retryProfile) {
-              // Use the retried profile
-              profile = retryProfile;
-            } else {
-              console.error('Retry failed:', retryError);
-              setLoading(false);
-              return;
-            }
-          } else {
-            // Profile really doesn't exist, create it
-            console.log('Creating new profile for user:', userId);
-            const { data: newProfile, error: createError } = await supabase
+          if (user) {
+            const { error: createError } = await supabase
               .from('profiles')
               .insert({
                 id: user.id,
                 email: user.email,
                 role: 'user',
-                user_type: 'student',
                 onboarding_completed: false,
                 terms_accepted: false
-              })
-              .select()
-              .maybeSingle();
+              });
             
-            if (createError) {
-              // Check if it's a duplicate key error (profile was created between check and insert)
-              if (createError.code === '23505' || createError.message?.includes('duplicate key')) {
-                console.log('Profile was created by another process, reloading...');
-                // Profile was created, reload it
-                const { data: reloadedProfile } = await supabase
-                  .from('profiles')
-                  .select('*')
-                  .eq('id', userId)
-                  .maybeSingle();
-                
-                if (reloadedProfile) {
-                  profile = reloadedProfile;
-                } else {
-                  console.error('Could not reload profile after duplicate error');
-                  setLoading(false);
-                  return;
-                }
-              } else {
-                console.error('Error creating profile:', createError);
-                // Set minimal user and show onboarding
-                setCurrentUser({
-                  id: user.id,
-                  email: user.email || '',
-                  role: 'user',
-                  userType: 'student'
-                });
-                setShowOnboarding(true);
-                setLoading(false);
-                return;
-              }
-            } else if (newProfile) {
-              profile = newProfile;
-            } else {
-              console.error('Profile creation succeeded but no profile returned');
+            if (createError) throw createError;
+            
+            // Reload profile
+            const { data: newProfile } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', userId)
+              .single();
+            
+            if (newProfile && !newProfile.onboarding_completed) {
+              setCurrentUser({
+                id: newProfile.id,
+                email: newProfile.email || '',
+                role: newProfile.role || 'user'
+              });
+              setShowOnboarding(true);
               setLoading(false);
               return;
             }
           }
         } else {
-          console.error('Error loading profile:', error);
-          setLoading(false);
-          return;
+          throw error;
         }
-      } else {
-        // No profile and no error - profile doesn't exist
-        console.log('No profile found, creating new one...');
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          const { data: newProfile, error: createError } = await supabase
-            .from('profiles')
-            .insert({
-              id: user.id,
-              email: user.email,
-              role: 'user',
-              user_type: 'student',
-              onboarding_completed: false,
-              terms_accepted: false
-            })
-            .select()
-            .maybeSingle();
-          
-          if (createError) {
-            if (createError.code === '23505' || createError.message?.includes('duplicate key')) {
-              // Profile exists, reload it
-              const { data: reloadedProfile } = await supabase
-                .from('profiles')
-                .select('*')
-                .eq('id', userId)
-                .maybeSingle();
-              if (reloadedProfile) profile = reloadedProfile;
-            } else {
-              console.error('Error creating profile:', createError);
-              setLoading(false);
-              return;
-            }
-          } else if (newProfile) {
-            profile = newProfile;
-          }
-        }
-      }
-      
-      // If we still don't have a profile, something went wrong
-      if (!profile) {
-        console.error('No profile available after all attempts');
-        setLoading(false);
-        return;
       }
 
       // Check if onboarding is completed
@@ -333,8 +133,7 @@ function SurgicalTechniquesApp() {
         setCurrentUser({
           id: profile.id,
           email: profile.email || '',
-          role: profile.role || 'user',
-          userType: profile.user_type || 'student' // Include userType even during onboarding
+          role: profile.role || 'user'
         });
         setShowOnboarding(true);
         setLoading(false);
@@ -356,8 +155,7 @@ function SurgicalTechniquesApp() {
         role: profile.role,
         specialtyId: profile.primary_specialty_id,
         subspecialtyId: profile.primary_subspecialty_id,
-        userType: profile.user_type || 'student', // 'surgeon', 'trainee', 'industry', 'student' - default to 'student' if null
-        userRole: profile.user_role, // surgeon, student, other (legacy)
+        userRole: profile.user_role, // surgeon, student, other
         primaryState: profile.primary_state_of_practice,
         residencyYear: profile.residency_completion_year,
         practiceModel: profile.practice_model,
@@ -367,21 +165,15 @@ function SurgicalTechniquesApp() {
       setCurrentUser(userData);
       
       // Initialize analytics session with complete profile data (critical for segmented analytics)
-      try {
-        initAnalyticsSession(userData.id, {
-          specialtyId: userData.specialtyId,
-          subspecialtyId: userData.subspecialtyId,
-          experienceBucket: experienceBucket,
-          practiceType: profile.practice_model || 'unknown',
-          region: profile.primary_state_of_practice || 'unknown',
-          userRole: profile.user_role || 'unknown'
-        });
-      } catch (analyticsError) {
-        console.error('Error initializing analytics:', analyticsError);
-        // Don't block loading if analytics fails
-      }
+      initAnalyticsSession(userData.id, {
+        specialtyId: userData.specialtyId,
+        subspecialtyId: userData.subspecialtyId,
+        experienceBucket: experienceBucket,
+        practiceType: profile.practice_model || 'unknown',
+        region: profile.primary_state_of_practice || 'unknown',
+        userRole: profile.user_role || 'unknown'
+      });
       
-      console.log('Profile loaded successfully, setting loading to false');
       setLoading(false);
     } catch (error) {
       console.error('Error loading profile:', error);
@@ -390,27 +182,10 @@ function SurgicalTechniquesApp() {
   }
 
   async function handleOnboardingComplete() {
-    console.log('handleOnboardingComplete called');
-    try {
-      // Reload profile after onboarding
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError) {
-        console.error('Error getting session:', sessionError);
-        setLoading(false);
-        return;
-      }
-      
-      if (session?.user) {
-        console.log('Reloading profile after onboarding for user:', session.user.id);
-        setShowOnboarding(false);
-        await loadUserProfile(session.user.id);
-      } else {
-        console.error('No session found after onboarding');
-        setLoading(false);
-      }
-    } catch (error) {
-      console.error('Error in handleOnboardingComplete:', error);
-      setLoading(false);
+    // Reload profile after onboarding
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user) {
+      await loadUserProfile(session.user.id);
     }
   }
 
@@ -472,16 +247,6 @@ function SurgicalTechniquesApp() {
 
         if (proceduresData) {
           setProcedures(proceduresData);
-        }
-      }
-
-      // Load suggested resources if user is an admin
-      if (isAdmin(currentUser)) {
-        try {
-          await loadSuggestedResources();
-        } catch (suggestionError) {
-          console.error('Error loading suggested resources (non-blocking):', suggestionError);
-          // Don't block the rest of the app if this fails
         }
       }
 
@@ -554,59 +319,6 @@ function SurgicalTechniquesApp() {
     }
   }
 
-  async function loadSuggestedResources() {
-    try {
-      if (!isAdmin(currentUser)) return;
-
-      let query = supabase
-        .from('resource_suggestions')
-        .select(`
-          *,
-          suggested_by_profile:profiles!suggested_by(
-            id,
-            email,
-            primary_specialty_id,
-            primary_subspecialty_id
-          )
-        `)
-        .eq('status', 'pending')
-        .order('created_at', { ascending: false });
-
-      // Filter based on admin role
-      if (currentUser.role === 'super_admin') {
-        // Super admin sees all
-      } else if (currentUser.role === 'specialty_admin' && currentUser.specialtyId) {
-        // Specialty admin sees suggestions for their specialty
-        query = query.eq('user_specialty_id', currentUser.specialtyId);
-      } else if (currentUser.role === 'subspecialty_admin' && currentUser.subspecialtyId) {
-        // Subspecialty admin sees suggestions for their subspecialty
-        query = query.eq('user_subspecialty_id', currentUser.subspecialtyId);
-      }
-
-      const { data, error } = await query;
-
-      if (error) {
-        // If columns don't exist, try without them
-        console.warn('Error loading with specialty columns, trying fallback:', error);
-        const fallbackQuery = supabase
-          .from('resource_suggestions')
-          .select('*')
-          .eq('status', 'pending')
-          .order('created_at', { ascending: false });
-        
-        const { data: fallbackData, error: fallbackError } = await fallbackQuery;
-        if (fallbackError) throw fallbackError;
-        setSuggestedResources(fallbackData || []);
-        return;
-      }
-      
-      setSuggestedResources(data || []);
-    } catch (error) {
-      console.error('Error loading suggested resources:', error);
-      setSuggestedResources([]);
-    }
-  }
-
   async function handleSuggestResource(resourceData, imageFile) {
     try {
       if (!imageFile) {
@@ -635,7 +347,6 @@ function SurgicalTechniquesApp() {
       const imageUrl = publicUrl;
 
       // Insert suggestion - only include duration_seconds for videos
-      // Store user's specialty/subspecialty so admins can see relevant suggestions
       const insertData = {
         title: resourceData.title,
         url: resourceData.url,
@@ -644,10 +355,7 @@ function SurgicalTechniquesApp() {
         image_url: imageUrl,
         keywords: resourceData.keywords || null,
         suggested_by: currentUser.id,
-        status: 'pending',
-        // Store user's specialty/subspecialty for admin filtering
-        user_specialty_id: currentUser.specialtyId || null,
-        user_subspecialty_id: currentUser.subspecialtyId || null
+        status: 'pending'
       };
       
       // Only add category_id if provided (column may not exist yet)
@@ -671,78 +379,6 @@ function SurgicalTechniquesApp() {
     } catch (error) {
       console.error('Error suggesting resource:', error);
       alert('Error submitting suggestion: ' + error.message);
-    }
-  }
-
-  async function handleApproveSuggestion(suggestionId) {
-    try {
-      // Get the suggestion
-      const { data: suggestion, error: fetchError } = await supabase
-        .from('resource_suggestions')
-        .select('*')
-        .eq('id', suggestionId)
-        .single();
-
-      if (fetchError) throw fetchError;
-
-      // Create resource from suggestion
-      const resourceData = {
-        title: suggestion.title,
-        url: suggestion.url,
-        description: suggestion.description,
-        resource_type: suggestion.resource_type,
-        image_url: suggestion.image_url,
-        keywords: suggestion.keywords || null,
-        category_id: suggestion.category_id || null,
-        duration_seconds: suggestion.duration_seconds || null
-      };
-
-      const { error: insertError } = await supabase
-        .from('resources')
-        .insert([resourceData]);
-
-      if (insertError) throw insertError;
-
-      // Update suggestion status to approved
-      const { error: updateError } = await supabase
-        .from('resource_suggestions')
-        .update({ 
-          status: 'approved', 
-          reviewed_by: currentUser.id, 
-          reviewed_at: new Date().toISOString() 
-        })
-        .eq('id', suggestionId);
-
-      if (updateError) throw updateError;
-
-      // Reload data
-      await loadAllData();
-      alert('Resource approved and added to library!');
-    } catch (error) {
-      console.error('Error approving suggestion:', error);
-      alert('Error approving suggestion: ' + error.message);
-    }
-  }
-
-  async function handleRejectSuggestion(suggestionId) {
-    try {
-      const { error } = await supabase
-        .from('resource_suggestions')
-        .update({ 
-          status: 'rejected', 
-          reviewed_by: currentUser.id, 
-          reviewed_at: new Date().toISOString() 
-        })
-        .eq('id', suggestionId);
-
-      if (error) throw error;
-
-      // Reload suggested resources
-      await loadSuggestedResources();
-      alert('Resource suggestion rejected.');
-    } catch (error) {
-      console.error('Error rejecting suggestion:', error);
-      alert('Error rejecting suggestion: ' + error.message);
     }
   }
 
@@ -846,18 +482,7 @@ function SurgicalTechniquesApp() {
     }
   }
 
-  // Helper function to check if user can favorite/rate/use upcoming cases
-  const canInteractWithResources = () => {
-    return currentUser?.userType === 'surgeon' || currentUser?.userType === 'trainee';
-  };
-
   async function toggleFavorite(resourceId) {
-    // Only surgeons and trainees can favorite resources
-    if (!canInteractWithResources()) {
-      alert('Only Surgeons and Trainees can favorite resources.');
-      return;
-    }
-
     try {
       const isFavorited = favorites.includes(resourceId);
 
@@ -893,12 +518,6 @@ function SurgicalTechniquesApp() {
   }
 
   async function toggleUpcomingCase(resourceId) {
-    // Only surgeons and trainees can use upcoming cases
-    if (!canInteractWithResources()) {
-      alert('Only Surgeons and Trainees can add resources to upcoming cases.');
-      return;
-    }
-
     try {
       const existingCase = upcomingCases.find(uc => uc.resource_id === resourceId);
 
@@ -1094,7 +713,7 @@ function SurgicalTechniquesApp() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center transition-colors">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="w-16 h-16 mx-auto mb-4 border-4 border-purple-600 border-t-transparent rounded-full animate-spin"></div>
           <p className="text-gray-600">Loading...</p>
@@ -1118,7 +737,7 @@ function SurgicalTechniquesApp() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
+    <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="gradient-bg relative overflow-hidden">
         <div className="absolute inset-0 opacity-10">
@@ -1136,7 +755,7 @@ function SurgicalTechniquesApp() {
             <div className="flex flex-wrap gap-3 sm:gap-4 items-center">
               <span className="text-white text-xs sm:text-sm">{currentUser.email}</span>
               
-              {isAdmin(currentUser) && currentView === 'user' && (
+              {currentView === 'user' && (
                 <div className="flex gap-2 glass-dark rounded-full p-1">
                   <button
                     onClick={() => setCurrentView('user')}
@@ -1153,7 +772,7 @@ function SurgicalTechniquesApp() {
                 </div>
               )}
 
-              {isAdmin(currentUser) && currentView === 'admin' && (
+              {currentView === 'admin' && (
                 <div className="flex gap-2 glass-dark rounded-full p-1">
                   <button
                     onClick={() => setCurrentView('user')}
@@ -1170,7 +789,7 @@ function SurgicalTechniquesApp() {
                 </div>
               )}
 
-              {currentView === 'user' && (currentUser?.userType === 'surgeon' || currentUser?.userType === 'trainee') && (
+              {currentView === 'user' && (
                 <button
                   onClick={() => setShowUpcomingCases(!showUpcomingCases)}
                   className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors text-sm sm:text-base ${
@@ -1189,13 +808,6 @@ function SurgicalTechniquesApp() {
                 </button>
               )}
 
-              <button
-                onClick={() => setShowSettings(true)}
-                className="flex items-center gap-2 px-4 py-2 text-white hover:bg-white/10 rounded-lg transition-colors"
-                title="Settings"
-              >
-                <Settings size={18} />
-              </button>
               <button
                 onClick={async () => {
                   await supabase.auth.signOut();
@@ -1249,7 +861,7 @@ function SurgicalTechniquesApp() {
             }}
             currentUser={currentUser}
           />
-        ) : isAdmin(currentUser) ? (
+        ) : (
           <AdminView
             resources={resources}
             adminTab={adminTab}
@@ -1258,23 +870,8 @@ function SurgicalTechniquesApp() {
             onEditResource={(resource) => setEditingResource(resource)}
             onDeleteResource={handleDeleteResource}
             onEditCategories={() => setShowCategoryManagement(true)}
-            onReorderResources={reorderResources}
             currentUser={currentUser}
-            suggestedResources={suggestedResources || []}
-            onShowSuggestedResources={() => setShowSuggestedResources(true)}
-            onApproveSuggestion={handleApproveSuggestion}
-            onRejectSuggestion={handleRejectSuggestion}
           />
-        ) : (
-          <div className="text-center py-12">
-            <p className="text-gray-600 dark:text-gray-300">You don't have permission to access admin mode.</p>
-            <button
-              onClick={() => setCurrentView('user')}
-              className="mt-4 px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-            >
-              Return to Browse
-            </button>
-          </div>
         )}
       </main>
 
@@ -1303,17 +900,6 @@ function SurgicalTechniquesApp() {
           currentUser={currentUser}
           onSubmit={(resourceData, imageFile) => handleEditResource(editingResource.id, resourceData, imageFile)}
           onClose={() => setEditingResource(null)}
-        />
-      )}
-
-      {/* Suggested Resources Modal */}
-      {showSuggestedResources && (
-        <SuggestedResourcesModal
-          suggestions={suggestedResources}
-          onApprove={handleApproveSuggestion}
-          onReject={handleRejectSuggestion}
-          onClose={() => setShowSuggestedResources(false)}
-          currentUser={currentUser}
         />
       )}
 
@@ -1347,31 +933,6 @@ function SurgicalTechniquesApp() {
                 });
             }
           }}
-        />
-      )}
-
-      {/* Settings Modal */}
-      {showSettings && (
-        <SettingsModal
-          currentUser={currentUser}
-          darkMode={darkMode}
-          onDarkModeToggle={(enabled) => {
-            setDarkMode(enabled);
-            localStorage.setItem('darkMode', enabled.toString());
-            // Apply dark mode class to document
-            if (enabled) {
-              document.documentElement.classList.add('dark');
-            } else {
-              document.documentElement.classList.remove('dark');
-            }
-          }}
-          onUpdateProfile={async (updates) => {
-            // Reload user profile after update
-            if (currentUser?.id) {
-              await loadUserProfile(currentUser.id);
-            }
-          }}
-          onClose={() => setShowSettings(false)}
         />
       )}
     </div>
@@ -1426,8 +987,8 @@ function LoginView({ onLogin }) {
   return (
     <div className="min-h-screen gradient-bg flex items-center justify-center p-4">
       <div className="glass rounded-2xl p-8 max-w-md w-full shadow-2xl">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Surgical Techniques</h1>
-        <p className="text-gray-600 dark:text-gray-300 mb-8">Sign in to access the resource library</p>
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">Surgical Techniques</h1>
+        <p className="text-gray-600 mb-8">Sign in to access the resource library</p>
 
         {/* Google Sign In Button */}
         <button
@@ -1455,31 +1016,25 @@ function LoginView({ onLogin }) {
 
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
-            <label htmlFor="login-email" className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Email</label>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Email</label>
             <input
-              id="login-email"
-              name="email"
               type="email"
-              autoComplete="email"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-3 border-2 border-gray-200 dark:border-gray-700 rounded-xl focus:border-purple-500 focus:outline-none transition-colors bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
+              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors"
               placeholder="your@email.com"
             />
           </div>
 
           <div>
-            <label htmlFor="login-password" className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Password</label>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">Password</label>
             <input
-              id="login-password"
-              name="password"
               type="password"
-              autoComplete="current-password"
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-3 border-2 border-gray-200 dark:border-gray-700 rounded-xl focus:border-purple-500 focus:outline-none transition-colors bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
+              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors"
               placeholder="••••••••"
             />
           </div>
@@ -1630,19 +1185,17 @@ function UserView({ resources, favorites, upcomingCases, showUpcomingCases, onTo
             <Plus size={18} />
             <span>Suggest Resource</span>
           </button>
-        {(currentUser?.userType === 'surgeon' || currentUser?.userType === 'trainee') && (
-          <button
-            onClick={onToggleFavorites}
-              className={`flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 rounded-xl font-medium transition-all text-sm sm:text-base ${
-              showFavoritesOnly 
-                  ? 'bg-gradient-to-r from-red-500 to-pink-500 text-white shadow-lg' 
-                : 'glass border hover:border-purple-300'
-            }`}
-          >
-              <Heart size={18} fill={showFavoritesOnly ? 'currentColor' : 'none'} />
-            <span>{showFavoritesOnly ? 'All Resources' : 'Favorites'}</span>
-          </button>
-        )}
+        <button
+          onClick={onToggleFavorites}
+            className={`flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 rounded-xl font-medium transition-all text-sm sm:text-base ${
+            showFavoritesOnly 
+                ? 'bg-gradient-to-r from-red-500 to-pink-500 text-white shadow-lg' 
+              : 'glass border hover:border-purple-300'
+          }`}
+        >
+            <Heart size={18} fill={showFavoritesOnly ? 'currentColor' : 'none'} />
+          <span>{showFavoritesOnly ? 'All Resources' : 'Favorites'}</span>
+        </button>
         </div>
       </div>
 
@@ -1727,7 +1280,7 @@ function UserView({ resources, favorites, upcomingCases, showUpcomingCases, onTo
             value={searchTerm}
             onChange={(e) => onSearchChange(e.target.value)}
             placeholder="Search resources..."
-            className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 dark:border-gray-700 rounded-xl focus:border-purple-500 focus:outline-none transition-colors bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
+            className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors"
           />
         </div>
       </div>
@@ -1740,10 +1293,10 @@ function UserView({ resources, favorites, upcomingCases, showUpcomingCases, onTo
               <div className="w-20 h-20 mx-auto mb-6 bg-gradient-to-br from-purple-100 to-pink-100 rounded-full flex items-center justify-center">
                 <FileText size={32} className="text-purple-600" />
               </div>
-              <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">
                 {showFavoritesOnly ? 'No favorites yet' : 'No resources found'}
               </h3>
-              <p className="text-gray-600 dark:text-gray-300">
+              <p className="text-gray-600">
                 {showFavoritesOnly 
                   ? 'Heart some resources to see them here!' 
                   : 'Try adjusting your search or check back later!'}
@@ -1773,61 +1326,20 @@ function UserView({ resources, favorites, upcomingCases, showUpcomingCases, onTo
   );
 }
 
-function AdminView({ resources, adminTab, setAdminTab, onAddResource, onEditResource, onDeleteResource, onEditCategories, onReorderResources, currentUser, suggestedResources, onShowSuggestedResources, onApproveSuggestion, onRejectSuggestion }) {
+function AdminView({ resources, adminTab, setAdminTab, onAddResource, onEditResource, onDeleteResource, onEditCategories, currentUser }) {
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Safe filtering with error handling
-  const filteredResources = (resources && Array.isArray(resources)) 
-    ? resources.filter(r => {
-        if (!r) return false;
-        if (searchTerm === '') return true;
-        const searchLower = searchTerm.toLowerCase();
-        return (r.title && r.title.toLowerCase().includes(searchLower)) ||
-               (r.description && r.description.toLowerCase().includes(searchLower));
-      })
-    : [];
-
-  const pendingCount = (suggestedResources && Array.isArray(suggestedResources)) 
-    ? suggestedResources.filter(s => s && s.status === 'pending').length 
-    : 0;
+  const filteredResources = resources.filter(r => 
+    searchTerm === '' || 
+    r.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    r.description?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
     <div className="animate-slide-up">
-      {/* Suggested Resources Banner */}
-      {pendingCount > 0 && (
-        <div className="mb-6">
-          <button
-            onClick={onShowSuggestedResources}
-            className="w-full glass rounded-2xl p-4 sm:p-6 shadow-lg hover:shadow-xl transition-all text-left group"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3 sm:gap-4">
-                <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl flex items-center justify-center">
-                  <Sparkles size={24} className="text-white" />
-                </div>
-                <div>
-                  <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white mb-1">
-                    Suggested Resources
-                  </h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-300">
-                    {pendingCount} {pendingCount === 1 ? 'resource' : 'resources'} pending review
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="bg-red-500 text-white text-sm font-bold px-3 py-1 rounded-full">
-                  {pendingCount}
-                </span>
-                <ArrowRight size={20} className="text-gray-400 group-hover:text-purple-600 transition-colors" />
-              </div>
-            </div>
-          </button>
-        </div>
-      )}
-
       <div className="mb-6 sm:mb-8">
-        <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-2">Admin Dashboard</h2>
-        <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300">Manage content and view insights</p>
+        <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">Admin Dashboard</h2>
+        <p className="text-sm sm:text-base text-gray-600">Manage content and view insights</p>
       </div>
 
       {/* Tabs */}
@@ -1866,7 +1378,7 @@ function AdminView({ resources, adminTab, setAdminTab, onAddResource, onEditReso
           onEditResource={onEditResource}
           onDeleteResource={onDeleteResource}
           onEditCategories={onEditCategories}
-          onReorderResources={onReorderResources}
+          onReorderResources={reorderResources}
         />
       )}
 
@@ -1912,8 +1424,8 @@ function ResourcesManagement({ resources, searchTerm, setSearchTerm, onAddResour
     <>
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-4 sm:mb-6 gap-4">
         <div>
-          <h3 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white mb-2">Manage Resources</h3>
-          <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300">Add, edit, or remove resources from the library</p>
+          <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">Manage Resources</h3>
+          <p className="text-sm sm:text-base text-gray-600">Add, edit, or remove resources from the library</p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
           <button
@@ -1956,8 +1468,8 @@ function ResourcesManagement({ resources, searchTerm, setSearchTerm, onAddResour
               <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-4 sm:mb-6 bg-gradient-to-br from-purple-100 to-pink-100 rounded-full flex items-center justify-center">
                 <FileText size={24} className="text-purple-600 sm:w-8 sm:h-8" />
               </div>
-              <h3 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white mb-2">No resources found</h3>
-              <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300">Click "Add Resource" to get started!</p>
+              <h3 className="text-lg sm:text-xl font-semibold text-gray-900 mb-2">No resources found</h3>
+              <p className="text-sm sm:text-base text-gray-600">Click "Add Resource" to get started!</p>
             </div>
           </div>
         ) : (
@@ -2063,42 +1575,42 @@ function AnalyticsDashboard({ resources }) {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="glass rounded-2xl p-6 shadow-lg">
           <div className="flex items-center justify-between mb-2">
-            <h4 className="text-sm font-semibold text-gray-600 dark:text-gray-300">Total Views (30d)</h4>
+            <h4 className="text-sm font-semibold text-gray-600">Total Views (30d)</h4>
             <TrendingUp size={20} className="text-purple-600" />
           </div>
-          <p className="text-3xl font-bold text-gray-900 dark:text-white">{totalViews}</p>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Across all resources</p>
+          <p className="text-3xl font-bold text-gray-900">{totalViews}</p>
+          <p className="text-sm text-gray-500 mt-1">Across all resources</p>
         </div>
 
         <div className="glass rounded-2xl p-6 shadow-lg">
           <div className="flex items-center justify-between mb-2">
-            <h4 className="text-sm font-semibold text-gray-600 dark:text-gray-300">Total Favorites</h4>
+            <h4 className="text-sm font-semibold text-gray-600">Total Favorites</h4>
             <Heart size={20} className="text-red-500" fill="currentColor" />
           </div>
-          <p className="text-3xl font-bold text-gray-900 dark:text-white">{totalFavorites}</p>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Learning signals</p>
+          <p className="text-3xl font-bold text-gray-900">{totalFavorites}</p>
+          <p className="text-sm text-gray-500 mt-1">Learning signals</p>
         </div>
 
         <div className="glass rounded-2xl p-6 shadow-lg">
           <div className="flex items-center justify-between mb-2">
-            <h4 className="text-sm font-semibold text-gray-600 dark:text-gray-300">Avg Time Spent</h4>
+            <h4 className="text-sm font-semibold text-gray-600">Avg Time Spent</h4>
             <BarChart3 size={20} className="text-blue-600" />
           </div>
-          <p className="text-3xl font-bold text-gray-900 dark:text-white">{avgEngagement.toFixed(1)}m</p>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Per resource view</p>
+          <p className="text-3xl font-bold text-gray-900">{avgEngagement.toFixed(1)}m</p>
+          <p className="text-sm text-gray-500 mt-1">Per resource view</p>
         </div>
       </div>
 
       {/* Top Resources */}
       <div className="glass rounded-2xl p-6 shadow-lg">
-        <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Top Resources (Last 30 Days)</h3>
+        <h3 className="text-xl font-bold text-gray-900 mb-4">Top Resources (Last 30 Days)</h3>
         <div className="space-y-3">
           {topResources.map((resource, index) => (
             <div key={resource.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
               <div className="flex items-center gap-4 flex-1">
                 <span className="text-2xl font-bold text-gray-300">#{index + 1}</span>
                 <div className="flex-1">
-                  <h4 className="font-semibold text-gray-900 dark:text-white">{resource.title}</h4>
+                  <h4 className="font-semibold text-gray-900">{resource.title}</h4>
                   <p className="text-sm text-gray-600">
                     {resource.stats.viewCount} views • 
                     {resource.stats.favoriteCount || 0} favorites • 
@@ -2173,13 +1685,6 @@ function ResourceCard({ resource, isFavorited, note, onToggleFavorite, onUpdateN
 
   async function handleRateResource(starRating) {
     if (!currentUser?.id || loadingRating) return;
-    
-    // Only surgeons and trainees can rate resources
-    const canRate = currentUser?.userType === 'surgeon' || currentUser?.userType === 'trainee';
-    if (!canRate) {
-      alert('Only Surgeons and Trainees can rate resources.');
-      return;
-    }
 
     try {
       setLoadingRating(true);
@@ -2313,8 +1818,8 @@ function ResourceCard({ resource, isFavorited, note, onToggleFavorite, onUpdateN
             </div>
         </div>
 
-          <h4 className="font-bold text-xl text-gray-900 dark:text-white mb-2">{resource.title}</h4>
-          <p className="text-gray-600 dark:text-gray-300 mb-3">{resource.description}</p>
+          <h4 className="font-bold text-xl text-gray-900 mb-2">{resource.title}</h4>
+          <p className="text-gray-600 mb-3">{resource.description}</p>
           
           <a 
             href={resource.url} 
@@ -2327,10 +1832,10 @@ function ResourceCard({ resource, isFavorited, note, onToggleFavorite, onUpdateN
           </a>
 
         {/* Personal Rating (Private - only visible to this user) */}
-        {currentUser && (currentUser.userType === 'surgeon' || currentUser.userType === 'trainee') && (
+        {currentUser && (
           <div className="mb-4">
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">My Rating:</span>
+              <span className="text-xs font-semibold text-gray-700">My Rating:</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-0.5">
@@ -2422,21 +1927,19 @@ function ResourceCard({ resource, isFavorited, note, onToggleFavorite, onUpdateN
             >
               <StickyNote size={18} fill={note ? 'currentColor' : 'none'} />
             </button>
-            {(currentUser?.userType === 'surgeon' || currentUser?.userType === 'trainee') && (
-              <button
-                onClick={() => onToggleFavorite(resource.id)}
-                className={`p-2.5 rounded-lg transition-all ${
-                  isFavorited 
-                    ? 'bg-red-100 text-red-500 hover:bg-red-200' 
-                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                }`}
-                title={isFavorited ? 'Remove from Favorites' : 'Add to Favorites'}
-                aria-label={isFavorited ? 'Remove from Favorites' : 'Add to Favorites'}
-              >
-                <Heart size={18} fill={isFavorited ? 'currentColor' : 'none'} />
-              </button>
-            )}
-            {onToggleUpcomingCase && (currentUser?.userType === 'surgeon' || currentUser?.userType === 'trainee') && (
+            <button
+              onClick={() => onToggleFavorite(resource.id)}
+              className={`p-2.5 rounded-lg transition-all ${
+                isFavorited 
+                  ? 'bg-red-100 text-red-500 hover:bg-red-200' 
+                  : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+              }`}
+              title={isFavorited ? 'Remove from Favorites' : 'Add to Favorites'}
+              aria-label={isFavorited ? 'Remove from Favorites' : 'Add to Favorites'}
+            >
+              <Heart size={18} fill={isFavorited ? 'currentColor' : 'none'} />
+            </button>
+            {onToggleUpcomingCase && (
               <button
                 onClick={() => onToggleUpcomingCase(resource.id)}
                 className={`p-2.5 rounded-lg transition-all ${
@@ -2535,7 +2038,7 @@ function AdminResourceCard({ resource, onEdit, onDelete, index, onDragStart, onD
             </div>
           </div>
 
-          <h4 className="font-bold text-lg sm:text-xl text-gray-900 dark:text-white mb-2 break-words">{resource.title}</h4>
+          <h4 className="font-bold text-lg sm:text-xl text-gray-900 mb-2 break-words">{resource.title}</h4>
           <p className="text-gray-600 mb-3 text-sm sm:text-base break-words">{resource.description}</p>
           
           <a 
@@ -5153,357 +4656,6 @@ function CategoryManagementModal({ currentUser, onClose }) {
           >
             Done
           </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function SuggestedResourcesModal({ suggestions, onApprove, onReject, onClose, currentUser }) {
-  const pendingSuggestions = suggestions?.filter(s => s.status === 'pending') || [];
-
-  const formatDate = (dateString) => {
-    if (!dateString) return 'Unknown date';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-  };
-
-  const getTypeIcon = (type) => {
-    switch (type) {
-      case 'video': return <Video size={16} />;
-      case 'article': return <FileText size={16} />;
-      case 'link': return <Link size={16} />;
-      default: return <FileText size={16} />;
-    }
-  };
-
-  const getTypeColor = (type) => {
-    switch (type) {
-      case 'video': return 'from-red-500 to-pink-500';
-      case 'article': return 'from-blue-500 to-cyan-500';
-      case 'link': return 'from-green-500 to-emerald-500';
-      default: return 'from-gray-500 to-gray-600';
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="glass rounded-2xl p-6 sm:p-8 max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-2">
-              Suggested Resources
-            </h2>
-            <p className="text-sm text-gray-600 dark:text-gray-300">
-              {pendingSuggestions.length} {pendingSuggestions.length === 1 ? 'resource' : 'resources'} pending review
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-          >
-            <X size={24} className="text-gray-500" />
-          </button>
-        </div>
-
-        {pendingSuggestions.length === 0 ? (
-          <div className="text-center py-12">
-            <Sparkles size={48} className="text-gray-400 mx-auto mb-4" />
-            <p className="text-gray-600 dark:text-gray-300">No pending suggestions</p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {pendingSuggestions.map((suggestion) => (
-              <div
-                key={suggestion.id}
-                className="glass rounded-xl p-4 sm:p-6 border-2 border-purple-200 dark:border-purple-800"
-              >
-                <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
-                  {/* Image */}
-                  <div className="w-full sm:w-32 h-32 flex-shrink-0 rounded-lg overflow-hidden bg-gray-100">
-                    {suggestion.image_url ? (
-                      <img
-                        src={suggestion.image_url}
-                        alt={suggestion.title}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
-                        <FileText size={32} className="text-gray-400" />
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Content */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-4 mb-2">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
-                          <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 bg-gradient-to-r ${getTypeColor(suggestion.resource_type)} rounded-lg text-white text-xs font-medium`}>
-                            {getTypeIcon(suggestion.resource_type)}
-                            <span className="capitalize">{suggestion.resource_type}</span>
-                          </div>
-                        </div>
-                        <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white mb-2">
-                          {suggestion.title}
-                        </h3>
-                        <p className="text-sm text-gray-600 dark:text-gray-300 mb-3 line-clamp-2">
-                          {suggestion.description}
-                        </p>
-                        <a
-                          href={suggestion.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 text-sm break-all flex items-center gap-1 mb-3"
-                        >
-                          <span>{suggestion.url}</span>
-                          <ArrowRight size={14} />
-                        </a>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">
-                          Suggested by: {suggestion.suggested_by_profile?.email || 'Unknown'} • {formatDate(suggestion.created_at)}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Actions */}
-                    <div className="flex gap-2 mt-4">
-                      <button
-                        onClick={() => onApprove(suggestion.id)}
-                        className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
-                      >
-                        Approve
-                      </button>
-                      <button
-                        onClick={() => onReject(suggestion.id)}
-                        className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
-                      >
-                        Reject
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function SettingsModal({ currentUser, darkMode, onDarkModeToggle, onUpdateProfile, onClose }) {
-  const [specialties, setSpecialties] = useState([]);
-  const [subspecialties, setSubspecialties] = useState([]);
-  const [selectedSpecialty, setSelectedSpecialty] = useState(currentUser?.specialtyId || '');
-  const [selectedSubspecialty, setSelectedSubspecialty] = useState(currentUser?.subspecialtyId || '');
-  const [loadingSubspecialties, setLoadingSubspecialties] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState('');
-
-  useEffect(() => {
-    loadSpecialties();
-    // Initialize from currentUser
-    if (currentUser?.specialtyId) {
-      setSelectedSpecialty(String(currentUser.specialtyId));
-      loadSubspecialties(currentUser.specialtyId);
-      if (currentUser?.subspecialtyId) {
-        setSelectedSubspecialty(String(currentUser.subspecialtyId));
-      }
-    } else {
-      setSelectedSpecialty('');
-      setSelectedSubspecialty('');
-    }
-  }, [currentUser]);
-
-  async function loadSpecialties() {
-    const { data } = await supabase
-      .from('specialties')
-      .select('*')
-      .order('order');
-    if (data) setSpecialties(data);
-  }
-
-  async function loadSubspecialties(specialtyId) {
-    if (!specialtyId) {
-      setSubspecialties([]);
-      return Promise.resolve();
-    }
-    setLoadingSubspecialties(true);
-    try {
-      const { data } = await supabase
-        .from('subspecialties')
-        .select('*')
-        .eq('specialty_id', specialtyId)
-        .order('order');
-      setSubspecialties(data || []);
-      // Clear subspecialty if it doesn't belong to new specialty
-      if (selectedSubspecialty && data) {
-        const exists = data.some(s => String(s.id) === String(selectedSubspecialty));
-        if (!exists) {
-          setSelectedSubspecialty('');
-        }
-      }
-    } finally {
-      setLoadingSubspecialties(false);
-    }
-  }
-
-  const handleSpecialtyChange = (specialtyId) => {
-    setSelectedSpecialty(specialtyId);
-    setSelectedSubspecialty('');
-    loadSubspecialties(specialtyId);
-  };
-
-  async function handleSave() {
-    if (!currentUser?.id) return;
-    
-    setSaving(true);
-    setMessage('');
-    
-    try {
-      const updateData = {};
-      
-      // Only allow surgeons and trainees to update specialty/subspecialty
-      if (currentUser.userType === 'surgeon' || currentUser.userType === 'trainee') {
-        if (selectedSpecialty) {
-          updateData.primary_specialty_id = selectedSpecialty;
-        }
-        if (selectedSubspecialty) {
-          updateData.primary_subspecialty_id = selectedSubspecialty;
-        } else if (currentUser.userType === 'surgeon') {
-          // Surgeons must have a subspecialty
-          setMessage('Surgeons must select a subspecialty.');
-          setSaving(false);
-          return;
-        }
-      }
-      
-      const { error } = await supabase
-        .from('profiles')
-        .update(updateData)
-        .eq('id', currentUser.id);
-      
-      if (error) throw error;
-      
-      setMessage('Settings saved successfully!');
-      setTimeout(() => {
-        onUpdateProfile(updateData);
-        onClose();
-      }, 1000);
-    } catch (error) {
-      console.error('Error saving settings:', error);
-      setMessage('Error saving settings: ' + error.message);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="glass rounded-2xl p-6 sm:p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-2xl sm:text-3xl font-bold text-gray-900">Settings</h2>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            <X size={24} />
-          </button>
-        </div>
-
-        {/* Dark Mode Toggle */}
-        <div className="mb-6 pb-6 border-b border-gray-200">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-1">Dark Mode</h3>
-              <p className="text-sm text-gray-600">Toggle dark mode theme</p>
-            </div>
-            <button
-              onClick={() => onDarkModeToggle(!darkMode)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                darkMode ? 'bg-purple-600' : 'bg-gray-300'
-              }`}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  darkMode ? 'translate-x-6' : 'translate-x-1'
-                }`}
-              />
-            </button>
-          </div>
-        </div>
-
-        {/* Specialty/Subspecialty (only for surgeons and trainees) */}
-        {(currentUser?.userType === 'surgeon' || currentUser?.userType === 'trainee') && (
-          <div className="space-y-6">
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Specialty & Subspecialty</h3>
-              
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Specialty</label>
-                  <select
-                    value={selectedSpecialty || ''}
-                    onChange={(e) => handleSpecialtyChange(e.target.value)}
-                    className="w-full px-4 py-3 bg-white text-gray-900 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors"
-                  >
-                    <option value="">Select Specialty</option>
-                    {specialties.map(specialty => (
-                      <option key={specialty.id} value={specialty.id}>{specialty.name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {selectedSpecialty && (
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      Subspecialty {currentUser?.userType === 'surgeon' && <span className="text-red-500">*</span>}
-                    </label>
-                    <select
-                      value={selectedSubspecialty || ''}
-                      onChange={(e) => setSelectedSubspecialty(e.target.value)}
-                      className="w-full px-4 py-3 bg-white text-gray-900 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors"
-                      disabled={loadingSubspecialties}
-                    >
-                      <option value="">Select Subspecialty</option>
-                      {subspecialties.map(subspecialty => (
-                        <option key={subspecialty.id} value={subspecialty.id}>{subspecialty.name}</option>
-                      ))}
-                    </select>
-                    {loadingSubspecialties && <p className="text-sm text-gray-500 mt-1">Loading subspecialties...</p>}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Message */}
-        {message && (
-          <div className={`mt-4 p-3 rounded-lg ${
-            message.includes('Error') ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'
-          }`}>
-            {message}
-          </div>
-        )}
-
-        {/* Buttons */}
-        <div className="mt-6 flex gap-3 justify-end">
-          <button
-            onClick={onClose}
-            className="px-6 py-3 border-2 border-gray-200 text-gray-700 rounded-xl font-medium hover:bg-gray-50 transition-colors"
-          >
-            Cancel
-          </button>
-          {(currentUser?.userType === 'surgeon' || currentUser?.userType === 'trainee') && (
-            <button
-              onClick={handleSave}
-              disabled={saving || (currentUser?.userType === 'surgeon' && !selectedSubspecialty)}
-              className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {saving ? 'Saving...' : 'Save Changes'}
-            </button>
-          )}
         </div>
       </div>
     </div>

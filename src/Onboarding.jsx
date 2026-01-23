@@ -7,6 +7,8 @@ export default function Onboarding({ user, onComplete }) {
   const [userType, setUserType] = useState('')
   const [specialties, setSpecialties] = useState([])
   const [subspecialties, setSubspecialties] = useState([])
+  const [loadingSubspecialties, setLoadingSubspecialties] = useState(false)
+  const [subspecialtiesError, setSubspecialtiesError] = useState(null)
   const [selectedSpecialty, setSelectedSpecialty] = useState('')
   const [selectedSubspecialty, setSelectedSubspecialty] = useState('')
 
@@ -19,6 +21,11 @@ export default function Onboarding({ user, onComplete }) {
   useEffect(() => {
     if (selectedSpecialty) {
       fetchSubspecialties(selectedSpecialty)
+    } else {
+      // Clear subspecialties when no specialty is selected
+      setSubspecialties([])
+      setLoadingSubspecialties(false)
+      setSubspecialtiesError(null)
     }
   }, [selectedSpecialty])
 
@@ -31,34 +38,86 @@ export default function Onboarding({ user, onComplete }) {
   }
 
   async function fetchSubspecialties(specialtyId) {
-    const { data } = await supabase
-      .from('subspecialties')
-      .select('*')
-      .eq('specialty_id', specialtyId)
-      .order('order')
-    if (data) setSubspecialties(data)
+    try {
+      setLoadingSubspecialties(true)
+      setSubspecialtiesError(null)
+      setSubspecialties([]) // Clear previous subspecialties
+      
+      console.log('Fetching subspecialties for specialty:', specialtyId)
+      
+      const { data, error } = await supabase
+        .from('subspecialties')
+        .select('*')
+        .eq('specialty_id', specialtyId)
+        .order('order')
+      
+      if (error) {
+        console.error('Error fetching subspecialties:', error)
+        setSubspecialtiesError(error.message)
+        setSubspecialties([])
+      } else {
+        console.log('Subspecialties fetched:', data?.length || 0)
+        setSubspecialties(data || [])
+        if (!data || data.length === 0) {
+          setSubspecialtiesError('No subspecialties found for this specialty')
+        }
+      }
+    } catch (err) {
+      console.error('Exception fetching subspecialties:', err)
+      setSubspecialtiesError(err.message)
+      setSubspecialties([])
+    } finally {
+      setLoadingSubspecialties(false)
+    }
   }
 
   async function handleComplete() {
-    setLoading(true)
-    
-    const { error } = await supabase
-      .from('profiles')
-      .update({
+    try {
+      console.log('handleComplete called', { userType, selectedSpecialty, selectedSubspecialty, userId: user?.id });
+      setLoading(true)
+      
+      const updateData = {
         user_type: userType,
-        primary_specialty_id: selectedSpecialty,
-        primary_subspecialty_id: selectedSubspecialty
-      })
-      .eq('id', user.id)
+        onboarding_completed: true
+      };
+      
+      // Only set specialty/subspecialty for surgeons
+      if (userType === 'surgeon') {
+        if (!selectedSpecialty) {
+          alert('Please select a specialty.');
+          setLoading(false);
+          return;
+        }
+        if (!selectedSubspecialty) {
+          alert('Please select a subspecialty. This is required for surgeons.');
+          setLoading(false);
+          return;
+        }
+        updateData.primary_specialty_id = selectedSpecialty;
+        updateData.primary_subspecialty_id = selectedSubspecialty;
+      }
+      
+      console.log('Updating profile with:', updateData);
+      
+      const { data, error } = await supabase
+        .from('profiles')
+        .update(updateData)
+        .eq('id', user.id)
+        .select()
 
-    if (error) {
-      console.error('Error updating profile:', error)
-      alert('Error saving profile. Please try again.')
-    } else {
-      onComplete()
+      if (error) {
+        console.error('Error updating profile:', error)
+        alert('Error saving profile: ' + error.message + '. Please try again.')
+        setLoading(false)
+      } else {
+        console.log('Profile updated successfully:', data);
+        onComplete()
+      }
+    } catch (err) {
+      console.error('Exception in handleComplete:', err);
+      alert('An error occurred: ' + err.message);
+      setLoading(false);
     }
-    
-    setLoading(false)
   }
 
   const styles = {
@@ -159,8 +218,12 @@ export default function Onboarding({ user, onComplete }) {
 
         <div style={styles.stepIndicator}>
           <div style={styles.stepDot(step === 1)} />
-          <div style={styles.stepDot(step === 2)} />
-          <div style={styles.stepDot(step === 3)} />
+          {userType === 'surgeon' && (
+            <>
+              <div style={styles.stepDot(step === 2)} />
+              <div style={styles.stepDot(step === 3)} />
+            </>
+          )}
         </div>
 
         {/* Step 1: User Type */}
@@ -175,9 +238,22 @@ export default function Onboarding({ user, onComplete }) {
               }}
               onClick={() => setUserType('surgeon')}
             >
-              <div style={styles.cardTitle}>👨‍⚕️ Surgeon</div>
+              <div style={styles.cardTitle}>👨‍⚕️ Surgeon (Attending / Consultant)</div>
               <div style={styles.cardDescription}>
-                Practicing surgeon looking for surgical techniques and resources
+                Primary decision-makers with NPI numbers and OR privileges. Your data contributes to "Upcoming Cases" volume reports.
+              </div>
+            </div>
+
+            <div
+              style={{
+                ...styles.card,
+                ...(userType === 'trainee' ? styles.cardSelected : {})
+              }}
+              onClick={() => setUserType('trainee')}
+            >
+              <div style={styles.cardTitle}>🏥 Surgical Trainee (Resident/Fellow)</div>
+              <div style={styles.cardDescription}>
+                Doctors in training who are still refining their brand preferences. Your favorites help create the "Adoption Pipeline" report.
               </div>
             </div>
 
@@ -188,9 +264,9 @@ export default function Onboarding({ user, onComplete }) {
               }}
               onClick={() => setUserType('industry')}
             >
-              <div style={styles.cardTitle}>🏢 Medical Device Industry</div>
+              <div style={styles.cardTitle}>🏢 Medical Industry (Device Rep / Clinical Specialist)</div>
               <div style={styles.cardDescription}>
-                Device company representative, product specialist, or industry professional
+                Sales reps from Stryker, Arthrex, etc., or clinical trainers. Your viewing data helps identify what products are being pushed in the field.
               </div>
             </div>
 
@@ -201,9 +277,9 @@ export default function Onboarding({ user, onComplete }) {
               }}
               onClick={() => setUserType('student')}
             >
-              <div style={styles.cardTitle}>📚 Student</div>
+              <div style={styles.cardTitle}>📚 Medical Student / Other Healthcare Professional</div>
               <div style={styles.cardDescription}>
-                Medical student, resident, or fellow learning surgical techniques
+                Non-surgeons, PAs, or students. This category helps keep core analytics pure by filtering out users without a "Case Dashboard."
               </div>
             </div>
 
@@ -213,7 +289,15 @@ export default function Onboarding({ user, onComplete }) {
                 ...(userType ? {} : styles.buttonDisabled)
               }}
               disabled={!userType}
-              onClick={() => setStep(2)}
+              onClick={() => {
+                // Only show specialty/subspecialty steps for surgeons
+                if (userType === 'surgeon') {
+                  setStep(2);
+                } else {
+                  // Skip to completion for non-surgeons
+                  handleComplete();
+                }
+              }}
             >
               Continue
             </button>
@@ -240,9 +324,6 @@ export default function Onboarding({ user, onComplete }) {
                 }}
               >
                 <div style={styles.cardTitle}>{specialty.name}</div>
-                {specialty.description && (
-                  <div style={styles.cardDescription}>{specialty.description}</div>
-                )}
               </div>
             ))}
 
@@ -273,8 +354,52 @@ export default function Onboarding({ user, onComplete }) {
               {userType === 'surgeon' ? 'What is your subspecialty?' : 'Which subspecialty interests you?'}
             </h2>
             
-            {subspecialties.length === 0 ? (
-              <p>Loading subspecialties...</p>
+            {loadingSubspecialties ? (
+              <div style={{ textAlign: 'center', padding: '20px' }}>
+                <p>Loading subspecialties...</p>
+              </div>
+            ) : subspecialtiesError ? (
+              <div style={{ 
+                padding: '20px', 
+                backgroundColor: '#fee', 
+                borderRadius: '8px',
+                color: '#c33',
+                marginBottom: '15px'
+              }}>
+                <p style={{ margin: 0, fontWeight: 'bold' }}>Error loading subspecialties</p>
+                <p style={{ margin: '5px 0 0 0', fontSize: '14px' }}>{subspecialtiesError}</p>
+                <button
+                  onClick={() => fetchSubspecialties(selectedSpecialty)}
+                  style={{
+                    marginTop: '10px',
+                    padding: '8px 16px',
+                    backgroundColor: '#0066cc',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Retry
+                </button>
+              </div>
+            ) : subspecialties.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '20px' }}>
+                <p style={{ color: '#666' }}>No subspecialties available for this specialty.</p>
+                <p style={{ color: '#999', fontSize: '14px', marginTop: '10px' }}>
+                  You can still complete setup without selecting a subspecialty.
+                </p>
+                <button
+                  onClick={handleComplete}
+                  style={{
+                    ...styles.button,
+                    marginTop: '20px'
+                  }}
+                  disabled={loading}
+                >
+                  {loading ? 'Saving...' : 'Complete Setup Without Subspecialty'}
+                </button>
+              </div>
             ) : (
               subspecialties.map(subspecialty => (
                 <div
@@ -286,9 +411,6 @@ export default function Onboarding({ user, onComplete }) {
                   onClick={() => setSelectedSubspecialty(subspecialty.id)}
                 >
                   <div style={styles.cardTitle}>{subspecialty.name}</div>
-                  {subspecialty.description && (
-                    <div style={styles.cardDescription}>{subspecialty.description}</div>
-                  )}
                 </div>
               ))
             )}
