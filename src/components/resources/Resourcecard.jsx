@@ -1,3 +1,4 @@
+
 /**
  * ResourceCard Component
  * Displays a single resource with actions (favorite, note, rating, upcoming cases)
