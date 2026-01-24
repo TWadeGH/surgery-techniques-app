@@ -54,8 +54,6 @@ export function useFavorites(userId) {
       setLoading(true);
       setError(null);
       
-      console.log('Loading favorites for user:', userId);
-      
       const { data, error: queryError } = await supabase
         .from('favorites')
         .select('resource_id')
@@ -68,8 +66,6 @@ export function useFavorites(userId) {
       // Extract just the resource IDs for efficient lookups
       const favoriteIds = data?.map((f) => f.resource_id) || [];
       setFavorites(favoriteIds);
-      
-      console.log(`Loaded ${favoriteIds.length} favorites`);
     } catch (err) {
       // Ignore abort errors
       if (err.name === 'AbortError') return;
@@ -158,7 +154,6 @@ export function useFavorites(userId) {
           .rpc('increment_favorite_count', { resource_id: resourceId })
           .then();
         
-        console.log('Added favorite:', resourceId);
         return { success: true };
       } catch (err) {
         console.error('Error adding favorite:', err);
@@ -218,7 +213,6 @@ export function useFavorites(userId) {
           .rpc('decrement_favorite_count', { resource_id: resourceId })
           .then();
         
-        console.log('Removed favorite:', resourceId);
         return { success: true };
       } catch (err) {
         console.error('Error removing favorite:', err);
@@ -282,7 +276,6 @@ export function useFavorites(userId) {
       
       if (deleteError) throw deleteError;
       
-      console.log('Cleared all favorites');
       return { success: true };
     } catch (err) {
       console.error('Error clearing favorites:', err);
@@ -332,7 +325,6 @@ export function useFavorites(userId) {
         // Track analytics for each
         newFavorites.forEach((id) => trackFavoriteEvent(id, userId));
         
-        console.log(`Added ${newFavorites.length} favorites`);
         return { success: true, count: newFavorites.length };
       } catch (err) {
         console.error('Error batch adding favorites:', err);

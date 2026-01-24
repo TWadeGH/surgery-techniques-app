@@ -68,8 +68,6 @@ export function useResources(options = {}) {
       setLoading(true);
       setError(null);
       
-      console.log('Loading resources...', { categoryId, procedureId });
-      
       // Build query
       let query = supabase
         .from('resources')
@@ -102,8 +100,6 @@ export function useResources(options = {}) {
       if (categoryId) {
         trackCategorySelection(null, categoryId); // userId will be added by analytics
       }
-      
-      console.log(`Loaded ${data?.length || 0} resources`);
     } catch (err) {
       // Ignore abort errors
       if (err.name === 'AbortError') return;
@@ -125,8 +121,6 @@ export function useResources(options = {}) {
   const setupRealtimeSubscription = useCallback(() => {
     if (!enableRealtime || !categoryId) return;
     
-    console.log('Setting up realtime subscription for category:', categoryId);
-    
     const subscription = supabase
       .channel(`resources:category_id=eq.${categoryId}`)
       .on(
@@ -138,8 +132,6 @@ export function useResources(options = {}) {
           filter: `category_id=eq.${categoryId}`,
         },
         (payload) => {
-          console.log('Realtime update:', payload);
-          
           if (!isMounted.current) return;
           
           if (payload.eventType === 'INSERT') {
@@ -163,7 +155,6 @@ export function useResources(options = {}) {
    */
   const cleanupSubscription = useCallback(() => {
     if (realtimeSubscription.current) {
-      console.log('Cleaning up realtime subscription');
       supabase.removeChannel(realtimeSubscription.current);
       realtimeSubscription.current = null;
     }

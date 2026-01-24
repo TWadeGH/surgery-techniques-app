@@ -55,8 +55,6 @@ export function useNotes(userId) {
       setLoading(true);
       setError(null);
       
-      console.log('Loading notes for user:', userId);
-      
       const { data, error: queryError } = await supabase
         .from('notes')
         .select('resource_id, note_text, created_at, updated_at')
@@ -77,8 +75,6 @@ export function useNotes(userId) {
       });
       
       setNotes(notesMap);
-      
-      console.log(`Loaded ${notesMap.size} notes`);
     } catch (err) {
       // Ignore abort errors
       if (err.name === 'AbortError') return;
@@ -140,8 +136,6 @@ export function useNotes(userId) {
             .eq('resource_id', resourceId);
           
           if (deleteError) throw deleteError;
-          
-          console.log('Deleted empty note for resource:', resourceId);
         } else {
           // Upsert note
           const { error: upsertError } = await supabase
@@ -159,8 +153,6 @@ export function useNotes(userId) {
             );
           
           if (upsertError) throw upsertError;
-          
-          console.log('Saved note for resource:', resourceId);
         }
       } catch (err) {
         console.error('Error saving note:', err);
@@ -278,7 +270,6 @@ export function useNotes(userId) {
         
         if (deleteError) throw deleteError;
         
-        console.log('Deleted note for resource:', resourceId);
         return { success: true };
       } catch (err) {
         console.error('Error deleting note:', err);

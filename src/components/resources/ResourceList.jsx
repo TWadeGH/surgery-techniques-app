@@ -5,7 +5,7 @@
  * Extracted from App.jsx as part of refactoring effort
  */
 
-import React from 'react';
+import React, { memo, useMemo, useCallback } from 'react';
 import { FileText } from 'lucide-react';
 import ResourceCard from './Resourcecard';
 
@@ -16,7 +16,7 @@ import ResourceCard from './Resourcecard';
  * @param {Object} props
  * @param {boolean} props.showFavoritesOnly - Whether showing favorites only
  */
-function EmptyState({ showFavoritesOnly }) {
+const EmptyState = memo(function EmptyState({ showFavoritesOnly }) {
   return (
     <div className="glass rounded-2xl p-16 text-center shadow-lg">
       <div className="max-w-md mx-auto">
@@ -34,7 +34,7 @@ function EmptyState({ showFavoritesOnly }) {
       </div>
     </div>
   );
-}
+});
 
 /**
  * ResourceList Component
@@ -52,7 +52,7 @@ function EmptyState({ showFavoritesOnly }) {
  * @param {Object} props.currentUser - Current user object
  * @param {boolean} props.showFavoritesOnly - Whether showing favorites only
  */
-export default function ResourceList({
+function ResourceList({
   resources,
   favorites = [],
   notes = {},
@@ -76,46 +76,57 @@ export default function ResourceList({
     return <EmptyState showFavoritesOnly={showFavoritesOnly} />;
   }
 
-  // Helper to check if favorited (use function if provided, otherwise use array)
-  const checkIsFavorited = (resourceId) => {
+  // Memoize upcoming case IDs for efficient lookup
+  const upcomingCaseResourceIds = useMemo(() => {
+    return new Set(upcomingCases.map(uc => uc?.resource_id).filter(Boolean));
+  }, [upcomingCases]);
+
+  // Memoized helper to check if favorited
+  const checkIsFavorited = useCallback((resourceId) => {
     if (isFavorited && typeof isFavorited === 'function') {
       return isFavorited(resourceId);
     }
     return favorites.includes(resourceId);
-  };
+  }, [isFavorited, favorites]);
 
-  // Helper to get note (use function if provided, otherwise use object)
-  const getNoteText = (resourceId) => {
+  // Memoized helper to get note
+  const getNoteText = useCallback((resourceId) => {
     if (getNote && typeof getNote === 'function') {
       return getNote(resourceId) || '';
     }
     return notes[resourceId] || '';
-  };
+  }, [getNote, notes]);
+
+  // Memoize filtered resources (safety check)
+  const validResources = useMemo(() => {
+    return resources.filter((resource, index) => {
+      if (!resource || !resource.id) {
+        console.warn('ResourceList: Invalid resource at index', index, resource);
+        return false;
+      }
+      return true;
+    });
+  }, [resources]);
 
   return (
     <div className="space-y-4">
-      {resources.map((resource, index) => {
-        // Safety check for individual resource
-        if (!resource || !resource.id) {
-          console.warn('ResourceList: Invalid resource at index', index, resource);
-          return null;
-        }
-
-        return (
-          <ResourceCard 
-            key={resource.id} 
-            resource={resource}
-            isFavorited={checkIsFavorited(resource.id)}
-            note={getNoteText(resource.id)}
-            onToggleFavorite={onToggleFavorite}
-            onUpdateNote={onUpdateNote}
-            onToggleUpcomingCase={onToggleUpcomingCase}
-            isUpcomingCase={upcomingCases.some(uc => uc && uc.resource_id === resource.id)}
-            index={index}
-            currentUser={currentUser}
-          />
-        );
-      })}
+      {validResources.map((resource, index) => (
+        <ResourceCard 
+          key={resource.id} 
+          resource={resource}
+          isFavorited={checkIsFavorited(resource.id)}
+          note={getNoteText(resource.id)}
+          onToggleFavorite={onToggleFavorite}
+          onUpdateNote={onUpdateNote}
+          onToggleUpcomingCase={onToggleUpcomingCase}
+          isUpcomingCase={upcomingCaseResourceIds.has(resource.id)}
+          index={index}
+          currentUser={currentUser}
+        />
+      ))}
     </div>
   );
 }
+
+// Memoize ResourceList to prevent unnecessary re-renders
+export default memo(ResourceList);

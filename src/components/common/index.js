@@ -17,3 +17,6 @@ export {
 } from './Spinner';
 export { default as ErrorBoundary, ComponentErrorBoundary } from './ErrorBoundary';
 export { default as Input, Textarea, Select } from './Input';
+export { default as SettingsModal } from './SettingsModal';
+export { ToastProvider, useToast } from './Toast';
+export { default as ConfirmDialog } from './ConfirmDialog';

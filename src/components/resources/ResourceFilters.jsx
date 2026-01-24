@@ -5,7 +5,7 @@
  * Extracted from App.jsx as part of refactoring effort
  */
 
-import React from 'react';
+import React, { memo, useCallback } from 'react';
 import { Search } from 'lucide-react';
 
 /**
@@ -16,20 +16,20 @@ import { Search } from 'lucide-react';
  * @param {Function} props.onSearchChange - Callback when search changes
  * @param {string} props.placeholder - Search placeholder text
  */
-export default function ResourceFilters({
+function ResourceFilters({
   searchTerm = '',
   onSearchChange,
   placeholder = 'Search resources...',
 }) {
   /**
-   * Handle search input change
+   * Handle search input change (memoized)
    * @param {Event} e - Input change event
    */
-  function handleSearchChange(e) {
+  const handleSearchChange = useCallback((e) => {
     if (onSearchChange) {
       onSearchChange(e.target.value);
     }
-  }
+  }, [onSearchChange]);
 
   return (
     <div className="glass rounded-2xl p-6 mb-6 shadow-lg">
@@ -51,3 +51,6 @@ export default function ResourceFilters({
     </div>
   );
 }
+
+// Memoize ResourceFilters to prevent unnecessary re-renders
+export default memo(ResourceFilters);

@@ -7,7 +7,7 @@
  * Uses utilities from utils/ for cleaner code
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, memo } from 'react';
 import { 
   Video, 
   FileText, 
@@ -23,6 +23,7 @@ import {
 import { supabase } from '../../lib/supabase';
 import { trackResourceCoview, trackRatingEvent } from '../../lib/analytics';
 import { USER_TYPES } from '../../utils/constants';
+import { useToast } from '../common';
 
 /**
  * Format duration in seconds to HH:MM:SS or MM:SS
@@ -104,7 +105,7 @@ function canUserRate(user) {
  * @param {number} props.index - Index for animation delay
  * @param {Object} props.currentUser - Current user object
  */
-export default function ResourceCard({ 
+function ResourceCard({
   resource, 
   isFavorited, 
   note, 
@@ -115,6 +116,7 @@ export default function ResourceCard({
   index, 
   currentUser 
 }) {
+  const toast = useToast();
   const [showNoteInput, setShowNoteInput] = useState(false);
   const [noteText, setNoteText] = useState(note || '');
   const [viewTracked, setViewTracked] = useState(false);
@@ -208,7 +210,7 @@ export default function ResourceCard({
       trackRatingEvent(currentUser.id, resource.id, starRating, resource.category_id);
     } catch (error) {
       console.error('Error rating resource:', error);
-      alert('Error submitting rating: ' + error.message);
+      toast.error('Error submitting rating: ' + error.message);
     } finally {
       setLoadingRating(false);
     }
@@ -435,3 +437,17 @@ export default function ResourceCard({
     </div>
   );
 }
+
+// Memoize ResourceCard to prevent unnecessary re-renders
+// Only re-render if props actually change
+export default memo(ResourceCard, (prevProps, nextProps) => {
+  // Custom comparison function for better performance
+  return (
+    prevProps.resource?.id === nextProps.resource?.id &&
+    prevProps.isFavorited === nextProps.isFavorited &&
+    prevProps.note === nextProps.note &&
+    prevProps.isUpcomingCase === nextProps.isUpcomingCase &&
+    prevProps.index === nextProps.index &&
+    prevProps.currentUser?.id === nextProps.currentUser?.id
+  );
+});

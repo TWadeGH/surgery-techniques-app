@@ -54,8 +54,6 @@ export function useUpcomingCases(userId) {
       setLoading(true);
       setError(null);
       
-      console.log('Loading upcoming cases for user:', userId);
-      
       const { data, error: queryError } = await supabase
         .from('upcoming_cases')
         .select('resource_id, display_order')
@@ -67,8 +65,6 @@ export function useUpcomingCases(userId) {
       if (!isMounted.current) return;
       
       setUpcomingCases(data || []);
-      
-      console.log(`Loaded ${data?.length || 0} upcoming cases`);
     } catch (err) {
       // Ignore abort errors
       if (err.name === 'AbortError') return;
@@ -170,7 +166,6 @@ export function useUpcomingCases(userId) {
         // Track analytics
         trackUpcomingCaseEvent(userId, 'add', resourceId, categoryId);
         
-        console.log('Added to upcoming cases:', resourceId);
         return { success: true };
       } catch (err) {
         console.error('Error adding to upcoming cases:', err);
@@ -252,7 +247,6 @@ export function useUpcomingCases(userId) {
         // Track analytics
         trackUpcomingCaseEvent(userId, 'remove', resourceId, categoryId);
         
-        console.log('Removed from upcoming cases:', resourceId);
         return { success: true };
       } catch (err) {
         console.error('Error removing from upcoming cases:', err);
@@ -320,7 +314,6 @@ export function useUpcomingCases(userId) {
         // Track analytics
         trackUpcomingCaseEvent(userId, 'reorder', removed.resource_id, null);
         
-        console.log('Reordered upcoming cases');
         return { success: true };
       } catch (err) {
         console.error('Error reordering upcoming cases:', err);
@@ -377,7 +370,6 @@ export function useUpcomingCases(userId) {
       
       if (deleteError) throw deleteError;
       
-      console.log('Cleared all upcoming cases');
       return { success: true };
     } catch (err) {
       console.error('Error clearing upcoming cases:', err);
