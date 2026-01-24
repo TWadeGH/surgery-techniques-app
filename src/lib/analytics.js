@@ -120,13 +120,22 @@ export function trackResourceCoview(resourceId) {
   if (lastViewedResource && lastViewedResource.id !== resourceId) {
     const timeBetween = Math.floor((Date.now() - lastViewedResource.time) / 1000);
     
+    // Silently track coviews - errors are non-critical for analytics
     supabase.from('resource_coviews').insert([{
       session_id: sessionId,
       resource_a_id: lastViewedResource.id,
       resource_b_id: resourceId,
       viewed_a_first: true,
       time_between_seconds: timeBetween
-    }]).then();
+    }]).then(() => {
+      // Success - no need to log
+    }).catch((error) => {
+      // Silently handle errors - coview tracking is optional
+      // RLS policies may block this for some users, which is fine
+      if (error.code !== '42501') { // 42501 = insufficient_privilege
+        console.warn('Coview tracking failed (non-critical):', error.message);
+      }
+    });
   }
   
   lastViewedResource = {

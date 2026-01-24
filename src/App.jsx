@@ -1741,11 +1741,15 @@ function ResourceCard({ resource, isFavorited, note, onToggleFavorite, onUpdateN
             .select('rating')
             .eq('resource_id', resource.id)
             .eq('user_id', currentUser.id)
-            .single();
+            .maybeSingle();
 
-          if (userError && userError.code !== 'PGRST116') throw userError; // PGRST116 = no rows returned
-          
-          if (userRating) {
+          // Silently handle errors - ratings are optional
+          if (userError) {
+            // Only log if it's not a "not found" error
+            if (userError.code !== 'PGRST116') {
+              console.warn('Error loading rating:', userError);
+            }
+          } else if (userRating) {
             setRating(userRating.rating);
           }
         }
@@ -1776,7 +1780,11 @@ function ResourceCard({ resource, isFavorited, note, onToggleFavorite, onUpdateN
         .select('id')
         .eq('resource_id', resource.id)
         .eq('user_id', currentUser.id)
-        .single();
+        .maybeSingle();
+      
+      if (checkError && checkError.code !== 'PGRST116') {
+        throw checkError;
+      }
 
       if (existingRating) {
         // Update existing rating
