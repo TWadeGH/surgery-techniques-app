@@ -36,7 +36,8 @@ function SurgicalTechniquesApp() {
   const { 
     currentUser, 
     loading: authLoading,
-    updateProfile
+    updateProfile,
+    signOut
   } = useAuth();
   
   // Use authLoading as the main loading state
@@ -568,9 +569,14 @@ function SurgicalTechniquesApp() {
 
   // Sign out handler
   const handleSignOut = async () => {
-    endAnalyticsSession();
-    await supabase.auth.signOut();
-    // useAuth hook will handle setting currentUser to null
+    try {
+      endAnalyticsSession();
+      await signOut();
+      // useAuth hook will handle setting currentUser to null
+    } catch (error) {
+      console.error('Error signing out:', error);
+      alert('Error signing out. Please try again.');
+    }
   };
 
   if (loading) {
@@ -846,6 +852,10 @@ function LoginView({ onLogin }) {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetSuccess, setResetSuccess] = useState(false);
 
   async function handleLogin(e) {
     e.preventDefault();
@@ -883,6 +893,92 @@ function LoginView({ onLogin }) {
       setError(error.message);
       setGoogleLoading(false);
     }
+  }
+
+  async function handleForgotPassword(e) {
+    e.preventDefault();
+    setResetLoading(true);
+    setError('');
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
+        redirectTo: `${window.location.origin}/reset-password`
+      });
+
+      if (error) throw error;
+      
+      setResetSuccess(true);
+      setTimeout(() => {
+        setShowForgotPassword(false);
+        setResetSuccess(false);
+        setResetEmail('');
+      }, 3000);
+    } catch (error) {
+      setError(error.message);
+    } finally {
+      setResetLoading(false);
+    }
+  }
+
+  if (showForgotPassword) {
+    return (
+      <div className="min-h-screen gradient-bg flex items-center justify-center p-4">
+        <div className="glass rounded-2xl p-8 max-w-md w-full shadow-2xl">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Reset Password</h1>
+          <p className="text-gray-600 dark:text-gray-300 mb-8">Enter your email to receive a password reset link</p>
+
+          {resetSuccess ? (
+            <div className="bg-green-50 border-2 border-green-200 rounded-xl p-4 text-green-700 text-sm mb-4">
+              <p className="font-semibold mb-1">✅ Check your email!</p>
+              <p>We've sent you a password reset link. Please check your inbox and spam folder.</p>
+            </div>
+          ) : (
+            <form onSubmit={handleForgotPassword} className="space-y-4">
+              <div>
+                <label htmlFor="reset-email" className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Email</label>
+                <input
+                  id="reset-email"
+                  name="email"
+                  type="email"
+                  autoComplete="email"
+                  required
+                  value={resetEmail}
+                  onChange={(e) => setResetEmail(e.target.value)}
+                  className="w-full px-4 py-3 border-2 border-gray-200 dark:border-gray-700 rounded-xl focus:border-purple-500 focus:outline-none transition-colors bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500"
+                  placeholder="your@email.com"
+                />
+              </div>
+
+              {error && (
+                <div className="bg-red-50 border-2 border-red-200 rounded-xl p-3 text-red-700 text-sm">
+                  {error}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={resetLoading}
+                className="w-full px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-medium glow-button disabled:opacity-50"
+              >
+                {resetLoading ? 'Sending...' : 'Send Reset Link'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowForgotPassword(false);
+                  setError('');
+                  setResetEmail('');
+                }}
+                className="w-full px-6 py-3 border-2 border-gray-200 rounded-xl font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                Back to Login
+              </button>
+            </form>
+          )}
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -932,7 +1028,16 @@ function LoginView({ onLogin }) {
           </div>
 
           <div>
-            <label htmlFor="login-password" className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">Password</label>
+            <div className="flex items-center justify-between mb-2">
+              <label htmlFor="login-password" className="block text-sm font-semibold text-gray-700 dark:text-gray-300">Password</label>
+              <button
+                type="button"
+                onClick={() => setShowForgotPassword(true)}
+                className="text-sm text-purple-600 hover:text-purple-700 font-medium transition-colors"
+              >
+                Forgot password?
+              </button>
+            </div>
             <input
               id="login-password"
               name="password"
