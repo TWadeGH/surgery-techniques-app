@@ -26,6 +26,33 @@ export function hasRole(user, role) {
 }
 
 /**
+ * Check if user is a surgeon (attending/consultant)
+ * @param {Object} user - User object
+ * @returns {boolean}
+ */
+export function isSurgeon(user) {
+  return user?.userType === 'surgeon';
+}
+
+/**
+ * Check if user is a trainee (resident/fellow)
+ * @param {Object} user - User object
+ * @returns {boolean}
+ */
+export function isTrainee(user) {
+  return user?.userType === 'trainee';
+}
+
+/**
+ * Check if user can rate/favorite resources (surgeons and trainees only)
+ * @param {Object} user - User object
+ * @returns {boolean}
+ */
+export function canRateOrFavorite(user) {
+  return isSurgeon(user) || isTrainee(user);
+}
+
+/**
  * Format a date to a readable string
  * @param {string|Date} date - Date to format
  * @returns {string}

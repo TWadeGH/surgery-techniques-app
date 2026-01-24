@@ -7,7 +7,7 @@
 
 import React from 'react';
 import { FileText } from 'lucide-react';
-import ResourceCard from './ResourceCard';
+import ResourceCard from './Resourcecard';
 
 /**
  * Empty State Component
@@ -41,8 +41,10 @@ function EmptyState({ showFavoritesOnly }) {
  * 
  * @param {Object} props
  * @param {Array} props.resources - Array of resource objects
- * @param {Array} props.favorites - Array of favorited resource IDs
- * @param {Object} props.notes - Object mapping resource IDs to notes
+ * @param {Array} props.favorites - Array of favorited resource IDs (optional, for backward compatibility)
+ * @param {Object} props.notes - Object mapping resource IDs to notes (optional, for backward compatibility)
+ * @param {Function} props.isFavorited - Function to check if resource is favorited (preferred)
+ * @param {Function} props.getNote - Function to get note for resource (preferred)
  * @param {Array} props.upcomingCases - Array of upcoming case objects
  * @param {Function} props.onToggleFavorite - Callback for toggling favorite
  * @param {Function} props.onUpdateNote - Callback for updating note
@@ -54,6 +56,8 @@ export default function ResourceList({
   resources,
   favorites = [],
   notes = {},
+  isFavorited,
+  getNote,
   upcomingCases = [],
   onToggleFavorite,
   onUpdateNote,
@@ -72,6 +76,22 @@ export default function ResourceList({
     return <EmptyState showFavoritesOnly={showFavoritesOnly} />;
   }
 
+  // Helper to check if favorited (use function if provided, otherwise use array)
+  const checkIsFavorited = (resourceId) => {
+    if (isFavorited && typeof isFavorited === 'function') {
+      return isFavorited(resourceId);
+    }
+    return favorites.includes(resourceId);
+  };
+
+  // Helper to get note (use function if provided, otherwise use object)
+  const getNoteText = (resourceId) => {
+    if (getNote && typeof getNote === 'function') {
+      return getNote(resourceId) || '';
+    }
+    return notes[resourceId] || '';
+  };
+
   return (
     <div className="space-y-4">
       {resources.map((resource, index) => {
@@ -85,8 +105,8 @@ export default function ResourceList({
           <ResourceCard 
             key={resource.id} 
             resource={resource}
-            isFavorited={favorites.includes(resource.id)}
-            note={notes[resource.id]}
+            isFavorited={checkIsFavorited(resource.id)}
+            note={getNoteText(resource.id)}
             onToggleFavorite={onToggleFavorite}
             onUpdateNote={onUpdateNote}
             onToggleUpcomingCase={onToggleUpcomingCase}
