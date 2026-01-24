@@ -3108,6 +3108,10 @@ function SuggestResourceModal({ currentUser, onSubmit, onClose }) {
   };
 
   const handleSubmit = async (e) => {
+    window.SUBMIT_FIRED = true; // Global flag we can check
+    window.SUBMIT_COUNT = (window.SUBMIT_COUNT || 0) + 1;
+    console.log('🎯 FORM SUBMIT FIRED - TOP OF FUNCTION - COUNT:', window.SUBMIT_COUNT);
+    alert('SUBMIT HANDLER CALLED!'); // Visible confirmation
     e.preventDefault();
     
     console.log('📝 Form submitted');
@@ -3123,11 +3127,20 @@ function SuggestResourceModal({ currentUser, onSubmit, onClose }) {
     setImageError('');
     setSubmitting(true);
     
+    // Safety timeout - if submission takes more than 30 seconds, reset
+    const timeoutId = setTimeout(() => {
+      console.error('⏱️ TIMEOUT: Submission took too long (30s), resetting...');
+      setSubmitting(false);
+      setImageError('Submission timed out. Please try again.');
+    }, 30000);
+    
     try {
       console.log('⏳ Calling onSubmit...');
       // Include category_id in the submission
       await onSubmit({ ...formData, category_id: selectedCategory }, imageFile);
       console.log('✅ onSubmit completed successfully');
+      
+      clearTimeout(timeoutId); // Clear timeout on success
       
       // Reset form
       setFormData({
@@ -3147,6 +3160,7 @@ function SuggestResourceModal({ currentUser, onSubmit, onClose }) {
       setDurationMinutes('');
       setDurationSeconds('');
     } catch (error) {
+      clearTimeout(timeoutId); // Clear timeout on error
       console.error('❌ Error in handleSubmit:', error);
       setImageError(error.message || 'Failed to submit suggestion. Please try again.');
     } finally {
@@ -3494,8 +3508,11 @@ function SuggestResourceModal({ currentUser, onSubmit, onClose }) {
               <button
                 type="submit"
                 disabled={submitting || !imageFile || (formData.type === 'video' && !formData.duration_seconds)}
-                className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-medium glow-button disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-medium glow-button disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
+                {submitting && (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                )}
                 {submitting ? 'Submitting...' : 'Submit Suggestion'}
               </button>
             </div>
