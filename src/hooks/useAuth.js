@@ -63,11 +63,14 @@ export function useAuth() {
         // Create new profile
         const { data: newProfile, error: createError } = await supabase
           .from('profiles')
-          .insert({
+          .upsert({
             id: userId,
             email: user.email,
             user_type: 'student', // Default type
             role: 'user'
+          }, {
+            onConflict: 'id',
+            ignoreDuplicates: false
           })
           .select()
           .single();
