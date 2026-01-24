@@ -15,11 +15,11 @@
  * - TypeScript-ready (when migrating)
  */
 
-export { default as useAuth, useAuth } from './useAuth';
-export { default as useResources, useResources } from './useResources';
-export { default as useFavorites, useFavorites } from './useFavorites';
-export { default as useNotes, useNotes } from './useNotes';
-export { default as useUpcomingCases, useUpcomingCases } from './useUpcomingCases';
+export { useAuth } from './useAuth';
+export { useResources } from './useResources';
+export { useFavorites } from './useFavorites';
+export { useNotes } from './useNotes';
+export { useUpcomingCases } from './useUpcomingCases';
 
 // Future hooks to add:
 // export { default as useCategories } from './useCategories';
