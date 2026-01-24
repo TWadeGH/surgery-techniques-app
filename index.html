@@ -4,9 +4,9 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- Permissive CSP for development - allows unsafe-eval for Vite HMR -->
-    <!-- Note: If CSP errors persist, the browser may be caching. Try hard refresh (Cmd+Shift+R) -->
-    <meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; script-src * 'unsafe-inline' 'unsafe-eval'; style-src * 'unsafe-inline'; img-src * data: blob:; font-src * data:; connect-src * ws: wss:; frame-src *; object-src 'none';">
+    <!-- CSP: Permissive for development, removed for production builds -->
+    <!-- In production, configure CSP via Cloudflare Pages headers if needed -->
+    <!-- For development, this allows Vite HMR to work properly -->
     <title>surgical-techniques-app</title>
   </head>
   <body>

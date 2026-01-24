@@ -11,11 +11,18 @@ export default defineConfig({
     // Disable CSP headers in dev mode (Vite handles HMR which needs eval)
     headers: {}
   },
-  // Disable CSP for development
+  // Production build settings
   build: {
+    outDir: 'dist',
+    assetsDir: 'assets',
+    sourcemap: false, // Disable sourcemaps for smaller build size
     rollupOptions: {
       output: {
-        // Don't add CSP in production build either - let the server handle it
+        // Optimize chunk splitting for better caching
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom'],
+          'supabase-vendor': ['@supabase/supabase-js']
+        }
       }
     }
   }
