@@ -2832,7 +2832,6 @@ function SuggestResourceModal({ currentUser, onSubmit, onClose }) {
   const [selectedSubspecialty, setSelectedSubspecialty] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [selectedSubcategory, setSelectedSubcategory] = useState(null);
-  const [selectedSubcategory, setSelectedSubcategory] = useState(null);
   const [canEditSpecialty, setCanEditSpecialty] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
   const [showNewCategoryInput, setShowNewCategoryInput] = useState(false);
