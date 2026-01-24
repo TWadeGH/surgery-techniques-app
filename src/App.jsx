@@ -2813,12 +2813,29 @@ function SuggestResourceModal({ currentUser, onSubmit, onClose }) {
   const [selectedSpecialty, setSelectedSpecialty] = useState(null);
   const [selectedSubspecialty, setSelectedSubspecialty] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState(null);
+  const [selectedSubcategory, setSelectedSubcategory] = useState(null);
+  const [selectedSubcategory, setSelectedSubcategory] = useState(null);
   const [canEditSpecialty, setCanEditSpecialty] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
   const [showNewCategoryInput, setShowNewCategoryInput] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [addingCategory, setAddingCategory] = useState(false);
   const isInitialLoad = useRef(true);
+  // Debug logging
+  useEffect(() => {
+    console.log("🔍 SuggestResourceModal opened");
+    console.log("currentUser:", currentUser);
+    console.log("specialtyId:", currentUser?.specialtyId);
+    console.log("subspecialtyId:", currentUser?.subspecialtyId);
+  }, []);
+
+  // Debug logging
+  useEffect(() => {
+    console.log('🔍 SuggestResourceModal opened');
+    console.log('currentUser:', currentUser);
+    console.log('specialtyId:', currentUser?.specialtyId);
+    console.log('subspecialtyId:', currentUser?.subspecialtyId);
+  }, []);
 
   // Initialize with user's specialty/subspecialty
   useEffect(() => {
@@ -2838,6 +2855,10 @@ function SuggestResourceModal({ currentUser, onSubmit, onClose }) {
     if (selectedSubspecialty && !isInitialLoad.current) {
       loadCategories(selectedSubspecialty);
     }
+      console.log("📥 SuggestResource - Loading initial data...");
+      console.log("currentUser:", currentUser);
+      console.log("currentUser.specialtyId:", currentUser?.specialtyId);
+      console.log("currentUser.subspecialtyId:", currentUser?.subspecialtyId);
   }, [selectedSubspecialty]);
 
 
