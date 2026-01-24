@@ -58,7 +58,7 @@ export function useNotes(userId) {
       console.log('Loading notes for user:', userId);
       
       const { data, error: queryError } = await supabase
-        .from('user_notes')
+        .from('notes')
         .select('resource_id, note_text, created_at, updated_at')
         .eq('user_id', userId);
       
@@ -134,7 +134,7 @@ export function useNotes(userId) {
         if (!noteText || noteText.trim() === '') {
           // Delete empty notes
           const { error: deleteError } = await supabase
-            .from('user_notes')
+            .from('notes')
             .delete()
             .eq('user_id', userId)
             .eq('resource_id', resourceId);
@@ -145,7 +145,7 @@ export function useNotes(userId) {
         } else {
           // Upsert note
           const { error: upsertError } = await supabase
-            .from('user_notes')
+            .from('notes')
             .upsert(
               {
                 user_id: userId,
@@ -271,7 +271,7 @@ export function useNotes(userId) {
       
       try {
         const { error: deleteError } = await supabase
-          .from('user_notes')
+          .from('notes')
           .delete()
           .eq('user_id', userId)
           .eq('resource_id', resourceId);
