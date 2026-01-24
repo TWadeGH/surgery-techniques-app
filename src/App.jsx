@@ -2858,6 +2858,7 @@ function SuggestResourceModal({ currentUser, onSubmit, onClose }) {
   // Initialize with user's specialty/subspecialty
   useEffect(() => {
     if (currentUser) {
+      alert('🎯 SUGGEST MODAL OPENED! New code is loaded!');
       loadInitialData();
     }
   }, [currentUser]);
@@ -2873,17 +2874,20 @@ function SuggestResourceModal({ currentUser, onSubmit, onClose }) {
     if (selectedSubspecialty && !isInitialLoad.current) {
       loadCategories(selectedSubspecialty);
     }
-      console.log("📥 SuggestResource - Loading initial data...");
-      console.log("currentUser:", currentUser);
-      console.log("currentUser.specialtyId:", currentUser?.specialtyId);
-      console.log("currentUser.subspecialtyId:", currentUser?.subspecialtyId);
   }, [selectedSubspecialty]);
 
 
   async function loadInitialData() {
+    console.log('📥 SuggestResource - Loading initial data...');
+    console.log('currentUser:', currentUser);
+    console.log('currentUser.specialtyId:', currentUser?.specialtyId);
+    console.log('currentUser.subspecialtyId:', currentUser?.subspecialtyId);
+    
     try {
       setLoadingData(true);
       setImageError(''); // Clear any previous errors
+      
+      console.log('🔍 Fetching specialties from database...');
       
       // Load all specialties
       const { data: specialtiesData, error: specialtiesError } = await supabase
@@ -2892,9 +2896,11 @@ function SuggestResourceModal({ currentUser, onSubmit, onClose }) {
         .order('order');
       
       if (specialtiesError) {
+        console.error('❌ Error loading specialties:', specialtiesError);
         throw new Error(`Failed to load specialties: ${specialtiesError.message}`);
       }
       
+      console.log('✅ Loaded specialties:', specialtiesData?.length || 0);
       setSpecialties(specialtiesData || []);
 
       // Pre-populate with user's specialty/subspecialty if available
