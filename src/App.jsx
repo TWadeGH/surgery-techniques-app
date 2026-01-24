@@ -282,21 +282,31 @@ function SurgicalTechniquesApp() {
 
   async function handleSuggestResource(resourceData, imageFile) {
     try {
+      console.log('🚀 Starting resource suggestion...');
+      console.log('resourceData:', resourceData);
+      console.log('imageFile:', imageFile);
+      
       if (!imageFile) {
         alert('Image is required');
-        return;
+        throw new Error('Image is required');
       }
 
+      console.log('📸 Processing image...');
       const processedImage = await processResourceImage(imageFile);
       const fileName = `suggestion-${Date.now()}.webp`;
       const filePath = `resource-images/${fileName}`;
 
+      console.log('☁️ Uploading to storage...');
       const { error: uploadError } = await supabase.storage
         .from('resources')
         .upload(filePath, processedImage);
 
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        console.error('Upload error:', uploadError);
+        throw uploadError;
+      }
 
+      console.log('🔗 Getting public URL...');
       const { data: { publicUrl } } = supabase.storage
         .from('resources')
         .getPublicUrl(filePath);
@@ -324,17 +334,25 @@ function SurgicalTechniquesApp() {
         insertData.duration_seconds = resourceData.duration_seconds;
       }
       
+      console.log('💾 Inserting into database...');
+      console.log('insertData:', insertData);
+      
       const { error } = await supabase
         .from('resource_suggestions')
         .insert([insertData]);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Database error:', error);
+        throw error;
+      }
 
+      console.log('✅ Suggestion submitted successfully!');
       setShowSuggestForm(false);
       alert('Resource suggestion submitted successfully! It will be reviewed by an admin.');
     } catch (error) {
-      console.error('Error suggesting resource:', error);
+      console.error('❌ Error suggesting resource:', error);
       alert('Error submitting suggestion: ' + error.message);
+      throw error; // Re-throw so the modal knows there was an error
     }
   }
 
@@ -3092,6 +3110,11 @@ function SuggestResourceModal({ currentUser, onSubmit, onClose }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
+    console.log('📝 Form submitted');
+    console.log('imageFile:', imageFile);
+    console.log('formData:', formData);
+    console.log('selectedCategory:', selectedCategory);
+    
     if (!imageFile) {
       setImageError('Image is required');
       return;
@@ -3101,23 +3124,33 @@ function SuggestResourceModal({ currentUser, onSubmit, onClose }) {
     setSubmitting(true);
     
     try {
+      console.log('⏳ Calling onSubmit...');
       // Include category_id in the submission
       await onSubmit({ ...formData, category_id: selectedCategory }, imageFile);
+      console.log('✅ onSubmit completed successfully');
+      
       // Reset form
       setFormData({
         title: '',
         url: '',
         type: 'video',
-        description: ''
+        description: '',
+        duration_seconds: null,
+        keywords: ''
       });
       setImageFile(null);
       setImagePreview(null);
       setSelectedCategory(null);
       setSelectedSubspecialty(null);
       setSelectedSpecialty(null);
+      setDurationHours('');
+      setDurationMinutes('');
+      setDurationSeconds('');
     } catch (error) {
-      console.error('Error submitting suggestion:', error);
+      console.error('❌ Error in handleSubmit:', error);
+      setImageError(error.message || 'Failed to submit suggestion. Please try again.');
     } finally {
+      console.log('🔄 Setting submitting to false');
       setSubmitting(false);
     }
   };
