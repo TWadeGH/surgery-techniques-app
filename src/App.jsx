@@ -1,3 +1,4 @@
+// Build v4 - Final test
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Video, FileText, Link, Plus, Star, Heart, Edit, Trash2, StickyNote, ArrowRight, Sparkles, LogOut, Upload, X, Search, BarChart3, TrendingUp, GripVertical, Settings, Moon, Sun } from 'lucide-react';
 import { supabase } from './lib/supabase';
