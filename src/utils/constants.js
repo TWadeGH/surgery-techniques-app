@@ -117,6 +117,9 @@ export const ERROR_MESSAGES = {
     NETWORK_ERROR: 'Network error. Please check your connection.',
     UNKNOWN_ERROR: 'An unexpected error occurred. Please try again.',
   },
+  // Shorthand aliases for hooks compatibility
+  AUTH_ERROR: 'Authentication failed. Please try again.',
+  GENERIC_ERROR: 'An unexpected error occurred. Please try again.',
 };
 
 // Success Messages
@@ -161,6 +164,12 @@ export const VALIDATION = {
     MAX_LENGTH: 5000,
     MESSAGE: 'Note must be less than 5000 characters.',
   },
+};
+
+// Note Limits
+export const NOTE_LIMITS = {
+  MAX_LENGTH: 5000,
+  MIN_LENGTH: 0,
 };
 
 // Image Upload
