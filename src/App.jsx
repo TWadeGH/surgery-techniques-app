@@ -32,8 +32,19 @@ import ResourceList from './components/resources/ResourceList';
 import ResourceCard from './components/resources/Resourcecard';
 import { SuggestResourceModal } from './components/resources';
 import { LoginView, UserView } from './components/views';
-import { ErrorBoundary, SettingsModal, useToast, ConfirmDialog } from './components/common';
-import { SuggestedResourcesModal, CategoryManagementModal, EditResourceModal, AddResourceModal, AdminView } from './components/admin';
+import { ErrorBoundary, useToast, ConfirmDialog } from './components/common';
+
+// Admin Components
+import { AdminView } from './components/admin';
+
+// Modal Components
+import {
+  AddResourceModal,
+  EditResourceModal,
+  CategoryManagementModal,
+  SuggestedResourcesModal,
+  SettingsModal
+} from './components/modals';
 
 function SurgicalTechniquesApp() {
   // Toast notifications
@@ -122,7 +133,8 @@ function SurgicalTechniquesApp() {
     if (currentUser && !currentUser.onboardingComplete) {
       setShowOnboarding(true);
     }
-  }, [currentUser]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.id, currentUser?.onboardingComplete]); // Only depend on specific fields
 
   const handleOnboardingComplete = useCallback(() => {
     setShowOnboarding(false);
@@ -177,7 +189,8 @@ function SurgicalTechniquesApp() {
       console.error('Error loading suggested resources:', error);
       setSuggestedResources([]);
     }
-  }, [currentUser]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.id, currentUser?.role, currentUser?.specialtyId, currentUser?.subspecialtyId]); // Only depend on specific fields
 
   const loadAllData = useCallback(async () => {
     try {
@@ -224,14 +237,21 @@ function SurgicalTechniquesApp() {
     } catch (error) {
       console.error('Error loading data:', error);
     }
-  }, [currentUser, loadSuggestedResources]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.id, currentUser?.subspecialtyId, currentUser?.role]); // Only depend on specific fields, not whole object
 
   // Load data when user is authenticated (moved after loadAllData definition)
+  // Use ref to prevent multiple loads
+  const dataLoadedRef = useRef(false);
   useEffect(() => {
-    if (currentUser) {
+    if (currentUser && !dataLoadedRef.current) {
+      dataLoadedRef.current = true;
       loadAllData();
+    } else if (!currentUser) {
+      dataLoadedRef.current = false; // Reset when user logs out
     }
-  }, [currentUser, loadAllData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.id]); // Only depend on user ID, not the whole object
 
   // NOTE: All the auth functions (checkUser, loadUserProfile, etc.) are now in useAuth hook!
   // NOTE: toggleFavorite, toggleUpcomingCase, updateNote are now from hooks!
@@ -616,13 +636,33 @@ function SurgicalTechniquesApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading]); // Only depend on loading - currentUser check is inside
 
-  // Show loading only briefly (max 3 seconds)
-  if (loading && !forceShowLogin) {
+  // Check if we're returning from OAuth (URL has hash fragments)
+  const [checkingOAuth, setCheckingOAuth] = useState(false);
+  useEffect(() => {
+    // Check if URL has OAuth callback parameters
+    const hashParams = window.location.hash;
+    if (hashParams && (hashParams.includes('access_token') || hashParams.includes('code'))) {
+      console.log('OAuth callback detected, waiting for session...');
+      setCheckingOAuth(true);
+      // Give Supabase time to process the OAuth callback
+      const timeout = setTimeout(() => {
+        setCheckingOAuth(false);
+      }, 3000); // Wait up to 3 seconds for session
+      return () => clearTimeout(timeout);
+    } else {
+      setCheckingOAuth(false);
+    }
+  }, []);
+
+  // Show loading if checking OAuth callback or still loading
+  if ((loading || checkingOAuth) && !forceShowLogin) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center transition-colors">
         <div className="text-center">
           <div className="w-16 h-16 mx-auto mb-4 border-4 border-purple-600 border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-gray-600 dark:text-gray-300">Loading...</p>
+          <p className="text-gray-600 dark:text-gray-300">
+            {checkingOAuth ? 'Completing sign in...' : 'Loading...'}
+          </p>
         </div>
       </div>
     );
@@ -839,7 +879,5 @@ function SurgicalTechniquesApp() {
     </ErrorBoundary>
   );
 }
-
-
 
 export default SurgicalTechniquesApp;

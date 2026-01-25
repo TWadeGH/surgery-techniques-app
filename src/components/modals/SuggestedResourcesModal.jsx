@@ -5,10 +5,12 @@
  * Extracted from App.jsx as part of refactoring effort
  */
 
-import React from 'react';
-import { Video, FileText, Link, X, Sparkles, ArrowRight } from 'lucide-react';
+import { useState } from 'react';
+import { Video, FileText, Link, X, Sparkles, ArrowRight, Edit } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
 import { formatDate } from '../../utils/helpers';
 import { RESOURCE_TYPES } from '../../utils/constants';
+import EditSuggestionModal from '../admin/EditSuggestionModal';
 
 /**
  * SuggestedResourcesModal Component

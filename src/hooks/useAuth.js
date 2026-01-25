@@ -39,6 +39,13 @@ export function useAuth() {
    * Includes retry logic and profile creation fallback
    */
   const loadUserProfile = useCallback(async (userId) => {
+    // Prevent multiple simultaneous profile loads for the same user
+    if (loadUserProfile.loading && loadUserProfile.loadingUserId === userId) {
+      console.log('Profile load already in progress for user:', userId);
+      return;
+    }
+    loadUserProfile.loading = true;
+    loadUserProfile.loadingUserId = userId;
     try {
       console.log('Loading profile for user:', userId);
       
@@ -241,9 +248,24 @@ export function useAuth() {
       };
       
       console.log('Profile loaded successfully, updating user:', transformedProfile.email);
-      setCurrentUser(transformedProfile);
-      setError(null);
-      console.log('User state updated with profile');
+      
+      // Only update if component is still mounted and user ID matches
+      if (isMounted.current) {
+        // Use functional update to prevent infinite loops
+        setCurrentUser(prevUser => {
+          // Only update if user ID matches or we don't have a user yet
+          if (!prevUser || prevUser.id === transformedProfile.id) {
+            console.log('Updating user state with profile');
+            return transformedProfile;
+          }
+          console.log('Skipping user update - user ID mismatch');
+          return prevUser;
+        });
+        setError(null);
+        console.log('User state updated with profile');
+      } else {
+        console.log('Component unmounted, skipping profile update');
+      }
       
       // Initialize analytics session
       try {
@@ -258,20 +280,39 @@ export function useAuth() {
       console.error('Error loading profile:', err);
       if (isMounted.current) {
         setError(err.message || ERROR_MESSAGES.AUTH_ERROR);
-        setCurrentUser(null);
+        // Don't set currentUser to null if we already have a minimal user
+        // Only clear if we don't have any user at all
+        setCurrentUser(prevUser => {
+          if (!prevUser) {
+            return null; // No user, so null is fine
+          }
+          // Keep existing minimal user - don't clear it on profile load error
+          console.log('Profile load error, but keeping minimal user');
+          return prevUser;
+        });
       }
-    } finally {
-      if (isMounted.current) {
-        setLoading(false);
+      } finally {
+        loadUserProfile.loading = false;
+        loadUserProfile.loadingUserId = null;
+        if (isMounted.current) {
+          setLoading(false);
+        }
       }
-    }
-  }, []);
+    }, []);
 
   /**
    * Check for existing session on mount
    * Includes timeout for fast failure on network issues
    */
+  // Use ref to prevent multiple simultaneous session checks
+  const checkingSession = useRef(false);
+  
   const checkSession = useCallback(async () => {
+    if (checkingSession.current) {
+      console.log('Session check already in progress, skipping...');
+      return;
+    }
+    checkingSession.current = true;
     try {
       console.log('Checking session...');
       // No artificial timeout - let Supabase handle it naturally
@@ -292,16 +333,19 @@ export function useAuth() {
       // Session found - create minimal user immediately, load full profile in background
       console.log('Session found, creating minimal user and loading profile in background:', session.user.id);
       if (isMounted.current) {
-        // Create minimal user object from session so app can render immediately
-        setCurrentUser({
-          id: session.user.id,
-          email: session.user.email || '',
-          userType: 'student',
-          role: 'user',
-          specialtyId: null,
-          subspecialtyId: null,
-          onboardingComplete: false,
-        });
+        // Only set user if we don't already have one (prevent infinite loops)
+        if (!currentUser || currentUser.id !== session.user.id) {
+          // Create minimal user object from session so app can render immediately
+          setCurrentUser({
+            id: session.user.id,
+            email: session.user.email || '',
+            userType: 'student',
+            role: 'user',
+            specialtyId: null,
+            subspecialtyId: null,
+            onboardingComplete: false,
+          });
+        }
         setLoading(false); // Show UI immediately
       }
       
@@ -319,6 +363,8 @@ export function useAuth() {
         setLoading(false);
         setError(err.message || ERROR_MESSAGES.AUTH_ERROR);
       }
+    } finally {
+      checkingSession.current = false;
     }
   }, [loadUserProfile]);
 
@@ -366,20 +412,32 @@ export function useAuth() {
           console.log('Initial session event:', session?.user?.id ? 'Session found' : 'No session');
           if (session?.user) {
             // We have a session - create minimal user and load profile
-            if (!currentUser || currentUser.id !== session.user.id) {
-              console.log('Creating minimal user from INITIAL_SESSION');
-              setCurrentUser({
-                id: session.user.id,
-                email: session.user.email || '',
-                userType: 'student',
-                role: 'user',
-                specialtyId: null,
-                subspecialtyId: null,
-                onboardingComplete: false,
-              });
-            }
-            setLoading(false);
-            // Load profile in background
+            // Use functional update to prevent loops
+            setCurrentUser(prevUser => {
+              if (!prevUser || prevUser.id !== session.user.id) {
+                console.log('Creating minimal user from INITIAL_SESSION');
+                return {
+                  id: session.user.id,
+                  email: session.user.email || '',
+                  userType: 'student',
+                  role: 'user',
+                  specialtyId: null,
+                  subspecialtyId: null,
+                  onboardingComplete: false,
+                };
+              }
+              console.log('User already exists from INITIAL_SESSION, skipping');
+              return prevUser;
+            });
+            // Only set loading to false if we're still loading
+            setLoading(prevLoading => {
+              if (prevLoading) {
+                console.log('Setting loading to false after INITIAL_SESSION');
+                return false;
+              }
+              return prevLoading;
+            });
+            // Load profile in background - only if not already loading
             setTimeout(() => {
               loadUserProfile(session.user.id).catch(err => {
                 console.error('Background profile load failed:', err);
@@ -395,19 +453,32 @@ export function useAuth() {
             console.log('User signed in, creating minimal user and loading profile in background...');
             // Create minimal user immediately from session data
             if (isMounted.current) {
-              // Only update if we don't already have a user (prevent duplicate calls)
-              if (!currentUser || currentUser.id !== session.user.id) {
-                setCurrentUser({
-                  id: session.user.id,
-                  email: session.user.email || '',
-                  userType: 'student',
-                  role: 'user',
-                  specialtyId: null,
-                  subspecialtyId: null,
-                  onboardingComplete: false,
-                });
-              }
-              setLoading(false); // Allow UI to render immediately
+              // Use functional update to prevent infinite loops
+              setCurrentUser(prevUser => {
+                // Only update if we don't already have a user (prevent duplicate calls)
+                if (!prevUser || prevUser.id !== session.user.id) {
+                  console.log('Creating minimal user from SIGNED_IN event');
+                  return {
+                    id: session.user.id,
+                    email: session.user.email || '',
+                    userType: 'student',
+                    role: 'user',
+                    specialtyId: null,
+                    subspecialtyId: null,
+                    onboardingComplete: false,
+                  };
+                }
+                console.log('User already exists from SIGNED_IN event, skipping');
+                return prevUser;
+              });
+              // Use functional update for loading too
+              setLoading(prevLoading => {
+                if (prevLoading) {
+                  console.log('Setting loading to false after SIGNED_IN');
+                  return false;
+                }
+                return prevLoading;
+              });
             }
             // Load full profile in background (non-blocking) - only if not already loading
             setTimeout(() => {
@@ -446,7 +517,8 @@ export function useAuth() {
       }
       endAnalyticsSession();
     };
-  }, [checkSession, loadUserProfile]); // Removed 'loading' from deps to prevent infinite loop
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty deps - only run once on mount, checkSession and loadUserProfile are stable
 
   /**
    * Sign in with email and password
