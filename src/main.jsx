@@ -12,11 +12,9 @@ try {
   }
 
   createRoot(rootElement).render(
-    <StrictMode>
       <ToastProvider>
         <App />
       </ToastProvider>
-    </StrictMode>,
   );
 } catch (error) {
   console.error('Failed to render app:', error);
