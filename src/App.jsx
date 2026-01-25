@@ -66,6 +66,9 @@ function SurgicalTechniquesApp() {
   // Use authLoading as the main loading state
   const loading = authLoading;
   
+  // Stabilize userId to prevent hook re-initialization on every currentUser change
+  const userId = useMemo(() => currentUser?.id, [currentUser?.id]);
+  
   // Resources (will be integrated after categories work)
   const [resources, setResources] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -74,13 +77,13 @@ function SurgicalTechniquesApp() {
   const { 
     isFavorited, 
     toggleFavorite
-  } = useFavorites(currentUser?.id);
+  } = useFavorites(userId);
   
   // Notes with auto-save (replaces ~400 lines)
   const { 
     getNote, 
     updateNote
-  } = useNotes(currentUser?.id);
+  } = useNotes(userId);
   
   // Upcoming Cases (replaces ~500 lines)
   const { 
@@ -88,7 +91,7 @@ function SurgicalTechniquesApp() {
     toggleCase: toggleUpcomingCase,
     reorderCases: reorderUpcomingCases,
     isInUpcomingCases
-  } = useUpcomingCases(currentUser?.id);
+  } = useUpcomingCases(userId);
   
   // ========================================
   // LOCAL STATE (Non-hook state)
