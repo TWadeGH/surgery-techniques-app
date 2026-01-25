@@ -448,7 +448,7 @@ export function useAuth() {
             console.log('No session in INITIAL_SESSION - showing login');
             setLoading(false);
           }
-        } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        } else if (event === 'SIGNED_IN') {
           if (session?.user) {
             console.log('User signed in, creating minimal user and loading profile in background...');
             // Create minimal user immediately from session data
@@ -487,6 +487,19 @@ export function useAuth() {
                 // User can still use app with minimal profile
               });
             }, 200); // Small delay to prevent duplicate calls
+          }
+        } else if (event === 'TOKEN_REFRESHED') {
+          // TOKEN_REFRESHED fires frequently - DON'T reload profile!
+          // Just ensure loading is false if we have a user
+          if (session?.user && isMounted.current) {
+            console.log('Token refreshed, keeping existing user state');
+            setLoading(prevLoading => {
+              if (prevLoading) {
+                console.log('Setting loading to false after TOKEN_REFRESHED');
+                return false;
+              }
+              return prevLoading;
+            });
           }
         } else if (event === 'USER_UPDATED') {
           if (session?.user) {
