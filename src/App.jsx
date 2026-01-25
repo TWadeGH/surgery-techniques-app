@@ -5197,14 +5197,6 @@ function EditSuggestionModal({ suggestion, onSave, onClose }) {
   };
 
   if (loading) {
-      category_id: selectedCategory || null,
-      subcategory_id: selectedSubcategory || null,
-    });
-    
-    setSaving(false);
-  };
-
-  if (loading) {
     return (
       <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
         <div className="glass rounded-2xl p-8 text-center">
