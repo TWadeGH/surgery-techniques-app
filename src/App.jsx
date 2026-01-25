@@ -4807,6 +4807,7 @@ function CategoryManagementModal({ currentUser, onClose }) {
 
 function SuggestedResourcesModal({ suggestions, onApprove, onReject, onClose, currentUser }) {
   const pendingSuggestions = suggestions?.filter(s => s.status === 'pending') || [];
+  const [editingSuggestion, setEditingSuggestion] = useState(null);
 
   const formatDate = (dateString) => {
     if (!dateString) return 'Unknown date';
@@ -4829,6 +4830,30 @@ function SuggestedResourcesModal({ suggestions, onApprove, onReject, onClose, cu
       case 'article': return 'from-blue-500 to-cyan-500';
       case 'link': return 'from-green-500 to-emerald-500';
       default: return 'from-gray-500 to-gray-600';
+    }
+  };
+
+  const handleSaveEdit = async (updatedSuggestion) => {
+    try {
+      // Update the suggestion in the database
+      const { error } = await supabase
+        .from('resource_suggestions')
+        .update({
+          title: updatedSuggestion.title,
+          description: updatedSuggestion.description,
+          url: updatedSuggestion.url,
+          resource_type: updatedSuggestion.resource_type,
+        })
+        .eq('id', updatedSuggestion.id);
+
+      if (error) throw error;
+
+      // Close edit modal and refresh
+      setEditingSuggestion(null);
+      window.location.reload(); // Refresh to show updated data
+    } catch (error) {
+      console.error('Error updating suggestion:', error);
+      alert('Failed to update suggestion. Please try again.');
     }
   };
 
@@ -4914,6 +4939,13 @@ function SuggestedResourcesModal({ suggestions, onApprove, onReject, onClose, cu
                     {/* Actions */}
                     <div className="flex gap-2 mt-4">
                       <button
+                        onClick={() => setEditingSuggestion(suggestion)}
+                        className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center justify-center gap-2"
+                      >
+                        <Edit size={16} />
+                        Edit
+                      </button>
+                      <button
                         onClick={() => onApprove(suggestion.id)}
                         className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
                       >
@@ -4932,6 +4964,138 @@ function SuggestedResourcesModal({ suggestions, onApprove, onReject, onClose, cu
             ))}
           </div>
         )}
+      </div>
+
+      {/* Edit Suggestion Modal */}
+      {editingSuggestion && (
+        <EditSuggestionModal
+          suggestion={editingSuggestion}
+          onSave={handleSaveEdit}
+          onClose={() => setEditingSuggestion(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// Edit Suggestion Modal Component
+function EditSuggestionModal({ suggestion, onSave, onClose }) {
+  const [title, setTitle] = useState(suggestion.title || '');
+  const [description, setDescription] = useState(suggestion.description || '');
+  const [url, setUrl] = useState(suggestion.url || '');
+  const [resourceType, setResourceType] = useState(suggestion.resource_type || 'video');
+  const [saving, setSaving] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    
+    await onSave({
+      ...suggestion,
+      title,
+      description,
+      url,
+      resource_type: resourceType,
+    });
+    
+    setSaving(false);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+      <div className="glass rounded-2xl p-6 sm:p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-2xl font-bold text-gray-900 dark:text-white">
+            Edit Suggested Resource
+          </h3>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+          >
+            <X size={24} className="text-gray-500" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Resource Type */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Resource Type
+            </label>
+            <select
+              value={resourceType}
+              onChange={(e) => setResourceType(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 dark:bg-gray-800 dark:text-white"
+              required
+            >
+              <option value="video">Video</option>
+              <option value="article">Article</option>
+              <option value="link">Link</option>
+            </select>
+          </div>
+
+          {/* Title */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Title
+            </label>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 dark:bg-gray-800 dark:text-white"
+              required
+              maxLength={200}
+            />
+          </div>
+
+          {/* Description */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Description
+            </label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 dark:bg-gray-800 dark:text-white"
+              rows={4}
+              required
+            />
+          </div>
+
+          {/* URL */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              URL
+            </label>
+            <input
+              type="url"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 dark:bg-gray-800 dark:text-white"
+              required
+            />
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-3 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-6 py-3 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors font-medium"
+              disabled={saving}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={saving}
+            >
+              {saving ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
