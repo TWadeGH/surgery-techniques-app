@@ -42,190 +42,46 @@ export function useAuth() {
     try {
       console.log('Loading profile for user:', userId);
       
-      // Add timeout to profile loading with better error handling
-      const profileLoadPromise = (async () => {
-        console.log('Step 1: Fetching existing profile...');
-        // First attempt - try to get existing profile with shorter timeout
-        const fetchStart = Date.now();
-        let { data: profile, error } = await supabase
+      // First attempt - try to get existing profile
+      let { data: profile, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle();
+      
+      // Handle "not found" errors by creating profile
+      if (!profile && (error?.code === 'PGRST116' || !error)) {
+        console.log('Profile not found, attempting to create...');
+        
+        // Get user data from auth
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        if (!user || user.id !== userId) {
+          throw new Error('User mismatch during profile creation');
+        }
+        
+        // Create new profile
+        const { data: newProfile, error: createError } = await supabase
           .from('profiles')
-          .select('*')
-          .eq('id', userId)
-          .maybeSingle();
+          .upsert({
+            id: userId,
+            email: user.email,
+            user_type: 'student', // Default type
+            role: 'user'
+          }, {
+            onConflict: 'id',
+            ignoreDuplicates: false
+          })
+          .select()
+          .single();
         
-        const fetchTime = Date.now() - fetchStart;
-        console.log(`Profile fetch took ${fetchTime}ms`, { profile: !!profile, error: error?.message });
-        
-        // If profile exists, return it immediately - don't try to create
-        if (profile) {
-          console.log('Profile found, returning it:', profile.email);
-          return profile;
-        }
-        
-        // Handle "not found" errors by creating profile
-        if (!profile && (error?.code === 'PGRST116' || !error)) {
-          console.log('Step 2: Profile not found, creating new profile...');
-          // Get user data from auth (with timeout)
-          const userStart = Date.now();
-          const { data: { user }, error: userError } = await supabase.auth.getUser();
-          
-          if (userError) {
-            console.error('Error getting user:', userError);
-            throw new Error('Failed to get user data: ' + userError.message);
-          }
-          
-          if (!user || user.id !== userId) {
-            throw new Error('User mismatch during profile creation');
-          }
-          
-          console.log('Step 3: Upserting profile...');
-          const upsertStart = Date.now();
-          
-          // Try INSERT first (faster), then fallback to upsert if needed
-          let newProfile;
-          let createError;
-          
-          // First try INSERT (faster for new profiles)
-          const { data: insertData, error: insertError } = await supabase
-            .from('profiles')
-            .insert({
-              id: userId,
-              email: user.email,
-              user_type: 'student',
-              role: 'user'
-            })
-            .select()
-            .single();
-          
-          if (insertError) {
-            console.log('Insert result:', { 
-              code: insertError.code, 
-              message: insertError.message,
-              details: insertError.details,
-              hint: insertError.hint
-            });
-            
-            // 23505 = unique violation (already exists) - try to fetch existing
-            if (insertError.code === '23505') {
-              console.log('Profile already exists (duplicate), fetching...');
-              const { data: existingProfile, error: fetchError } = await supabase
-                .from('profiles')
-                .select('*')
-                .eq('id', userId)
-                .single();
-              
-              if (existingProfile) {
-                profile = existingProfile;
-                console.log('Fetched existing profile after duplicate error');
-                return profile; // Return early, skip upsert
-              } else if (fetchError) {
-                console.error('Failed to fetch existing profile:', fetchError);
-                throw new Error('Profile exists but could not be fetched: ' + fetchError.message);
-              }
-            }
-            
-            // If not a duplicate, try upsert as fallback
-            console.log('Insert failed, trying upsert as fallback...', insertError.message);
-            const upsertResult = await supabase
-              .from('profiles')
-              .upsert({
-                id: userId,
-                email: user.email,
-                user_type: 'student',
-                role: 'user'
-              }, {
-                onConflict: 'id',
-                ignoreDuplicates: false
-              })
-              .select()
-              .single();
-            
-            newProfile = upsertResult.data;
-            createError = upsertResult.error;
-            
-            if (createError) {
-              console.error('Upsert also failed:', createError);
-            }
-          } else {
-            newProfile = insertData;
-            createError = null;
-          }
-          
-          const upsertTime = Date.now() - upsertStart;
-          console.log(`Profile upsert took ${upsertTime}ms`, { 
-            error: createError?.message,
-            code: createError?.code,
-            details: createError?.details
-          });
-          
-          if (createError) {
-            console.error('Profile creation/upsert error:', {
-              code: createError.code,
-              message: createError.message,
-              details: createError.details,
-              hint: createError.hint
-            });
-            
-            // If it's a duplicate, try to fetch the existing profile
-            if (createError.code === '23505') {
-              console.log('Profile already exists (duplicate), fetching...');
-              const { data: existingProfile, error: fetchError } = await supabase
-                .from('profiles')
-                .select('*')
-                .eq('id', userId)
-                .single();
-              
-              if (existingProfile) {
-                profile = existingProfile;
-                console.log('Fetched existing profile after duplicate error');
-              } else if (fetchError) {
-                console.error('Failed to fetch existing profile:', fetchError);
-                throw new Error('Profile exists but could not be fetched: ' + fetchError.message);
-              } else {
-                throw new Error('Profile exists but could not be fetched (unknown error)');
-              }
-            } else {
-              // For other errors, log but don't throw - user can still use app
-              console.warn('Profile creation failed, but continuing with minimal profile:', createError.message);
-              // Don't throw - let the app continue with minimal user
-              return null; // Return null to indicate profile creation failed
-            }
-          } else {
-            profile = newProfile;
-            console.log('Profile created/upserted successfully');
-          }
-        } else if (error) {
-          console.error('Profile fetch error:', error);
-          throw error;
-        }
-        
-        return profile;
-      })();
-      
-      // No aggressive timeout - profile fetch is fast (167ms in logs)
-      // Only timeout if it's truly stuck (30 seconds)
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => {
-          console.error('Profile loading exceeded 30 second timeout - this should not happen');
-          reject(new Error('Profile loading timeout - database may be unreachable'));
-        }, 30000) // 30 seconds - only for truly stuck cases
-      );
-      
-      const profile = await Promise.race([profileLoadPromise, timeoutPromise]);
-      
-      if (!isMounted.current) {
-        console.log('Component unmounted, skipping profile update');
-        return;
+        if (createError) throw createError;
+        profile = newProfile;
+      } else if (error) {
+        throw error;
       }
       
-      // If profile is null (creation failed but non-critical), just return
-      // User already has minimal profile from session
-      if (!profile) {
-        console.warn('Profile loading returned null - user will continue with minimal profile');
-        return;
-      }
-      
-      console.log('Profile received, transforming...', profile);
+      if (!isMounted.current) return;
       
       // Transform profile data to camelCase for consistency
       const transformedProfile = {
@@ -240,20 +96,16 @@ export function useAuth() {
         onboardingComplete: profile.onboarding_complete,
       };
       
-      console.log('Profile loaded successfully, updating user:', transformedProfile.email);
       setCurrentUser(transformedProfile);
       setError(null);
-      console.log('User state updated with profile');
       
       // Initialize analytics session
-      try {
-        initAnalyticsSession(userId, {
-          specialtyId: transformedProfile.specialtyId,
-          subspecialtyId: transformedProfile.subspecialtyId,
-        });
-      } catch (analyticsError) {
-        console.warn('Analytics initialization failed (non-blocking):', analyticsError);
-      }
+      initAnalyticsSession(userId, {
+        specialtyId: transformedProfile.specialtyId,
+        subspecialtyId: transformedProfile.subspecialtyId,
+      });
+      
+      console.log('Profile loaded successfully');
     } catch (err) {
       console.error('Error loading profile:', err);
       if (isMounted.current) {
@@ -273,46 +125,35 @@ export function useAuth() {
    */
   const checkSession = useCallback(async () => {
     try {
-      console.log('Checking session...');
-      // No artificial timeout - let Supabase handle it naturally
-      // Session checks are usually fast (< 500ms), but don't force a timeout
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      console.log('Checking for existing session...');
       
-      if (sessionError || !session?.user) {
-        console.log('No session found - showing login screen immediately');
+      // Race condition: timeout vs session check
+      const sessionPromise = supabase.auth.getSession();
+      const timeoutPromise = new Promise((resolve) => 
+        setTimeout(() => resolve({ data: { session: null } }), 3000)
+      );
+      
+      const result = await Promise.race([sessionPromise, timeoutPromise]);
+      const { data: { session }, error: sessionError } = result;
+      
+      if (sessionError) {
+        console.error('Session check error:', sessionError);
         if (isMounted.current) {
           setLoading(false);
-          if (sessionError) {
-            setError(sessionError.message);
-          }
+          setError(sessionError.message);
         }
         return;
       }
       
-      // Session found - create minimal user immediately, load full profile in background
-      console.log('Session found, creating minimal user and loading profile in background:', session.user.id);
-      if (isMounted.current) {
-        // Create minimal user object from session so app can render immediately
-        setCurrentUser({
-          id: session.user.id,
-          email: session.user.email || '',
-          userType: 'student',
-          role: 'user',
-          specialtyId: null,
-          subspecialtyId: null,
-          onboardingComplete: false,
-        });
-        setLoading(false); // Show UI immediately
+      if (session?.user) {
+        console.log('Session found, loading profile...');
+        await loadUserProfile(session.user.id);
+      } else {
+        console.log('No active session');
+        if (isMounted.current) {
+          setLoading(false);
+        }
       }
-      
-      // Load full profile in background (completely non-blocking)
-      // Use setTimeout to ensure it doesn't block the render
-      setTimeout(() => {
-        loadUserProfile(session.user.id).catch(err => {
-          console.error('Background profile load failed (non-critical):', err);
-          // User can still use app with minimal profile - profile will load eventually
-        });
-      }, 100); // Small delay to ensure UI renders first
     } catch (err) {
       console.error('Error checking session:', err);
       if (isMounted.current) {
@@ -327,27 +168,28 @@ export function useAuth() {
    * Subscribes to Supabase auth events
    */
   useEffect(() => {
-    // Don't set a safety timeout initially - let checkSession handle it
-    // Only set timeout if checkSession hasn't completed after 10 seconds
+    // Prevent re-running if already have user
+    if (currentUser) {
+      console.log('User already loaded, skipping auth setup');
+      setLoading(false);
+      return;
+    }
+
+    // Safety timeout to prevent infinite loading
     sessionCheckTimeout.current = setTimeout(() => {
-      console.warn('Safety timeout reached (10s) - forcing loading to false');
+      console.warn('Session check timeout reached');
       if (isMounted.current && loading) {
         setLoading(false);
-        // If no user after timeout, that's okay - show login screen
-        if (!currentUser) {
-          console.log('No user found after timeout - showing login screen');
-        }
       }
-    }, 10000); // 10 seconds - only for truly stuck cases
+    }, 5000);
 
     // Initial session check
-    console.log('Starting initial session check...');
     checkSession();
 
     // Subscribe to auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('Auth state changed:', event, session?.user?.id);
+        console.log('Auth state changed:', event);
         
         // Clear safety timeout
         if (sessionCheckTimeout.current) {
@@ -357,96 +199,50 @@ export function useAuth() {
         if (!isMounted.current) return;
         
         if (event === 'SIGNED_OUT') {
-          console.log('User signed out');
           setCurrentUser(null);
           setLoading(false);
           endAnalyticsSession();
+        } else if (event === 'SIGNED_IN') {
+          // Only load profile on actual sign-in, not on every state change
+          if (session?.user && !currentUser) {
+            await loadUserProfile(session.user.id);
+          }
+        } else if (event === 'TOKEN_REFRESHED') {
+          // Don't reload profile on token refresh, just update loading state
+          if (isMounted.current) {
+            setLoading(false);
+          }
         } else if (event === 'INITIAL_SESSION') {
-          // INITIAL_SESSION fires on mount - handle it like a session check
-          console.log('Initial session event:', session?.user?.id ? 'Session found' : 'No session');
-          if (session?.user) {
-            // We have a session - create minimal user and load profile
-            if (!currentUser || currentUser.id !== session.user.id) {
-              console.log('Creating minimal user from INITIAL_SESSION');
-              setCurrentUser({
-                id: session.user.id,
-                email: session.user.email || '',
-                userType: 'student',
-                role: 'user',
-                specialtyId: null,
-                subspecialtyId: null,
-                onboardingComplete: false,
-              });
-            }
+          // Handle initial session
+          if (session?.user && !currentUser) {
+            await loadUserProfile(session.user.id);
+          } else if (!session) {
             setLoading(false);
-            // Load profile in background
-            setTimeout(() => {
-              loadUserProfile(session.user.id).catch(err => {
-                console.error('Background profile load failed:', err);
-              });
-            }, 200);
-          } else {
-            // No session - show login screen
-            console.log('No session in INITIAL_SESSION - showing login');
-            setLoading(false);
-          }
-        } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-          if (session?.user) {
-            console.log('User signed in, creating minimal user and loading profile in background...');
-            // Create minimal user immediately from session data
-            if (isMounted.current) {
-              // Only update if we don't already have a user (prevent duplicate calls)
-              if (!currentUser || currentUser.id !== session.user.id) {
-                setCurrentUser({
-                  id: session.user.id,
-                  email: session.user.email || '',
-                  userType: 'student',
-                  role: 'user',
-                  specialtyId: null,
-                  subspecialtyId: null,
-                  onboardingComplete: false,
-                });
-              }
-              setLoading(false); // Allow UI to render immediately
-            }
-            // Load full profile in background (non-blocking) - only if not already loading
-            setTimeout(() => {
-              loadUserProfile(session.user.id).catch(err => {
-                console.error('Background profile load failed:', err);
-                // User can still use app with minimal profile
-              });
-            }, 200); // Small delay to prevent duplicate calls
-          }
-        } else if (event === 'USER_UPDATED') {
-          if (session?.user) {
-            console.log('User updated, reloading profile in background...');
-            // Non-blocking profile reload - only if user matches
-            if (!currentUser || currentUser.id === session.user.id) {
-              setTimeout(() => {
-                loadUserProfile(session.user.id).catch(err => {
-                  console.error('Background profile reload failed:', err);
-                });
-              }, 200);
-            }
           }
         }
       }
     );
-    
+
     authSubscription.current = subscription;
 
     // Cleanup
     return () => {
-      isMounted.current = false;
       if (sessionCheckTimeout.current) {
         clearTimeout(sessionCheckTimeout.current);
       }
       if (authSubscription.current) {
         authSubscription.current.unsubscribe();
       }
+    };
+  }, []); // Empty deps - only run once on mount
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      isMounted.current = false;
       endAnalyticsSession();
     };
-  }, [checkSession, loadUserProfile]); // Removed 'loading' from deps to prevent infinite loop
+  }, []);
 
   /**
    * Sign in with email and password
@@ -509,34 +305,24 @@ export function useAuth() {
    */
   const signInWithGoogle = useCallback(async () => {
     try {
-      // Don't set loading - OAuth redirects away, so loading state doesn't matter
+      setLoading(true);
       setError(null);
       
-      console.log('Initiating Google OAuth...');
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
           redirectTo: window.location.origin,
-          queryParams: {
-            access_type: 'offline',
-            prompt: 'consent',
-          },
         },
       });
       
-      if (error) {
-        console.error('Google OAuth error:', error);
-        throw error;
-      }
+      if (error) throw error;
       
-      console.log('Google OAuth initiated, redirecting...');
-      // Note: This will redirect away, so we won't return here
       return { success: true, data };
     } catch (err) {
       console.error('Google sign in error:', err);
       const errorMessage = err.message || ERROR_MESSAGES.AUTH_ERROR;
       setError(errorMessage);
-      // Don't set loading to false - let the redirect handle it
+      setLoading(false);
       return { success: false, error: errorMessage };
     }
   }, []);
