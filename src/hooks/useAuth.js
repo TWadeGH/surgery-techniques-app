@@ -1,886 +1,717 @@
-// Build v4 - Final test
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-// Icons are now imported in individual components - no longer needed here
-import { supabase } from './lib/supabase';
-import { 
-  trackResourceCoview,
-  trackSearchQuery,
-  trackCategorySelection,
-  trackRatingEvent,
-  endAnalyticsSession 
-} from './lib/analytics';
-import { processResourceImage } from './lib/imageUtils';
-import OnboardingFlow from './OnboardingFlow';
+/**
+ * useAuth Hook
+ * 
+ * Manages authentication state, session persistence, and user profile data.
+ * Provides a clean interface for auth operations throughout the application.
+ * 
+ * @example
+ * const { currentUser, loading, signIn, signOut, updateProfile } = useAuth();
+ * 
+ * Features:
+ * - Automatic session restoration on mount
+ * - Real-time auth state synchronization
+ * - Profile data loading with caching
+ * - Error handling with user-friendly messages
+ * - Loading states for all operations
+ * - Cleanup on unmount
+ * 
+ * @returns {Object} Auth state and methods
+ */
 
-// Import custom hooks
-import { 
-  useAuth, 
-  useResources, 
-  useFavorites, 
-  useNotes, 
-  useUpcomingCases 
-} from './hooks';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { supabase } from '../lib/supabase';
+import { initAnalyticsSession, endAnalyticsSession } from '../lib/analytics';
+import { ERROR_MESSAGES } from '../utils/constants';
 
-// Import utilities
-import { isAdmin, canRateOrFavorite, isSurgeon } from './utils/helpers';
-import { VIEW_MODES, USER_TYPES, ADMIN_TABS, RESOURCE_TYPES } from './utils/constants';
-
-// Import components
-import Header from './components/layout/Header';
-import ResourceFilters from './components/resources/ResourceFilters';
-import ResourceList from './components/resources/ResourceList';
-import ResourceCard from './components/resources/Resourcecard';
-import { SuggestResourceModal } from './components/resources';
-import { LoginView, UserView } from './components/views';
-import { ErrorBoundary, useToast, ConfirmDialog } from './components/common';
-
-// Admin Components
-import { AdminView } from './components/admin';
-
-// Modal Components
-import {
-  AddResourceModal,
-  EditResourceModal,
-  CategoryManagementModal,
-  SuggestedResourcesModal,
-  SettingsModal
-} from './components/modals';
-
-function SurgicalTechniquesApp() {
-  // Toast notifications
-  const toast = useToast();
-  const [confirmDialog, setConfirmDialog] = useState(null);
-
-  // ========================================
-  // CUSTOM HOOKS - Replaces 2000+ lines of code!
-  // ========================================
+export function useAuth() {
+  // State
+  const [currentUser, setCurrentUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   
-  // Authentication (replaces ~500 lines)
-  const { 
-    currentUser, 
-    loading: authLoading,
-    updateProfile,
-    signOut
-  } = useAuth();
-  
-  // Use authLoading as the main loading state
-  const loading = authLoading;
-  
-  // Stabilize userId to prevent hook re-initialization on every currentUser change
-  const userId = useMemo(() => currentUser?.id, [currentUser?.id]);
-  
-  // Resources (will be integrated after categories work)
-  const [resources, setResources] = useState([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  
-  // Favorites (replaces ~300 lines)
-  const { 
-    isFavorited, 
-    toggleFavorite
-  } = useFavorites(userId);
-  
-  // Notes with auto-save (replaces ~400 lines)
-  const { 
-    getNote, 
-    updateNote
-  } = useNotes(userId);
-  
-  // Upcoming Cases (replaces ~500 lines)
-  const { 
-    upcomingCases,
-    toggleCase: toggleUpcomingCase,
-    reorderCases: reorderUpcomingCases,
-    isInUpcomingCases
-  } = useUpcomingCases(userId);
-  
-  // ========================================
-  // LOCAL STATE (Non-hook state)
-  // ========================================
-  
-  const [showOnboarding, setShowOnboarding] = useState(false);
-  const [currentView, setCurrentView] = useState(VIEW_MODES.USER);
-  const [showSettings, setShowSettings] = useState(false);
-  const [darkMode, setDarkMode] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('darkMode');
-      return saved === 'true';
-    }
-    return false;
-  });
-  const [adminTab, setAdminTab] = useState('resources');
-  const [suggestedResources, setSuggestedResources] = useState([]);
-  const [showSuggestedResources, setShowSuggestedResources] = useState(false);
-  const [showUpcomingCases, setShowUpcomingCases] = useState(false);
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [showSuggestForm, setShowSuggestForm] = useState(false);
-  const [editingResource, setEditingResource] = useState(null);
-  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
-  const [showCategoryManagement, setShowCategoryManagement] = useState(false);
-  const [categories, setCategories] = useState([]);
-  const [selectedCategoryId, setSelectedCategoryId] = useState(null);
-  const [procedures, setProcedures] = useState([]);
-  const [draggedResourceId, setDraggedResourceId] = useState(null);
-  const [draggedUpcomingCaseId, setDraggedUpcomingCaseId] = useState(null);
-
-  // Apply dark mode
-  useEffect(() => {
-    if (darkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  }, [darkMode]);
-
-  // Check onboarding status
-  useEffect(() => {
-    if (currentUser && !currentUser.onboardingComplete) {
-      setShowOnboarding(true);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser?.id, currentUser?.onboardingComplete]); // Only depend on specific fields
-
-  const handleOnboardingComplete = useCallback(() => {
-    setShowOnboarding(false);
-    // The useAuth hook will automatically reload the profile
-  }, []);
-
-  // Define loadSuggestedResources first to avoid circular dependency
-  const loadSuggestedResources = useCallback(async () => {
-    try {
-      if (!isAdmin(currentUser)) return;
-
-      let query = supabase
-        .from('resource_suggestions')
-        .select(`
-          *,
-          suggested_by_profile:profiles!suggested_by(
-            id,
-            email,
-            primary_specialty_id,
-            primary_subspecialty_id
-          )
-        `)
-        .eq('status', 'pending')
-        .order('created_at', { ascending: false });
-
-      if (currentUser.role === 'super_admin') {
-        // Super admin sees all
-      } else if (currentUser.role === 'specialty_admin' && currentUser.specialtyId) {
-        query = query.eq('user_specialty_id', currentUser.specialtyId);
-      } else if (currentUser.role === 'subspecialty_admin' && currentUser.subspecialtyId) {
-        query = query.eq('user_subspecialty_id', currentUser.subspecialtyId);
-      }
-
-      const { data, error } = await query;
-
-      if (error) {
-        console.warn('Error loading with specialty columns, trying fallback:', error);
-        const fallbackQuery = supabase
-          .from('resource_suggestions')
-          .select('*')
-          .eq('status', 'pending')
-          .order('created_at', { ascending: false });
-        
-        const { data: fallbackData, error: fallbackError } = await fallbackQuery;
-        if (fallbackError) throw fallbackError;
-        setSuggestedResources(fallbackData || []);
-        return;
-      }
-      
-      setSuggestedResources(data || []);
-    } catch (error) {
-      console.error('Error loading suggested resources:', error);
-      setSuggestedResources([]);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser?.id, currentUser?.role, currentUser?.specialtyId, currentUser?.subspecialtyId]); // Only depend on specific fields
-
-  const loadAllData = useCallback(async () => {
-    try {
-      // Load resources
-      const { data: resourcesData } = await supabase
-        .from('resources')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      setResources(resourcesData || []);
-
-      // Load categories for user's subspecialty
-      if (currentUser?.subspecialtyId) {
-        const { data: categoriesData } = await supabase
-          .from('categories')
-          .select('*')
-          .eq('subspecialty_id', currentUser.subspecialtyId)
-          .order('order');
-
-        if (categoriesData) {
-          setCategories(categoriesData);
-        }
-
-        // Load all procedures for filtering
-        const { data: proceduresData } = await supabase
-          .from('procedures')
-          .select('*')
-          .in('category_id', categoriesData?.map(c => c.id) || []);
-
-        if (proceduresData) {
-          setProcedures(proceduresData);
-        }
-      }
-
-      // Load suggested resources if user is an admin
-      if (isAdmin(currentUser)) {
-        try {
-          await loadSuggestedResources();
-        } catch (suggestionError) {
-          console.error('Error loading suggested resources (non-blocking):', suggestionError);
-        }
-      }
-
-    } catch (error) {
-      console.error('Error loading data:', error);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser?.id, currentUser?.subspecialtyId, currentUser?.role]); // Only depend on specific fields, not whole object
-
-  // Load data when user is authenticated (moved after loadAllData definition)
-  // Use ref to prevent multiple loads
-  const dataLoadedRef = useRef(false);
-  useEffect(() => {
-    if (currentUser && !dataLoadedRef.current) {
-      dataLoadedRef.current = true;
-      loadAllData();
-    } else if (!currentUser) {
-      dataLoadedRef.current = false; // Reset when user logs out
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser?.id]); // Only depend on user ID, not the whole object
-
-  // NOTE: All the auth functions (checkUser, loadUserProfile, etc.) are now in useAuth hook!
-  // NOTE: toggleFavorite, toggleUpcomingCase, updateNote are now from hooks!
-
-  async function handleAddResource(resourceData, imageFile) {
-    try {
-      if (!imageFile) {
-        toast.error('Image is required');
-        return;
-      }
-
-      const processedImage = await processResourceImage(imageFile);
-      const fileName = `resource-${Date.now()}.webp`;
-      const filePath = `resource-images/${fileName}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from('resources')
-        .upload(filePath, processedImage);
-
-      if (uploadError) throw uploadError;
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('resources')
-        .getPublicUrl(filePath);
-
-      const imageUrl = publicUrl;
-
-      const insertData = {
-        title: resourceData.title,
-        url: resourceData.url,
-        description: resourceData.description,
-        resource_type: resourceData.type,
-        image_url: imageUrl,
-        keywords: resourceData.keywords || null,
-        curated_by: currentUser.id,
-        is_sponsored: false
-      };
-      
-      if (resourceData.category_id) {
-        insertData.category_id = resourceData.category_id;
-      }
-      
-      if (resourceData.type === 'video' && resourceData.duration_seconds) {
-        insertData.duration_seconds = resourceData.duration_seconds;
-      }
-      
-      const { error } = await supabase
-        .from('resources')
-        .insert([insertData]);
-
-      if (error) throw error;
-
-      setShowAddForm(false);
-      loadAllData();
-      toast.success('Resource added successfully!');
-    } catch (error) {
-      console.error('Error adding resource:', error);
-      toast.error('Error adding resource: ' + error.message);
-    }
-  }
-
-  async function handleSuggestResource(resourceData, imageFile) {
-    try {
-      if (!imageFile) {
-        toast.error('Image is required');
-        throw new Error('Image is required');
-      }
-
-      const processedImage = await processResourceImage(imageFile);
-      const fileName = `suggestion-${Date.now()}.webp`;
-      const filePath = `resource-images/${fileName}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from('resources')
-        .upload(filePath, processedImage);
-
-      if (uploadError) {
-        console.error('Upload error:', uploadError);
-        throw uploadError;
-      }
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('resources')
-        .getPublicUrl(filePath);
-
-      const imageUrl = publicUrl;
-
-      const insertData = {
-        title: resourceData.title,
-        url: resourceData.url,
-        description: resourceData.description,
-        resource_type: resourceData.type || RESOURCE_TYPES.VIDEO,
-        image_url: imageUrl,
-        keywords: resourceData.keywords || null,
-        suggested_by: currentUser.id,
-        status: 'pending', // TODO: Use constant from utils/constants.js
-        user_specialty_id: currentUser.specialtyId || null,
-        user_subspecialty_id: currentUser.subspecialtyId || null
-      };
-      
-      if (resourceData.category_id) {
-        insertData.category_id = resourceData.category_id;
-      }
-      
-      if (resourceData.type === RESOURCE_TYPES.VIDEO && resourceData.duration_seconds) {
-        insertData.duration_seconds = resourceData.duration_seconds;
-      }
-      
-      const { error } = await supabase
-        .from('resource_suggestions')
-        .insert([insertData]);
-
-      if (error) {
-        console.error('Database error:', error);
-        throw error;
-      }
-      setShowSuggestForm(false);
-      toast.success('Resource suggestion submitted successfully! It will be reviewed by an admin.');
-    } catch (error) {
-      console.error('❌ Error suggesting resource:', error);
-      toast.error('Error submitting suggestion: ' + error.message);
-      throw error; // Re-throw so the modal knows there was an error
-    }
-  }
-
-  async function handleApproveSuggestion(suggestionId) {
-    try {
-      const { data: suggestion, error: fetchError } = await supabase
-        .from('resource_suggestions')
-        .select('*')
-        .eq('id', suggestionId)
-        .single();
-
-      if (fetchError) throw fetchError;
-
-      const resourceData = {
-        title: suggestion.title,
-        url: suggestion.url,
-        description: suggestion.description,
-        resource_type: suggestion.resource_type,
-        image_url: suggestion.image_url,
-        keywords: suggestion.keywords || null,
-        category_id: suggestion.category_id || null,
-        duration_seconds: suggestion.duration_seconds || null
-      };
-
-      const { error: insertError } = await supabase
-        .from('resources')
-        .insert([resourceData]);
-
-      if (insertError) throw insertError;
-
-      const { error: updateError } = await supabase
-        .from('resource_suggestions')
-        .update({ 
-          status: 'approved', 
-          reviewed_by: currentUser.id, 
-          reviewed_at: new Date().toISOString() 
-        })
-        .eq('id', suggestionId);
-
-      if (updateError) throw updateError;
-
-      await loadAllData();
-      toast.success('Resource approved and added to library!');
-    } catch (error) {
-      console.error('Error approving suggestion:', error);
-      toast.error('Error approving suggestion: ' + error.message);
-    }
-  }
-
-  async function handleRejectSuggestion(suggestionId) {
-    try {
-      const { error } = await supabase
-        .from('resource_suggestions')
-        .update({ 
-          status: 'rejected', 
-          reviewed_by: currentUser.id, 
-          reviewed_at: new Date().toISOString() 
-        })
-        .eq('id', suggestionId);
-
-      if (error) throw error;
-
-      await loadSuggestedResources();
-      toast.success('Resource suggestion rejected.');
-    } catch (error) {
-      console.error('Error rejecting suggestion:', error);
-      toast.error('Error rejecting suggestion: ' + error.message);
-    }
-  }
-
-  async function handleEditResource(resourceId, resourceData, imageFile) {
-    try {
-      let imageUrl = resourceData.image_url;
-
-      if (imageFile) {
-        const fileName = `resource-${Date.now()}.webp`;
-        const filePath = `resource-images/${fileName}`;
-
-        const { error: uploadError } = await supabase.storage
-          .from('resources')
-          .upload(filePath, imageFile);
-
-        if (uploadError) {
-          console.error('Upload error details:', uploadError);
-          throw uploadError;
-        }
-
-        const { data: { publicUrl } } = supabase.storage
-          .from('resources')
-          .getPublicUrl(filePath);
-
-        imageUrl = publicUrl;
-      }
-
-      const updateData = {
-        title: resourceData.title,
-        url: resourceData.url,
-        description: resourceData.description,
-        resource_type: resourceData.type,
-        image_url: imageUrl,
-        keywords: resourceData.keywords || null,
-      };
-      
-      if (resourceData.category_id !== undefined) {
-        updateData.category_id = resourceData.category_id;
-      }
-      
-      if (resourceData.type === 'video' && resourceData.duration_seconds) {
-        updateData.duration_seconds = resourceData.duration_seconds;
-      }
-      
-      const { error, data } = await supabase
-        .from('resources')
-        .update(updateData)
-        .eq('id', resourceId)
-        .select();
-
-      if (error) {
-        console.error('Error updating resource:', error);
-        if (error.message && error.message.includes('category_id')) {
-          toast.error('Error: The category_id column does not exist in the database. Please run the SQL migration "add_category_id_column.sql" in your Supabase SQL editor first.');
-        }
-        throw error;
-      }
-
-      setEditingResource(null);
-      loadAllData();
-      toast.success('Resource updated successfully!');
-    } catch (error) {
-      console.error('Error updating resource:', error);
-      toast.error('Error updating resource: ' + error.message);
-    }
-  }
-
-  async function handleDeleteResource(resourceId) {
-    if (!confirm('Are you sure you want to delete this resource?')) return;
-
-    try {
-      const { error } = await supabase
-        .from('resources')
-        .delete()
-        .eq('id', resourceId);
-
-      if (error) throw error;
-
-      loadAllData();
-      alert('Resource deleted successfully!');
-    } catch (error) {
-      console.error('Error deleting resource:', error);
-      alert('Error deleting resource: ' + error.message);
-    }
-  }
-
-  const canInteractWithResources = () => {
-    return currentUser?.userType === USER_TYPES.ATTENDING || currentUser?.userType === USER_TYPES.RESIDENT || currentUser?.userType === USER_TYPES.FELLOW;
-  };
-
-  // REMOVED: toggleFavorite - now from useFavorites hook
-  // REMOVED: toggleUpcomingCase - now from useUpcomingCases hook  
-  // REMOVED: reorderUpcomingCases - now from useUpcomingCases hook
-  // REMOVED: updateNote - now from useNotes hook
-
-  async function reorderResources(newOrder) {
-    try {
-      setResources(newOrder);
-    } catch (error) {
-      console.error('Error reordering resources:', error);
-      toast.error('Error reordering resources: ' + error.message);
-    }
-  }
-
-  // Memoize sort function
-  const sortResources = useCallback((resourcesToSort) => {
-    return [...resourcesToSort].sort((a, b) => {
-      if (a.is_sponsored && !b.is_sponsored) return -1;
-      if (!a.is_sponsored && b.is_sponsored) return 1;
-      
-      const aFav = isFavorited(a.id);
-      const bFav = isFavorited(b.id);
-      if (aFav && !bFav) return -1;
-      if (!aFav && bFav) return 1;
-      
-      return 0;
-    });
-  }, [isFavorited]);
-
-  // Memoize filtered resources for performance
-  const displayedResources = useMemo(() => {
-    let filtered = resources;
-
-    if (showFavoritesOnly) {
-      filtered = filtered.filter(r => isFavorited(r.id));
-    }
-
-    if (selectedCategoryId) {
-      const categoryIds = [selectedCategoryId];
-      const subcategoryIds = categories
-        .filter(c => c.parent_category_id === selectedCategoryId)
-        .map(c => c.id);
-      const allCategoryIds = [...categoryIds, ...subcategoryIds];
-
-      filtered = filtered.filter(r => {
-        if (r.category_id && allCategoryIds.includes(r.category_id)) {
-          return true;
-        }
-        if (r.procedure_id) {
-          const procedureIds = procedures
-            .filter(p => allCategoryIds.includes(p.category_id))
-            .map(p => p.id);
-          return procedureIds.includes(r.procedure_id);
-        }
-        return false;
-      });
-    }
-
-    if (searchTerm) {
-      const searchLower = searchTerm.toLowerCase();
-      filtered = filtered.filter(r => 
-        r.title.toLowerCase().includes(searchLower) ||
-        r.description?.toLowerCase().includes(searchLower) ||
-        r.keywords?.toLowerCase().includes(searchLower)
-      );
-    }
-
-    return sortResources(filtered);
-  }, [resources, showFavoritesOnly, selectedCategoryId, categories, procedures, searchTerm, isFavorited, sortResources]);
-
-  // Sign out handler
-  const handleSignOut = async () => {
-    try {
-      endAnalyticsSession();
-      await signOut();
-      // useAuth hook will handle setting currentUser to null
-    } catch (error) {
-      console.error('Error signing out:', error);
-      toast.error('Error signing out. Please try again.');
-    }
-  };
-
-  // Only show login screen if we have no user and loading is stuck
-  // Don't timeout if we already have a user - they're logged in!
-  const [forceShowLogin, setForceShowLogin] = useState(false);
-  useEffect(() => {
-    // If we have a user, never force login screen - they're already logged in
-    if (currentUser) {
-      setForceShowLogin(false);
+  // Refs for cleanup and race condition prevention
+  const isMounted = useRef(true);
+  const authSubscription = useRef(null);
+  const sessionCheckTimeout = useRef(null);
+  const authSetupStarted = useRef(false); // Prevent duplicate auth setup
+
+  /**
+   * Load user profile from database
+   * Includes retry logic and profile creation fallback
+   */
+  const loadUserProfile = useCallback(async (userId) => {
+    // Prevent multiple simultaneous profile loads for the same user
+    if (loadUserProfile.loading && loadUserProfile.loadingUserId === userId) {
+      console.log('Profile load already in progress for user:', userId);
       return;
     }
-    
-    // Only timeout if no user after 10 seconds
-    if (loading) {
-      const timeout = setTimeout(() => {
-        console.warn('Loading timeout (10s) - showing login screen (no user found)');
-        setForceShowLogin(true);
-      }, 10000); // 10 seconds - only if no user found
-      return () => clearTimeout(timeout);
-    } else {
-      setForceShowLogin(false);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading]); // Only depend on loading - currentUser check is inside
+    loadUserProfile.loading = true;
+    loadUserProfile.loadingUserId = userId;
+    try {
+      console.log('Loading profile for user:', userId);
+      
+      // Add timeout to profile loading with better error handling
+      const profileLoadPromise = (async () => {
+        console.log('Step 1: Fetching existing profile...');
+        // First attempt - try to get existing profile with shorter timeout
+        const fetchStart = Date.now();
+        let { data: profile, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .maybeSingle();
+        
+        const fetchTime = Date.now() - fetchStart;
+        console.log(`Profile fetch took ${fetchTime}ms`, { profile: !!profile, error: error?.message });
+        
+        // If profile exists, return it immediately - don't try to create
+        if (profile) {
+          console.log('Profile found, returning it:', profile.email);
+          return profile;
+        }
+        
+        // Handle "not found" errors by creating profile
+        if (!profile && (error?.code === 'PGRST116' || !error)) {
+          console.log('Step 2: Profile not found, creating new profile...');
+          // Get user data from auth (with timeout)
+          const userStart = Date.now();
+          const { data: { user }, error: userError } = await supabase.auth.getUser();
+          
+          if (userError) {
+            console.error('Error getting user:', userError);
+            throw new Error('Failed to get user data: ' + userError.message);
+          }
+          
+          if (!user || user.id !== userId) {
+            throw new Error('User mismatch during profile creation');
+          }
+          
+          console.log('Step 3: Upserting profile...');
+          const upsertStart = Date.now();
+          
+          // Try INSERT first (faster), then fallback to upsert if needed
+          let newProfile;
+          let createError;
+          
+          // First try INSERT (faster for new profiles)
+          const { data: insertData, error: insertError } = await supabase
+            .from('profiles')
+            .insert({
+              id: userId,
+              email: user.email,
+              user_type: 'student',
+              role: 'user'
+            })
+            .select()
+            .single();
+          
+          if (insertError) {
+            console.log('Insert result:', { 
+              code: insertError.code, 
+              message: insertError.message,
+              details: insertError.details,
+              hint: insertError.hint
+            });
+            
+            // 23505 = unique violation (already exists) - try to fetch existing
+            if (insertError.code === '23505') {
+              console.log('Profile already exists (duplicate), fetching...');
+              const { data: existingProfile, error: fetchError } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', userId)
+                .single();
+              
+              if (existingProfile) {
+                profile = existingProfile;
+                console.log('Fetched existing profile after duplicate error');
+                return profile; // Return early, skip upsert
+              } else if (fetchError) {
+                console.error('Failed to fetch existing profile:', fetchError);
+                throw new Error('Profile exists but could not be fetched: ' + fetchError.message);
+              }
+            }
+            
+            // If not a duplicate, try upsert as fallback
+            console.log('Insert failed, trying upsert as fallback...', insertError.message);
+            const upsertResult = await supabase
+              .from('profiles')
+              .upsert({
+                id: userId,
+                email: user.email,
+                user_type: 'student',
+                role: 'user'
+              }, {
+                onConflict: 'id',
+                ignoreDuplicates: false
+              })
+              .select()
+              .single();
+            
+            newProfile = upsertResult.data;
+            createError = upsertResult.error;
+            
+            if (createError) {
+              console.error('Upsert also failed:', createError);
+            }
+          } else {
+            newProfile = insertData;
+            createError = null;
+          }
+          
+          const upsertTime = Date.now() - upsertStart;
+          console.log(`Profile upsert took ${upsertTime}ms`, { 
+            error: createError?.message,
+            code: createError?.code,
+            details: createError?.details
+          });
+          
+          if (createError) {
+            console.error('Profile creation/upsert error:', {
+              code: createError.code,
+              message: createError.message,
+              details: createError.details,
+              hint: createError.hint
+            });
+            
+            // If it's a duplicate, try to fetch the existing profile
+            if (createError.code === '23505') {
+              console.log('Profile already exists (duplicate), fetching...');
+              const { data: existingProfile, error: fetchError } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('id', userId)
+                .single();
+              
+              if (existingProfile) {
+                profile = existingProfile;
+                console.log('Fetched existing profile after duplicate error');
+              } else if (fetchError) {
+                console.error('Failed to fetch existing profile:', fetchError);
+                throw new Error('Profile exists but could not be fetched: ' + fetchError.message);
+              } else {
+                throw new Error('Profile exists but could not be fetched (unknown error)');
+              }
+            } else {
+              // For other errors, log but don't throw - user can still use app
+              console.warn('Profile creation failed, but continuing with minimal profile:', createError.message);
+              // Don't throw - let the app continue with minimal user
+              return null; // Return null to indicate profile creation failed
+            }
+          } else {
+            profile = newProfile;
+            console.log('Profile created/upserted successfully');
+          }
+        } else if (error) {
+          console.error('Profile fetch error:', error);
+          throw error;
+        }
+        
+        return profile;
+      })();
+      
+      // No aggressive timeout - profile fetch is fast (167ms in logs)
+      // Only timeout if it's truly stuck (30 seconds)
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => {
+          console.error('Profile loading exceeded 30 second timeout - this should not happen');
+          reject(new Error('Profile loading timeout - database may be unreachable'));
+        }, 30000) // 30 seconds - only for truly stuck cases
+      );
+      
+      const profile = await Promise.race([profileLoadPromise, timeoutPromise]);
+      
+      if (!isMounted.current) {
+        console.log('Component unmounted, skipping profile update');
+        return;
+      }
+      
+      // If profile is null (creation failed but non-critical), just return
+      // User already has minimal profile from session
+      if (!profile) {
+        console.warn('Profile loading returned null - user will continue with minimal profile');
+        return;
+      }
+      
+      console.log('Profile received, transforming...', profile);
+      
+      // Transform profile data to camelCase for consistency
+      const transformedProfile = {
+        id: profile.id,
+        email: profile.email,
+        userType: profile.user_type,
+        role: profile.role,
+        specialtyId: profile.primary_specialty_id,
+        subspecialtyId: profile.primary_subspecialty_id,
+        createdAt: profile.created_at,
+        updatedAt: profile.updated_at,
+        onboardingComplete: profile.onboarding_complete,
+      };
+      
+      console.log('Profile loaded successfully, updating user:', transformedProfile.email);
+      
+      // Only update if component is still mounted and user ID matches
+      if (isMounted.current) {
+        // Use functional update to prevent infinite loops
+        setCurrentUser(prevUser => {
+          // Only update if user ID matches or we don't have a user yet
+          if (!prevUser || prevUser.id === transformedProfile.id) {
+            console.log('Updating user state with profile');
+            return transformedProfile;
+          }
+          console.log('Skipping user update - user ID mismatch');
+          return prevUser;
+        });
+        setError(null);
+        console.log('User state updated with profile');
+      } else {
+        console.log('Component unmounted, skipping profile update');
+      }
+      
+      // Initialize analytics session
+      try {
+        initAnalyticsSession(userId, {
+          specialtyId: transformedProfile.specialtyId,
+          subspecialtyId: transformedProfile.subspecialtyId,
+        });
+      } catch (analyticsError) {
+        console.warn('Analytics initialization failed (non-blocking):', analyticsError);
+      }
+    } catch (err) {
+      console.error('Error loading profile:', err);
+      if (isMounted.current) {
+        setError(err.message || ERROR_MESSAGES.AUTH_ERROR);
+        // Don't set currentUser to null if we already have a minimal user
+        // Only clear if we don't have any user at all
+        setCurrentUser(prevUser => {
+          if (!prevUser) {
+            return null; // No user, so null is fine
+          }
+          // Keep existing minimal user - don't clear it on profile load error
+          console.log('Profile load error, but keeping minimal user');
+          return prevUser;
+        });
+      }
+      } finally {
+        loadUserProfile.loading = false;
+        loadUserProfile.loadingUserId = null;
+        if (isMounted.current) {
+          setLoading(false);
+        }
+      }
+    }, []);
 
-  // Check if we're returning from OAuth (URL has hash fragments)
-  const [checkingOAuth, setCheckingOAuth] = useState(false);
+  /**
+   * Check for existing session on mount
+   * Includes timeout for fast failure on network issues
+   */
+  // Use ref to prevent multiple simultaneous session checks
+  const checkingSession = useRef(false);
+  
+  const checkSession = useCallback(async () => {
+    if (checkingSession.current) {
+      console.log('Session check already in progress, skipping...');
+      return;
+    }
+    checkingSession.current = true;
+    try {
+      console.log('Checking session...');
+      // No artificial timeout - let Supabase handle it naturally
+      // Session checks are usually fast (< 500ms), but don't force a timeout
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError || !session?.user) {
+        console.log('No session found - showing login screen immediately');
+        if (isMounted.current) {
+          setLoading(false);
+          if (sessionError) {
+            setError(sessionError.message);
+          }
+        }
+        return;
+      }
+      
+      // Session found - create minimal user immediately, load full profile in background
+      console.log('Session found, creating minimal user and loading profile in background:', session.user.id);
+      if (isMounted.current) {
+        // Only set user if we don't already have one (prevent infinite loops)
+        if (!currentUser || currentUser.id !== session.user.id) {
+          // Create minimal user object from session so app can render immediately
+          setCurrentUser({
+            id: session.user.id,
+            email: session.user.email || '',
+            userType: 'student',
+            role: 'user',
+            specialtyId: null,
+            subspecialtyId: null,
+            onboardingComplete: false,
+          });
+        }
+        setLoading(false); // Show UI immediately
+      }
+      
+      // Load full profile in background (completely non-blocking)
+      // Use setTimeout to ensure it doesn't block the render
+      setTimeout(() => {
+        loadUserProfile(session.user.id).catch(err => {
+          console.error('Background profile load failed (non-critical):', err);
+          // User can still use app with minimal profile - profile will load eventually
+        });
+      }, 100); // Small delay to ensure UI renders first
+    } catch (err) {
+      console.error('Error checking session:', err);
+      if (isMounted.current) {
+        setLoading(false);
+        setError(err.message || ERROR_MESSAGES.AUTH_ERROR);
+      }
+    } finally {
+      checkingSession.current = false;
+    }
+  }, [loadUserProfile]);
+
+  /**
+   * Handle auth state changes
+   * Subscribes to Supabase auth events
+   */
   useEffect(() => {
-    // Check if URL has OAuth callback parameters
-    const hashParams = window.location.hash;
-    if (hashParams && (hashParams.includes('access_token') || hashParams.includes('code'))) {
-      console.log('OAuth callback detected, waiting for session...');
-      setCheckingOAuth(true);
-      // Give Supabase time to process the OAuth callback
-      const timeout = setTimeout(() => {
-        setCheckingOAuth(false);
-      }, 3000); // Wait up to 3 seconds for session
-      return () => clearTimeout(timeout);
-    } else {
-      setCheckingOAuth(false);
+    // CRITICAL: Prevent duplicate auth setup using ref
+    if (authSetupStarted.current) {
+      console.log('Auth already set up, skipping duplicate setup');
+      return;
+    }
+    authSetupStarted.current = true;
+    console.log('Setting up auth for the first time');
+
+    // Don't set a safety timeout initially - let checkSession handle it
+    // Only set timeout if checkSession hasn't completed after 10 seconds
+    sessionCheckTimeout.current = setTimeout(() => {
+      console.warn('Safety timeout reached (10s) - forcing loading to false');
+      if (isMounted.current && loading) {
+        setLoading(false);
+        // If no user after timeout, that's okay - show login screen
+        if (!currentUser) {
+          console.log('No user found after timeout - showing login screen');
+        }
+      }
+    }, 10000); // 10 seconds - only for truly stuck cases
+
+    // Initial session check
+    console.log('Starting initial session check...');
+    checkSession();
+
+    // Subscribe to auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        console.log('Auth state changed:', event, session?.user?.id);
+        
+        // Clear safety timeout
+        if (sessionCheckTimeout.current) {
+          clearTimeout(sessionCheckTimeout.current);
+        }
+        
+        if (!isMounted.current) return;
+        
+        if (event === 'SIGNED_OUT') {
+          console.log('User signed out');
+          setCurrentUser(null);
+          setLoading(false);
+          endAnalyticsSession();
+        } else if (event === 'INITIAL_SESSION') {
+          // INITIAL_SESSION fires on mount - handle it like a session check
+          console.log('Initial session event:', session?.user?.id ? 'Session found' : 'No session');
+          if (session?.user) {
+            // We have a session - create minimal user and load profile
+            // Use functional update to prevent loops
+            setCurrentUser(prevUser => {
+              if (!prevUser || prevUser.id !== session.user.id) {
+                console.log('Creating minimal user from INITIAL_SESSION');
+                return {
+                  id: session.user.id,
+                  email: session.user.email || '',
+                  userType: 'student',
+                  role: 'user',
+                  specialtyId: null,
+                  subspecialtyId: null,
+                  onboardingComplete: false,
+                };
+              }
+              console.log('User already exists from INITIAL_SESSION, skipping');
+              return prevUser;
+            });
+            // Only set loading to false if we're still loading
+            setLoading(prevLoading => {
+              if (prevLoading) {
+                console.log('Setting loading to false after INITIAL_SESSION');
+                return false;
+              }
+              return prevLoading;
+            });
+            // Load profile in background - only if not already loading
+            setTimeout(() => {
+              loadUserProfile(session.user.id).catch(err => {
+                console.error('Background profile load failed:', err);
+              });
+            }, 200);
+          } else {
+            // No session - show login screen
+            console.log('No session in INITIAL_SESSION - showing login');
+            setLoading(false);
+          }
+        } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+          if (session?.user) {
+            console.log('User signed in, creating minimal user and loading profile in background...');
+            // Create minimal user immediately from session data
+            if (isMounted.current) {
+              // Use functional update to prevent infinite loops
+              setCurrentUser(prevUser => {
+                // Only update if we don't already have a user (prevent duplicate calls)
+                if (!prevUser || prevUser.id !== session.user.id) {
+                  console.log('Creating minimal user from SIGNED_IN event');
+                  return {
+                    id: session.user.id,
+                    email: session.user.email || '',
+                    userType: 'student',
+                    role: 'user',
+                    specialtyId: null,
+                    subspecialtyId: null,
+                    onboardingComplete: false,
+                  };
+                }
+                console.log('User already exists from SIGNED_IN event, skipping');
+                return prevUser;
+              });
+              // Use functional update for loading too
+              setLoading(prevLoading => {
+                if (prevLoading) {
+                  console.log('Setting loading to false after SIGNED_IN');
+                  return false;
+                }
+                return prevLoading;
+              });
+            }
+            // Load full profile in background (non-blocking) - only if not already loading
+            setTimeout(() => {
+              loadUserProfile(session.user.id).catch(err => {
+                console.error('Background profile load failed:', err);
+                // User can still use app with minimal profile
+              });
+            }, 200); // Small delay to prevent duplicate calls
+          }
+        } else if (event === 'USER_UPDATED') {
+          if (session?.user) {
+            console.log('User updated, reloading profile in background...');
+            // Non-blocking profile reload - only if user matches
+            if (!currentUser || currentUser.id === session.user.id) {
+              setTimeout(() => {
+                loadUserProfile(session.user.id).catch(err => {
+                  console.error('Background profile reload failed:', err);
+                });
+              }, 200);
+            }
+          }
+        }
+      }
+    );
+    
+    authSubscription.current = subscription;
+
+    // Cleanup
+    return () => {
+      console.log('Cleaning up auth subscription');
+      isMounted.current = false;
+      authSetupStarted.current = false; // Reset so it can be set up again if needed
+      if (sessionCheckTimeout.current) {
+        clearTimeout(sessionCheckTimeout.current);
+      }
+      if (authSubscription.current) {
+        authSubscription.current.unsubscribe();
+      }
+      endAnalyticsSession();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty deps - only run once on mount, checkSession and loadUserProfile are stable
+
+  /**
+   * Sign in with email and password
+   */
+  const signIn = useCallback(async (email, password) => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      
+      if (error) throw error;
+      
+      // Profile will be loaded by onAuthStateChange
+      return { success: true, data };
+    } catch (err) {
+      console.error('Sign in error:', err);
+      const errorMessage = err.message || ERROR_MESSAGES.AUTH_ERROR;
+      setError(errorMessage);
+      setLoading(false);
+      return { success: false, error: errorMessage };
     }
   }, []);
 
-  // Show loading if checking OAuth callback or still loading
-  if ((loading || checkingOAuth) && !forceShowLogin) {
-    return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center transition-colors">
-        <div className="text-center">
-          <div className="w-16 h-16 mx-auto mb-4 border-4 border-purple-600 border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-gray-600 dark:text-gray-300">
-            {checkingOAuth ? 'Completing sign in...' : 'Loading...'}
-          </p>
-        </div>
-      </div>
-    );
-  }
+  /**
+   * Sign up with email and password
+   */
+  const signUp = useCallback(async (email, password) => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+      });
+      
+      if (error) throw error;
+      
+      // Create profile if user was created
+      if (data.user) {
+        await loadUserProfile(data.user.id);
+      }
+      
+      return { success: true, data };
+    } catch (err) {
+      console.error('Sign up error:', err);
+      const errorMessage = err.message || ERROR_MESSAGES.AUTH_ERROR;
+      setError(errorMessage);
+      setLoading(false);
+      return { success: false, error: errorMessage };
+    }
+  }, [loadUserProfile]);
 
-  // Show login screen if no user (fast path)
-  if (!currentUser) {
-    return <LoginView onLogin={() => {}} />;
-  }
+  /**
+   * Sign in with Google OAuth
+   */
+  const signInWithGoogle = useCallback(async () => {
+    try {
+      // Don't set loading - OAuth redirects away, so loading state doesn't matter
+      setError(null);
+      
+      console.log('Initiating Google OAuth...');
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
+        },
+      });
+      
+      if (error) {
+        console.error('Google OAuth error:', error);
+        throw error;
+      }
+      
+      console.log('Google OAuth initiated, redirecting...');
+      // Note: This will redirect away, so we won't return here
+      return { success: true, data };
+    } catch (err) {
+      console.error('Google sign in error:', err);
+      const errorMessage = err.message || ERROR_MESSAGES.AUTH_ERROR;
+      setError(errorMessage);
+      // Don't set loading to false - let the redirect handle it
+      return { success: false, error: errorMessage };
+    }
+  }, []);
 
-  if (showOnboarding && currentUser) {
-    return (
-      <OnboardingFlow 
-        user={currentUser} 
-        onComplete={handleOnboardingComplete} 
-      />
-    );
-  }
+  /**
+   * Sign out
+   */
+  const signOut = useCallback(async () => {
+    try {
+      setLoading(true);
+      endAnalyticsSession();
+      
+      const { error } = await supabase.auth.signOut();
+      
+      if (error) throw error;
+      
+      setCurrentUser(null);
+      setError(null);
+      return { success: true };
+    } catch (err) {
+      console.error('Sign out error:', err);
+      const errorMessage = err.message || ERROR_MESSAGES.AUTH_ERROR;
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  return (
-    <ErrorBoundary>
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
-        {/* Header */}
-        <Header
-          currentUser={currentUser}
-          currentView={currentView}
-          onViewChange={setCurrentView}
-          showUpcomingCases={showUpcomingCases}
-          upcomingCasesCount={upcomingCases.length}
-          onToggleUpcomingCases={useCallback(() => {
-            setShowUpcomingCases(prev => !prev);
-          }, [])}
-          onSettingsClick={useCallback(() => {
-            setShowSettings(true);
-          }, [])}
-          onSignOut={handleSignOut}
-        />
+  /**
+   * Update user profile
+   */
+  const updateProfile = useCallback(async (updates) => {
+    if (!currentUser?.id) {
+      return { success: false, error: 'No user logged in' };
+    }
+    
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // Transform camelCase to snake_case for database
+      const dbUpdates = {};
+      if (updates.userType !== undefined) dbUpdates.user_type = updates.userType;
+      if (updates.specialtyId !== undefined) dbUpdates.primary_specialty_id = updates.specialtyId;
+      if (updates.subspecialtyId !== undefined) dbUpdates.primary_subspecialty_id = updates.subspecialtyId;
+      if (updates.onboardingComplete !== undefined) dbUpdates.onboarding_complete = updates.onboardingComplete;
+      
+      const { error } = await supabase
+        .from('profiles')
+        .update(dbUpdates)
+        .eq('id', currentUser.id);
+      
+      if (error) throw error;
+      
+      // Reload profile
+      await loadUserProfile(currentUser.id);
+      
+      return { success: true };
+    } catch (err) {
+      console.error('Update profile error:', err);
+      const errorMessage = err.message || 'Failed to update profile';
+      setError(errorMessage);
+      return { success: false, error: errorMessage };
+    } finally {
+      setLoading(false);
+    }
+  }, [currentUser, loadUserProfile]);
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-12">
-        {currentView === VIEW_MODES.USER ? (
-          <UserView 
-            resources={displayedResources}
-            upcomingCases={upcomingCases}
-            showUpcomingCases={showUpcomingCases}
-            onToggleUpcomingCases={useCallback(() => {
-              setShowUpcomingCases(prev => !prev);
-            }, [])}
-            showFavoritesOnly={showFavoritesOnly}
-            searchTerm={searchTerm}
-            categories={categories}
-            selectedCategoryId={selectedCategoryId}
-            onToggleFavorites={useCallback(() => {
-              setShowFavoritesOnly(prev => !prev);
-            }, [])}
-            onSearchChange={useCallback((term) => {
-              setSearchTerm(term);
-              if (term && term.trim().length > 0 && currentUser) {
-                // Note: displayedResources is memoized, so we'll track after state update
-                // For now, we'll track with the search term
-                trackSearchQuery(term, currentUser.id, 0);
-              }
-            }, [currentUser])}
-            onToggleFavorite={toggleFavorite}
-            onToggleUpcomingCase={toggleUpcomingCase}
-            onReorderUpcomingCases={reorderUpcomingCases}
-            onUpdateNote={updateNote}
-            onSuggestResource={useCallback(() => {
-              setShowSuggestForm(true);
-            }, [])}
-            onCategorySelect={useCallback((categoryId) => {
-              setSelectedCategoryId(categoryId);
-              if (categoryId && currentUser) {
-                const category = categories.find(c => c.id === categoryId);
-                trackCategorySelection(currentUser.id, categoryId, null);
-              }
-            }, [currentUser, categories])}
-            currentUser={currentUser}
-            isFavorited={isFavorited}
-            getNote={getNote}
-            isInUpcomingCases={isInUpcomingCases}
-          />
-        ) : isAdmin(currentUser) ? (
-          <AdminView
-            resources={resources}
-            adminTab={adminTab}
-            setAdminTab={setAdminTab}
-            onAddResource={useCallback(() => setShowAddForm(true), [])}
-            onEditResource={useCallback((resource) => setEditingResource(resource), [])}
-            onDeleteResource={handleDeleteResource}
-            onEditCategories={useCallback(() => {
-              setShowCategoryManagement(true);
-            }, [])}
-            onReorderResources={reorderResources}
-            currentUser={currentUser}
-            suggestedResources={suggestedResources || []}
-            onShowSuggestedResources={useCallback(() => {
-              setShowSuggestedResources(true);
-            }, [])}
-            onApproveSuggestion={handleApproveSuggestion}
-            onRejectSuggestion={handleRejectSuggestion}
-          />
-        ) : (
-          <div className="text-center py-12">
-            <p className="text-gray-600 dark:text-gray-300">You don't have permission to access admin mode.</p>
-            <button
-              onClick={() => setCurrentView(VIEW_MODES.USER)}
-              className="mt-4 px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-            >
-              Return to Browse
-            </button>
-          </div>
-        )}
-      </main>
+  /**
+   * Refresh current user profile
+   */
+  const refreshProfile = useCallback(async () => {
+    if (!currentUser?.id) return;
+    await loadUserProfile(currentUser.id);
+  }, [currentUser, loadUserProfile]);
 
-      {/* Modals */}
-      {showAddForm && (
-        <AddResourceModal
-          currentUser={currentUser}
-          onSubmit={handleAddResource}
-          onClose={() => setShowAddForm(false)}
-        />
-      )}
-
-      {showSuggestForm && (
-        <SuggestResourceModal
-          currentUser={currentUser}
-          onSubmit={handleSuggestResource}
-          onClose={() => setShowSuggestForm(false)}
-        />
-      )}
-
-      {editingResource && (
-        <EditResourceModal
-          resource={editingResource}
-          currentUser={currentUser}
-          onSubmit={(resourceData, imageFile) => handleEditResource(editingResource.id, resourceData, imageFile)}
-          onClose={() => setEditingResource(null)}
-        />
-      )}
-
-      {showSuggestedResources && (
-        <SuggestedResourcesModal
-          suggestions={suggestedResources}
-          onApprove={handleApproveSuggestion}
-          onReject={handleRejectSuggestion}
-          onClose={() => setShowSuggestedResources(false)}
-          currentUser={currentUser}
-        />
-      )}
-
-      {showCategoryManagement && (
-        <CategoryManagementModal
-          currentUser={currentUser}
-          onClose={() => {
-            setShowCategoryManagement(false);
-            if (currentUser?.subspecialtyId) {
-              supabase
-                .from('categories')
-                .select('*')
-                .eq('subspecialty_id', currentUser.subspecialtyId)
-                .order('order')
-                .then(({ data }) => {
-                  if (data) {
-                    setCategories(data);
-                    supabase
-                      .from('procedures')
-                      .select('*')
-                      .in('category_id', data.map(c => c.id))
-                      .then(({ data: proceduresData }) => {
-                        if (proceduresData) {
-                          setProcedures(proceduresData);
-                        }
-                      });
-                  }
-                });
-            }
-          }}
-        />
-      )}
-
-      {showSettings && (
-        <SettingsModal
-          currentUser={currentUser}
-          darkMode={darkMode}
-          onDarkModeToggle={(enabled) => {
-            setDarkMode(enabled);
-            localStorage.setItem('darkMode', enabled.toString());
-            if (enabled) {
-              document.documentElement.classList.add('dark');
-            } else {
-              document.documentElement.classList.remove('dark');
-            }
-          }}
-          onUpdateProfile={updateProfile}
-          onClose={() => setShowSettings(false)}
-        />
-      )}
-
-      {/* Confirmation Dialog */}
-      {confirmDialog && (
-        <ConfirmDialog
-          isOpen={confirmDialog.isOpen}
-          title={confirmDialog.title}
-          message={confirmDialog.message}
-          confirmText={confirmDialog.confirmText}
-          cancelText={confirmDialog.cancelText}
-          variant={confirmDialog.variant}
-          onConfirm={confirmDialog.onConfirm}
-          onCancel={confirmDialog.onCancel}
-        />
-      )}
-      </div>
-    </ErrorBoundary>
-  );
+  return {
+    // State
+    currentUser,
+    loading,
+    error,
+    isAuthenticated: !!currentUser,
+    
+    // Methods
+    signIn,
+    signUp,
+    signInWithGoogle,
+    signOut,
+    updateProfile,
+    refreshProfile,
+  };
 }
 
-export default SurgicalTechniquesApp;
+export default useAuth;
