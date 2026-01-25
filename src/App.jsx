@@ -671,8 +671,8 @@ function SurgicalTechniquesApp() {
     );
   }
 
-  // Show login screen if no user (fast path)
-  if (!currentUser) {
+  // Show login screen if no user AND not loading (prevents unmount during profile load)
+  if (!currentUser && !loading) {
     return <LoginView onLogin={() => {}} />;
   }
 
