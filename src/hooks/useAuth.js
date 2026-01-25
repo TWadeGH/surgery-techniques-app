@@ -23,6 +23,10 @@ import { supabase } from '../lib/supabase';
 import { initAnalyticsSession, endAnalyticsSession } from '../lib/analytics';
 import { ERROR_MESSAGES } from '../utils/constants';
 
+// Global flag to prevent duplicate auth subscriptions across all instances
+// This is necessary because React Fast Refresh can cause multiple hook instances
+let AUTH_SUBSCRIPTION_ACTIVE = false;
+
 export function useAuth() {
   // State
   const [currentUser, setCurrentUser] = useState(null);
@@ -374,13 +378,22 @@ export function useAuth() {
    * Subscribes to Supabase auth events
    */
   useEffect(() => {
-    // CRITICAL: Prevent duplicate auth setup using ref
-    if (authSetupStarted.current) {
-      console.log('Auth already set up, skipping duplicate setup');
+    // CRITICAL: Check global flag first to prevent duplicate subscriptions
+    if (AUTH_SUBSCRIPTION_ACTIVE) {
+      console.log('Auth subscription already active globally, skipping setup');
       return;
     }
+    
+    // CRITICAL: Prevent duplicate auth setup using ref
+    if (authSetupStarted.current) {
+      console.log('Auth already set up in this instance, skipping');
+      return;
+    }
+    
+    // Set both flags
+    AUTH_SUBSCRIPTION_ACTIVE = true;
     authSetupStarted.current = true;
-    console.log('Setting up auth for the first time');
+    console.log('Setting up auth for the first time (global flag set)');
 
     // Don't set a safety timeout initially - let checkSession handle it
     // Only set timeout if checkSession hasn't completed after 10 seconds
@@ -517,7 +530,8 @@ export function useAuth() {
 
     // Cleanup
     return () => {
-      console.log('Cleaning up auth subscription');
+      console.log('Cleaning up auth subscription (resetting global flag)');
+      AUTH_SUBSCRIPTION_ACTIVE = false; // Reset global flag
       isMounted.current = false;
       authSetupStarted.current = false; // Reset so it can be set up again if needed
       if (sessionCheckTimeout.current) {
