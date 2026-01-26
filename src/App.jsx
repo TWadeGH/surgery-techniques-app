@@ -97,7 +97,8 @@ const {
   // LOCAL STATE (Non-hook state)
   // ========================================
   
-  const [showOnboarding, setShowOnboarding] = useState(false);
+  // const [showOnboarding, setShowOnboarding] = useState(false);
+const showOnboarding = false;
   const [currentView, setCurrentView] = useState(VIEW_MODES.USER);
   const [showSettings, setShowSettings] = useState(false);
   const [darkMode, setDarkMode] = useState(() => {
@@ -131,14 +132,13 @@ const {
     }
   }, [darkMode]);
 
-  // Check onboarding status
-  // Check onboarding status
-useEffect(() => {
-  if (currentUser?.id) {
-    setShowOnboarding(!currentUser.onboardingComplete);
-  }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, [currentUser?.id, currentUser?.onboardingComplete]);
+ // Check onboarding status
+// useEffect(() => {
+//   if (currentUser?.id) {
+//     setShowOnboarding(!currentUser.onboardingComplete);
+//   }
+//   // eslint-disable-next-line react-hooks/exhaustive-deps
+// }, [currentUser?.id, currentUser?.onboardingComplete]);
 
   const handleOnboardingComplete = useCallback(() => {
     setShowOnboarding(false);
@@ -677,14 +677,14 @@ useEffect(() => {
     return <LoginView onLogin={() => {}} />;
   }
 
-  if (showOnboarding && currentUser) {
-    return (
-      <OnboardingFlow 
-        user={currentUser} 
-        onComplete={handleOnboardingComplete} 
-      />
-    );
-  }
+  // if (showOnboarding && currentUser) {
+  //   return (
+  //     <OnboardingFlow 
+  //       user={currentUser} 
+  //       onComplete={handleOnboardingComplete} 
+  //     />
+  //   );
+  // }
 
   return (
     <ErrorBoundary>
