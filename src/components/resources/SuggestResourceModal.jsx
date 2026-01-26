@@ -9,6 +9,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Edit, Upload, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { processResourceImage, createImagePreview, validateImageFile } from '../../lib/imageUtils';
+import { useToast } from '../common';
 
 /**
  * SuggestResourceModal Component

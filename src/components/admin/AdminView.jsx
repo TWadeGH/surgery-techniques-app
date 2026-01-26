@@ -70,38 +70,38 @@ function AdminView({
 
   return (
     <div className="animate-slide-up">
-      {/* Suggested Resources Banner */}
-      {pendingCount > 0 && (
-        <div className="mb-6">
-          <button
-            onClick={onShowSuggestedResources}
-            className="w-full glass rounded-2xl p-4 sm:p-6 shadow-lg hover:shadow-xl transition-all text-left group"
-            aria-label={`View ${pendingCount} pending suggestions`}
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3 sm:gap-4">
-                <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl flex items-center justify-center">
-                  <Sparkles size={24} className="text-white" />
-                </div>
-                <div>
-                  <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white mb-1">
-                    Suggested Resources
-                  </h3>
-                  <p className="text-sm text-gray-600 dark:text-gray-300">
-                    {pendingCount} {pendingCount === 1 ? 'resource' : 'resources'} pending review
-                  </p>
-                </div>
+      {/* Suggested Resources – always visible so admins can open modal even when 0 pending */}
+      <div className="mb-6">
+        <button
+          onClick={onShowSuggestedResources}
+          className="w-full glass rounded-2xl p-4 sm:p-6 shadow-lg hover:shadow-xl transition-all text-left group"
+          aria-label={`View suggested resources (${pendingCount} pending)`}
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3 sm:gap-4">
+              <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl flex items-center justify-center">
+                <Sparkles size={24} className="text-white" />
               </div>
-              <div className="flex items-center gap-3">
+              <div>
+                <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white mb-1">
+                  Suggested Resources
+                </h3>
+                <p className="text-sm text-gray-600 dark:text-gray-300">
+                  {pendingCount} {pendingCount === 1 ? 'resource' : 'resources'} pending review
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              {pendingCount > 0 && (
                 <span className="bg-red-500 text-white text-sm font-bold px-3 py-1 rounded-full">
                   {pendingCount}
                 </span>
-                <ArrowRight size={20} className="text-gray-400 group-hover:text-purple-600 transition-colors" />
-              </div>
+              )}
+              <ArrowRight size={20} className="text-gray-400 group-hover:text-purple-600 transition-colors" />
             </div>
-          </button>
-        </div>
-      )}
+          </div>
+        </button>
+      </div>
 
       <div className="mb-6 sm:mb-8">
         <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-2">Admin Dashboard</h2>

@@ -23,7 +23,7 @@ import {
 
 // Import utilities
 import { isAdmin, canRateOrFavorite, isSurgeon } from './utils/helpers';
-import { VIEW_MODES, USER_TYPES, ADMIN_TABS, RESOURCE_TYPES } from './utils/constants';
+import { VIEW_MODES, USER_TYPES, ADMIN_TABS, RESOURCE_TYPES, SPECIALTY_SUBSPECIALTY } from './utils/constants';
 
 // Import components
 import Header from './components/layout/Header';
@@ -67,46 +67,27 @@ function SurgicalTechniquesApp() {
   const loading = authLoading;
   
   // Stabilize userId to prevent hook re-initialization on every currentUser change
-// Use empty string instead of undefined to prevent hook re-init
-const userId = useMemo(() => currentUser?.id || '', [currentUser?.id]);
+  const userId = useMemo(() => currentUser?.id, [currentUser?.id]);
 
-// Resources (will be integrated after categories work)
-const [resources, setResources] = useState([]);
-const [searchTerm, setSearchTerm] = useState('');
-// TEMP: Disable custom hooks to test
-const isFavorited = () => false;
-const toggleFavorite = () => {};
-const getNote = () => '';
-const updateNote = () => {};
-const upcomingCases = [];
-const toggleUpcomingCase = () => {};
-const reorderUpcomingCases = () => {};
-const isInUpcomingCases = () => false;
-// // CRITICAL: Pass userId even if empty to maintain hook order
-// // Hooks will handle empty string internally
-// const { 
-//   isFavorited, 
-//   toggleFavorite
-// } = useFavorites(userId);
+  // Resources (will be integrated after categories work)
+  const [resources, setResources] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
 
-// const { 
-//   getNote, 
-//   updateNote
-// } = useNotes(userId);
+  // Favorites, Notes, Upcoming Cases
+  const { isFavorited, toggleFavorite } = useFavorites(userId);
+  const { getNote, updateNote } = useNotes(userId);
+  const {
+    upcomingCases,
+    toggleCase: toggleUpcomingCase,
+    reorderCases: reorderUpcomingCases,
+    isInUpcomingCases,
+  } = useUpcomingCases(userId);
 
-// const { 
-//   upcomingCases,
-//   toggleCase: toggleUpcomingCase,
-//   reorderCases: reorderUpcomingCases,
-//   isInUpcomingCases
-// } = useUpcomingCases(userId);
-  
   // ========================================
   // LOCAL STATE (Non-hook state)
   // ========================================
-  
-  // const [showOnboarding, setShowOnboarding] = useState(false);
-const showOnboarding = false;
+
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const [currentView, setCurrentView] = useState(VIEW_MODES.USER);
   const [showSettings, setShowSettings] = useState(false);
   const [darkMode, setDarkMode] = useState(() => {
@@ -140,17 +121,94 @@ const showOnboarding = false;
     }
   }, [darkMode]);
 
- // Check onboarding status
-// useEffect(() => {
-//   if (currentUser?.id) {
-//     setShowOnboarding(!currentUser.onboardingComplete);
-//   }
-//   // eslint-disable-next-line react-hooks/exhaustive-deps
-// }, [currentUser?.id, currentUser?.onboardingComplete]);
+  // Check onboarding status
+  useEffect(() => {
+    if (currentUser && !currentUser.onboardingComplete) {
+      setShowOnboarding(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.id, currentUser?.onboardingComplete]);
 
   const handleOnboardingComplete = useCallback(() => {
     setShowOnboarding(false);
     // The useAuth hook will automatically reload the profile
+  }, []);
+
+  /** Generalist → all categories; Podiatry (no subspecialty) → Foot and Ankle; else → user's subspecialty. */
+  const fetchCategoriesAndProceduresForUser = useCallback(async (user) => {
+    let loadAll = false;
+    let effectiveSubspecialtyId = user?.subspecialtyId ?? null;
+
+    if (user?.subspecialtyId) {
+      const { data: sub } = await supabase
+        .from('subspecialties')
+        .select('name')
+        .eq('id', user.subspecialtyId)
+        .maybeSingle();
+      const name = (sub?.name || '').toLowerCase();
+      if (name === SPECIALTY_SUBSPECIALTY.GENERALIST) {
+        loadAll = true;
+        effectiveSubspecialtyId = null;
+      }
+    } else if (user?.specialtyId) {
+      const { data: spec } = await supabase
+        .from('specialties')
+        .select('name')
+        .eq('id', user.specialtyId)
+        .maybeSingle();
+      const specName = (spec?.name || '').toLowerCase();
+      if (specName === SPECIALTY_SUBSPECIALTY.PODIATRY) {
+        let ortho = null;
+        for (const orthoName of [SPECIALTY_SUBSPECIALTY.ORTHOPAEDIC_SURGERY, SPECIALTY_SUBSPECIALTY.ORTHOPEDIC_SURGERY]) {
+          const { data } = await supabase
+            .from('specialties')
+            .select('id')
+            .ilike('name', orthoName)
+            .limit(1)
+            .maybeSingle();
+          if (data?.id) {
+            ortho = data;
+            break;
+          }
+        }
+        if (ortho?.id) {
+          const { data: fa } = await supabase
+            .from('subspecialties')
+            .select('id')
+            .eq('specialty_id', ortho.id)
+            .ilike('name', SPECIALTY_SUBSPECIALTY.FOOT_AND_ANKLE)
+            .limit(1)
+            .maybeSingle();
+          if (fa?.id) effectiveSubspecialtyId = fa.id;
+        }
+      }
+      if (!effectiveSubspecialtyId) loadAll = true;
+    } else {
+      loadAll = true;
+    }
+
+    let categoriesData = [];
+    if (loadAll) {
+      const { data } = await supabase.from('categories').select('*').order('order');
+      categoriesData = data || [];
+    } else if (effectiveSubspecialtyId) {
+      const { data } = await supabase
+        .from('categories')
+        .select('*')
+        .eq('subspecialty_id', effectiveSubspecialtyId)
+        .order('order');
+      categoriesData = data || [];
+    }
+
+    let proceduresData = [];
+    if (categoriesData.length > 0) {
+      const { data } = await supabase
+        .from('procedures')
+        .select('*')
+        .in('category_id', categoriesData.map((c) => c.id));
+      proceduresData = data || [];
+    }
+    return { categoriesData, proceduresData };
   }, []);
 
   // Define loadSuggestedResources first to avoid circular dependency
@@ -214,28 +272,9 @@ const showOnboarding = false;
 
       setResources(resourcesData || []);
 
-      // Load categories for user's subspecialty
-      if (currentUser?.subspecialtyId) {
-        const { data: categoriesData } = await supabase
-          .from('categories')
-          .select('*')
-          .eq('subspecialty_id', currentUser.subspecialtyId)
-          .order('order');
-
-        if (categoriesData) {
-          setCategories(categoriesData);
-        }
-
-        // Load all procedures for filtering
-        const { data: proceduresData } = await supabase
-          .from('procedures')
-          .select('*')
-          .in('category_id', categoriesData?.map(c => c.id) || []);
-
-        if (proceduresData) {
-          setProcedures(proceduresData);
-        }
-      }
+      const { categoriesData, proceduresData } = await fetchCategoriesAndProceduresForUser(currentUser);
+      setCategories(categoriesData);
+      setProcedures(proceduresData);
 
       // Load suggested resources if user is an admin
       if (isAdmin(currentUser)) {
@@ -250,7 +289,7 @@ const showOnboarding = false;
       console.error('Error loading data:', error);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser?.id, currentUser?.subspecialtyId, currentUser?.role]); // Only depend on specific fields, not whole object
+  }, [currentUser?.id, currentUser?.subspecialtyId, currentUser?.specialtyId, currentUser?.role, fetchCategoriesAndProceduresForUser]);
 
   // Load data when user is authenticated (moved after loadAllData definition)
   // Use ref to prevent multiple loads
@@ -543,11 +582,6 @@ const showOnboarding = false;
     return currentUser?.userType === USER_TYPES.ATTENDING || currentUser?.userType === USER_TYPES.RESIDENT || currentUser?.userType === USER_TYPES.FELLOW;
   };
 
-  // REMOVED: toggleFavorite - now from useFavorites hook
-  // REMOVED: toggleUpcomingCase - now from useUpcomingCases hook  
-  // REMOVED: reorderUpcomingCases - now from useUpcomingCases hook
-  // REMOVED: updateNote - now from useNotes hook
-
   async function reorderResources(newOrder) {
     try {
       setResources(newOrder);
@@ -625,6 +659,43 @@ const showOnboarding = false;
     }
   };
 
+  // Stable callbacks for main UI — MUST be defined before any early return.
+  // Inline useCallback in JSX causes Error #310: we return <LoginView /> before
+  // the main app, so those hooks never run; after sign-in we render main app
+  // and they do → "Rendered more hooks than during the previous render."
+  const handleToggleUpcomingCases = useCallback(() => setShowUpcomingCases((prev) => !prev), []);
+  const handleSettingsClick = useCallback(() => setShowSettings(true), []);
+  const handleToggleFavorites = useCallback(() => setShowFavoritesOnly((prev) => !prev), []);
+  const handleSearchChange = useCallback(
+    (term) => {
+      setSearchTerm(term);
+      if (term?.trim() && currentUser) trackSearchQuery(term, currentUser.id, 0);
+    },
+    [currentUser]
+  );
+  const handleSuggestResourceClick = useCallback(() => setShowSuggestForm(true), []);
+  const handleCategorySelect = useCallback(
+    (categoryId) => {
+      setSelectedCategoryId(categoryId);
+      if (categoryId && currentUser) {
+        trackCategorySelection(currentUser.id, categoryId, null);
+      }
+    },
+    [currentUser, categories]
+  );
+  const handleAddResourceClick = useCallback(() => setShowAddForm(true), []);
+  const handleEditResourceClick = useCallback((resource) => setEditingResource(resource), []);
+  const handleEditCategoriesClick = useCallback(() => setShowCategoryManagement(true), []);
+  const handleShowSuggestedResourcesClick = useCallback(() => setShowSuggestedResources(true), []);
+  const handleReturnToBrowse = useCallback(() => setCurrentView(VIEW_MODES.USER), []);
+  const handleCloseCategoryManagement = useCallback(() => {
+    setShowCategoryManagement(false);
+    fetchCategoriesAndProceduresForUser(currentUser).then(({ categoriesData, proceduresData }) => {
+      setCategories(categoriesData);
+      setProcedures(proceduresData || []);
+    });
+  }, [currentUser, fetchCategoriesAndProceduresForUser]);
+
   // Only show login screen if we have no user and loading is stuck
   // Don't timeout if we already have a user - they're logged in!
   const [forceShowLogin, setForceShowLogin] = useState(false);
@@ -685,14 +756,14 @@ const showOnboarding = false;
     return <LoginView onLogin={() => {}} />;
   }
 
-  // if (showOnboarding && currentUser) {
-  //   return (
-  //     <OnboardingFlow 
-  //       user={currentUser} 
-  //       onComplete={handleOnboardingComplete} 
-  //     />
-  //   );
-  // }
+  if (showOnboarding && currentUser) {
+    return (
+      <OnboardingFlow
+        user={currentUser}
+        onComplete={handleOnboardingComplete}
+      />
+    );
+  }
 
   return (
     <ErrorBoundary>
@@ -704,12 +775,8 @@ const showOnboarding = false;
           onViewChange={setCurrentView}
           showUpcomingCases={showUpcomingCases}
           upcomingCasesCount={upcomingCases.length}
-          onToggleUpcomingCases={useCallback(() => {
-            setShowUpcomingCases(prev => !prev);
-          }, [])}
-          onSettingsClick={useCallback(() => {
-            setShowSettings(true);
-          }, [])}
+          onToggleUpcomingCases={handleToggleUpcomingCases}
+          onSettingsClick={handleSettingsClick}
           onSignOut={handleSignOut}
         />
 
@@ -720,38 +787,19 @@ const showOnboarding = false;
             resources={displayedResources}
             upcomingCases={upcomingCases}
             showUpcomingCases={showUpcomingCases}
-            onToggleUpcomingCases={useCallback(() => {
-              setShowUpcomingCases(prev => !prev);
-            }, [])}
+            onToggleUpcomingCases={handleToggleUpcomingCases}
             showFavoritesOnly={showFavoritesOnly}
             searchTerm={searchTerm}
             categories={categories}
             selectedCategoryId={selectedCategoryId}
-            onToggleFavorites={useCallback(() => {
-              setShowFavoritesOnly(prev => !prev);
-            }, [])}
-            onSearchChange={useCallback((term) => {
-              setSearchTerm(term);
-              if (term && term.trim().length > 0 && currentUser) {
-                // Note: displayedResources is memoized, so we'll track after state update
-                // For now, we'll track with the search term
-                trackSearchQuery(term, currentUser.id, 0);
-              }
-            }, [currentUser])}
+            onToggleFavorites={handleToggleFavorites}
+            onSearchChange={handleSearchChange}
             onToggleFavorite={toggleFavorite}
             onToggleUpcomingCase={toggleUpcomingCase}
             onReorderUpcomingCases={reorderUpcomingCases}
             onUpdateNote={updateNote}
-            onSuggestResource={useCallback(() => {
-              setShowSuggestForm(true);
-            }, [])}
-            onCategorySelect={useCallback((categoryId) => {
-              setSelectedCategoryId(categoryId);
-              if (categoryId && currentUser) {
-                const category = categories.find(c => c.id === categoryId);
-                trackCategorySelection(currentUser.id, categoryId, null);
-              }
-            }, [currentUser, categories])}
+            onSuggestResource={handleSuggestResourceClick}
+            onCategorySelect={handleCategorySelect}
             currentUser={currentUser}
             isFavorited={isFavorited}
             getNote={getNote}
@@ -762,18 +810,14 @@ const showOnboarding = false;
             resources={resources}
             adminTab={adminTab}
             setAdminTab={setAdminTab}
-            onAddResource={useCallback(() => setShowAddForm(true), [])}
-            onEditResource={useCallback((resource) => setEditingResource(resource), [])}
+            onAddResource={handleAddResourceClick}
+            onEditResource={handleEditResourceClick}
             onDeleteResource={handleDeleteResource}
-            onEditCategories={useCallback(() => {
-              setShowCategoryManagement(true);
-            }, [])}
+            onEditCategories={handleEditCategoriesClick}
             onReorderResources={reorderResources}
             currentUser={currentUser}
             suggestedResources={suggestedResources || []}
-            onShowSuggestedResources={useCallback(() => {
-              setShowSuggestedResources(true);
-            }, [])}
+            onShowSuggestedResources={handleShowSuggestedResourcesClick}
             onApproveSuggestion={handleApproveSuggestion}
             onRejectSuggestion={handleRejectSuggestion}
           />
@@ -781,7 +825,7 @@ const showOnboarding = false;
           <div className="text-center py-12">
             <p className="text-gray-600 dark:text-gray-300">You don't have permission to access admin mode.</p>
             <button
-              onClick={() => setCurrentView(VIEW_MODES.USER)}
+              onClick={handleReturnToBrowse}
               className="mt-4 px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
             >
               Return to Browse
@@ -829,30 +873,7 @@ const showOnboarding = false;
       {showCategoryManagement && (
         <CategoryManagementModal
           currentUser={currentUser}
-          onClose={() => {
-            setShowCategoryManagement(false);
-            if (currentUser?.subspecialtyId) {
-              supabase
-                .from('categories')
-                .select('*')
-                .eq('subspecialty_id', currentUser.subspecialtyId)
-                .order('order')
-                .then(({ data }) => {
-                  if (data) {
-                    setCategories(data);
-                    supabase
-                      .from('procedures')
-                      .select('*')
-                      .in('category_id', data.map(c => c.id))
-                      .then(({ data: proceduresData }) => {
-                        if (proceduresData) {
-                          setProcedures(proceduresData);
-                        }
-                      });
-                  }
-                });
-            }
-          }}
+          onClose={handleCloseCategoryManagement}
         />
       )}
 

@@ -20,6 +20,15 @@ export const ADMIN_ROLES = [
   USER_ROLES.ADMIN,
 ];
 
+// Specialty/subspecialty display names for special-case logic (case-insensitive match)
+export const SPECIALTY_SUBSPECIALTY = {
+  GENERALIST: 'generalist', // subspecialty: see all resources for all subspecialties
+  PODIATRY: 'podiatry', // specialty with no subspecialty; view = Orthopaedic Surgery + Foot and Ankle
+  ORTHOPAEDIC_SURGERY: 'orthopaedic surgery', // UK spelling
+  ORTHOPEDIC_SURGERY: 'orthopedic surgery', // US spelling
+  FOOT_AND_ANKLE: 'foot and ankle',
+};
+
 // User Types
 export const USER_TYPES = {
   STUDENT: 'student',
