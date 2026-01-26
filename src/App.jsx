@@ -132,12 +132,13 @@ function SurgicalTechniquesApp() {
   }, [darkMode]);
 
   // Check onboarding status
-  useEffect(() => {
-    if (currentUser && !currentUser.onboardingComplete) {
-      setShowOnboarding(true);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser?.id, currentUser?.onboardingComplete]); // Only depend on specific fields
+  // Check onboarding status
+useEffect(() => {
+  if (currentUser?.id) {
+    setShowOnboarding(!currentUser.onboardingComplete);
+  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [currentUser?.id, currentUser?.onboardingComplete]);
 
   const handleOnboardingComplete = useCallback(() => {
     setShowOnboarding(false);
