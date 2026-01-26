@@ -73,25 +73,33 @@ const userId = useMemo(() => currentUser?.id || '', [currentUser?.id]);
 // Resources (will be integrated after categories work)
 const [resources, setResources] = useState([]);
 const [searchTerm, setSearchTerm] = useState('');
+// TEMP: Disable custom hooks to test
+const isFavorited = () => false;
+const toggleFavorite = () => {};
+const getNote = () => '';
+const updateNote = () => {};
+const upcomingCases = [];
+const toggleUpcomingCase = () => {};
+const reorderUpcomingCases = () => {};
+const isInUpcomingCases = () => false;
+// // CRITICAL: Pass userId even if empty to maintain hook order
+// // Hooks will handle empty string internally
+// const { 
+//   isFavorited, 
+//   toggleFavorite
+// } = useFavorites(userId);
 
-// CRITICAL: Pass userId even if empty to maintain hook order
-// Hooks will handle empty string internally
-const { 
-  isFavorited, 
-  toggleFavorite
-} = useFavorites(userId);
+// const { 
+//   getNote, 
+//   updateNote
+// } = useNotes(userId);
 
-const { 
-  getNote, 
-  updateNote
-} = useNotes(userId);
-
-const { 
-  upcomingCases,
-  toggleCase: toggleUpcomingCase,
-  reorderCases: reorderUpcomingCases,
-  isInUpcomingCases
-} = useUpcomingCases(userId);
+// const { 
+//   upcomingCases,
+//   toggleCase: toggleUpcomingCase,
+//   reorderCases: reorderUpcomingCases,
+//   isInUpcomingCases
+// } = useUpcomingCases(userId);
   
   // ========================================
   // LOCAL STATE (Non-hook state)
