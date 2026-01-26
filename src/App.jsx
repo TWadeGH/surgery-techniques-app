@@ -67,31 +67,31 @@ function SurgicalTechniquesApp() {
   const loading = authLoading;
   
   // Stabilize userId to prevent hook re-initialization on every currentUser change
-  const userId = useMemo(() => currentUser?.id, [currentUser?.id]);
-  
-  // Resources (will be integrated after categories work)
-  const [resources, setResources] = useState([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  
-  // Favorites (replaces ~300 lines)
-  const { 
-    isFavorited, 
-    toggleFavorite
-  } = useFavorites(userId);
-  
-  // Notes with auto-save (replaces ~400 lines)
-  const { 
-    getNote, 
-    updateNote
-  } = useNotes(userId);
-  
-  // Upcoming Cases (replaces ~500 lines)
-  const { 
-    upcomingCases,
-    toggleCase: toggleUpcomingCase,
-    reorderCases: reorderUpcomingCases,
-    isInUpcomingCases
-  } = useUpcomingCases(userId);
+// Use empty string instead of undefined to prevent hook re-init
+const userId = useMemo(() => currentUser?.id || '', [currentUser?.id]);
+
+// Resources (will be integrated after categories work)
+const [resources, setResources] = useState([]);
+const [searchTerm, setSearchTerm] = useState('');
+
+// CRITICAL: Pass userId even if empty to maintain hook order
+// Hooks will handle empty string internally
+const { 
+  isFavorited, 
+  toggleFavorite
+} = useFavorites(userId);
+
+const { 
+  getNote, 
+  updateNote
+} = useNotes(userId);
+
+const { 
+  upcomingCases,
+  toggleCase: toggleUpcomingCase,
+  reorderCases: reorderUpcomingCases,
+  isInUpcomingCases
+} = useUpcomingCases(userId);
   
   // ========================================
   // LOCAL STATE (Non-hook state)
