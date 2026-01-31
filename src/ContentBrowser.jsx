@@ -120,8 +120,7 @@ export default function ContentBrowser({ profile }) {
     const { data } = await supabase
       .from('resources')
       .select(`
-        *,
-        curated_by:profiles!resources_curated_by_fkey(email)
+        *
       `)
       .eq('procedure_id', procedureId)
       .order('is_featured', { ascending: false })

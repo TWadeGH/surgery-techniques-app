@@ -66,7 +66,7 @@ export function trackResourceViewEnd(scrollDepth = 0, completed = false) {
 // Track favorite event (GOLD for learning curve analysis)
 export async function trackFavoriteEvent(resourceId, userId) {
   try {
-    // Get first view time
+    // Get first view time (use maybeSingle to handle no views gracefully)
     const { data: firstView } = await supabase
       .from('resource_views')
       .select('viewed_at')
@@ -74,7 +74,7 @@ export async function trackFavoriteEvent(resourceId, userId) {
       .eq('user_id', userId)
       .order('viewed_at', { ascending: true })
       .limit(1)
-      .single();
+      .maybeSingle(); // Use maybeSingle instead of single to handle no results
     
     // Count views before favoriting
     const { count: viewCount } = await supabase
@@ -87,7 +87,7 @@ export async function trackFavoriteEvent(resourceId, userId) {
     const favoritedAt = new Date();
     const timeToFavoriteHours = (favoritedAt - firstViewedAt) / (1000 * 60 * 60);
     
-    await supabase.from('favorite_events').insert([{
+    const { error } = await supabase.from('favorite_events').insert([{
       user_id: userId,
       resource_id: resourceId,
       first_viewed_at: firstViewedAt,
@@ -95,8 +95,15 @@ export async function trackFavoriteEvent(resourceId, userId) {
       time_to_favorite_hours: timeToFavoriteHours,
       view_count_before_favorite: viewCount || 0
     }]);
+    
+    // Silently ignore 409 Conflict (duplicate favorite event) - expected behavior
+    if (error && error.code !== '23505' && error.status !== 409) {
+      // Only log unexpected errors
+      console.warn('Analytics: Non-critical favorite event tracking error:', error.code);
+    }
   } catch (error) {
-    console.error('Error tracking favorite event:', error);
+    // Silently ignore analytics errors - they're non-critical
+    // Don't log to avoid cluttering console
   }
 }
 
@@ -116,17 +123,52 @@ export async function trackUnfavoriteEvent(resourceId, userId) {
 // Track co-views (which resources viewed together)
 let lastViewedResource = null;
 
-export function trackResourceCoview(resourceId) {
+/**
+ * Track resource co-views (which resources are viewed together)
+ * Security: Fails gracefully if RLS policies don't allow insert
+ * @param {string} resourceId - ID of the resource being viewed
+ */
+export async function trackResourceCoview(resourceId) {
+  // Security: Validate input to prevent injection
+  if (!resourceId || typeof resourceId !== 'string' || resourceId.length > 100) {
+    return; // Silently fail for invalid input
+  }
+  
   if (lastViewedResource && lastViewedResource.id !== resourceId) {
     const timeBetween = Math.floor((Date.now() - lastViewedResource.time) / 1000);
     
-    supabase.from('resource_coviews').insert([{
-      session_id: sessionId,
-      resource_a_id: lastViewedResource.id,
-      resource_b_id: resourceId,
-      viewed_a_first: true,
-      time_between_seconds: timeBetween
-    }]).then();
+    try {
+      const { error } = await supabase.from('resource_coviews').insert([{
+        session_id: sessionId,
+        resource_a_id: lastViewedResource.id,
+        resource_b_id: resourceId,
+        viewed_a_first: true,
+        time_between_seconds: timeBetween
+      }]);
+      
+      // Security: Silently ignore 403/RLS errors - these are expected if RLS policies restrict access
+      // Don't log to console to avoid cluttering developer tools
+      if (error) {
+        // 403 Forbidden, 42501 (insufficient_privilege), PGRST301 (RLS policy violation) are expected
+        const isRLSError = error.status === 403 || 
+                          error.code === '42501' || 
+                          error.code === 'PGRST301' ||
+                          error.message?.includes('permission denied') ||
+                          error.message?.includes('row-level security');
+        
+        if (!isRLSError) {
+          // Only log unexpected errors (not RLS-related)
+          console.error('Analytics error (non-RLS):', error.code || 'Unknown');
+        }
+        // Silently ignore RLS errors - they're expected
+        return;
+      }
+      // If no error, continue (successful insert)
+    } catch (error) {
+      // Security: Fail gracefully, don't expose internal errors
+      // Analytics failures should not break the app
+      console.warn('Analytics tracking failed (non-critical)');
+    }
   }
   
   lastViewedResource = {
@@ -149,6 +191,87 @@ export function trackSponsoredClick(resourceId) {
   supabase.from('sponsored_analytics').insert([{
     resource_id: resourceId,
     click_count: 1
+  }]).then();
+}
+
+// Track search query
+export async function trackSearchQuery(query, userId, resultCount = 0) {
+  // Security: Validate input to prevent injection
+  if (!query || typeof query !== 'string' || !query.trim()) return;
+  if (query.length > 500) return; // Prevent DoS with extremely long queries
+  if (!userId || typeof userId !== 'string') return;
+  
+  try {
+    const { error } = await supabase.from('search_queries').insert([{
+      user_id: userId,
+      session_id: sessionId,
+      query: query.trim().substring(0, 500), // Sanitize length
+      result_count: resultCount,
+      searched_at: new Date()
+    }]);
+    
+    // Security: Fail gracefully - analytics errors shouldn't break the app
+    if (error && error.code !== 'PGRST301' && error.code !== '42501') {
+      console.warn('Analytics tracking error (non-critical):', error.code);
+    }
+  } catch (error) {
+    // Silently ignore analytics failures
+    console.warn('Analytics tracking failed (non-critical)');
+  }
+}
+
+// Track category selection
+export async function trackCategorySelection(userId, categoryId, procedureId = null) {
+  // Security: Validate input
+  if (!categoryId) return;
+  if (!userId || typeof userId !== 'string') return;
+  if (typeof categoryId !== 'string' || categoryId.length > 100) return;
+  if (procedureId && (typeof procedureId !== 'string' || procedureId.length > 100)) return;
+  
+  try {
+    const { error } = await supabase.from('category_selections').insert([{
+      user_id: userId,
+      session_id: sessionId,
+      category_id: categoryId,
+      procedure_id: procedureId,
+      selected_at: new Date()
+    }]);
+    
+    // Security: Fail gracefully - analytics errors shouldn't break the app
+    if (error && error.code !== 'PGRST301' && error.code !== '42501') {
+      console.warn('Analytics tracking error (non-critical):', error.code);
+    }
+  } catch (error) {
+    // Silently ignore analytics failures
+    console.warn('Analytics tracking failed (non-critical)');
+  }
+}
+
+// Track rating event
+export function trackRatingEvent(resourceId, userId, rating, comment = null) {
+  if (!resourceId || !userId || !rating) return;
+  
+  supabase.from('ratings').insert([{
+    resource_id: resourceId,
+    user_id: userId,
+    session_id: sessionId,
+    rating: rating,
+    comment: comment,
+    rated_at: new Date()
+  }]).then();
+}
+
+// Track upcoming case event (add, remove, reorder)
+export function trackUpcomingCaseEvent(userId, action, resourceId, categoryId = null) {
+  if (!userId || !action || !resourceId) return;
+  
+  supabase.from('upcoming_case_events').insert([{
+    user_id: userId,
+    session_id: sessionId,
+    action: action, // 'add', 'remove', 'reorder'
+    resource_id: resourceId,
+    category_id: categoryId,
+    event_at: new Date()
   }]).then();
 }
 

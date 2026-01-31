@@ -1,109 +1,409 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Video, FileText, Link, Plus, Star, Heart, Edit, Trash2, StickyNote, ArrowRight, Sparkles, LogOut, Upload, X, Search, BarChart3, TrendingUp, GripVertical } from 'lucide-react';
+// Build v4 - Final test
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+// Icons are now imported in individual components - no longer needed here
 import { supabase } from './lib/supabase';
 import { 
-  initAnalyticsSession, 
-  trackResourceView, 
-  trackResourceViewEnd, 
-  trackFavoriteEvent, 
-  trackUnfavoriteEvent,
   trackResourceCoview,
+  trackSearchQuery,
+  trackCategorySelection,
+  trackRatingEvent,
   endAnalyticsSession 
 } from './lib/analytics';
-import { processResourceImage, createImagePreview, validateImageFile } from './lib/imageUtils';
+import { processResourceImage } from './lib/imageUtils';
+import Onboarding from './Onboarding';
+
+// Import custom hooks
+import { 
+  useAuth, 
+  useResources, 
+  useFavorites, 
+  useNotes, 
+  useUpcomingCases 
+} from './hooks';
+
+// Import utilities
+import { isAdmin, canRateOrFavorite, isSurgeon } from './utils/helpers';
+import { VIEW_MODES, USER_TYPES, ADMIN_TABS, RESOURCE_TYPES, SPECIALTY_SUBSPECIALTY } from './utils/constants';
+import { validateCategoryId, validateUuid } from './utils/validators';
+
+// Import components
+import Header from './components/layout/Header';
+import ResourceFilters from './components/resources/ResourceFilters';
+import ResourceList from './components/resources/ResourceList';
+import ResourceCard from './components/resources/Resourcecard';
+import { SuggestResourceModal } from './components/resources';
+import { LoginView, UserView } from './components/views';
+import { ErrorBoundary, useToast, ConfirmDialog } from './components/common';
+
+// Admin Components
+import { AdminView } from './components/admin';
+
+// Modal Components
+import {
+  AddResourceModal,
+  EditResourceModal,
+  CategoryManagementModal,
+  SuggestedResourcesModal,
+  SettingsModal
+} from './components/modals';
 
 function SurgicalTechniquesApp() {
-  const [currentUser, setCurrentUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [currentView, setCurrentView] = useState('user');
-  const [adminTab, setAdminTab] = useState('resources'); // 'resources', 'analytics'
+  // Toast notifications
+  const toast = useToast();
+  const [confirmDialog, setConfirmDialog] = useState(null);
+
+  // ========================================
+  // CUSTOM HOOKS - Replaces 2000+ lines of code!
+  // ========================================
+  
+  // Authentication (replaces ~500 lines)
+  const { 
+    currentUser, 
+    loading: authLoading,
+    updateProfile,
+    signOut,
+    refreshSession
+  } = useAuth();
+  
+  // Use authLoading as the main loading state
+  const loading = authLoading;
+  
+  // Stabilize userId to prevent hook re-initialization on every currentUser change
+  const userId = useMemo(() => currentUser?.id, [currentUser?.id]);
+
+  // Resources (will be integrated after categories work)
   const [resources, setResources] = useState([]);
-  const [favorites, setFavorites] = useState([]);
-  const [notes, setNotes] = useState({});
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Favorites, Notes, Upcoming Cases
+  const { isFavorited, toggleFavorite } = useFavorites(userId);
+  const { getNote, updateNote } = useNotes(userId);
+  const {
+    upcomingCases,
+    toggleCase: toggleUpcomingCase,
+    reorderCases: reorderUpcomingCases,
+    isInUpcomingCases,
+  } = useUpcomingCases(userId);
+
+  // ========================================
+  // LOCAL STATE (Non-hook state)
+  // ========================================
+
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [currentView, setCurrentView] = useState(VIEW_MODES.USER);
+  const [showSettings, setShowSettings] = useState(false);
+  const [darkMode, setDarkMode] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('darkMode');
+      const isDark = saved === 'true';
+      console.log('Initial dark mode state from localStorage:', saved, '→', isDark);
+      return isDark;
+    }
+    return false;
+  });
+  const [adminTab, setAdminTab] = useState('resources');
+  const [suggestedResources, setSuggestedResources] = useState([]);
+  const [showSuggestedResources, setShowSuggestedResources] = useState(false);
+  const [showUpcomingCases, setShowUpcomingCases] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [showSuggestForm, setShowSuggestForm] = useState(false);
   const [editingResource, setEditingResource] = useState(null);
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
   const [showCategoryManagement, setShowCategoryManagement] = useState(false);
   const [categories, setCategories] = useState([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState(null);
-  const [procedures, setProcedures] = useState([]); // For filtering resources by category
+  const [procedures, setProcedures] = useState([]);
+  const [draggedResourceId, setDraggedResourceId] = useState(null);
+  const [draggedUpcomingCaseId, setDraggedUpcomingCaseId] = useState(null);
+  // Browse by subspecialty feature - allows temporary browsing without changing profile
+  const [browsingSubspecialtyId, setBrowsingSubspecialtyId] = useState(null); // null = use profile subspecialty
+  const [availableSubspecialties, setAvailableSubspecialties] = useState([]); // All subspecialties for dropdown
 
+  // Apply dark mode
   useEffect(() => {
-    checkUser();
-    
-    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
-      if (session?.user) {
-        loadUserProfile(session.user.id);
-      } else {
-        setCurrentUser(null);
-        setLoading(false);
-      }
-    });
+    console.log('Dark mode changed to:', darkMode);
+    const html = document.documentElement;
+    if (darkMode) {
+      html.classList.add('dark');
+      html.style.colorScheme = 'dark';
+      console.log('Added dark class to documentElement, current classes:', html.className);
+    } else {
+      html.classList.remove('dark');
+      html.style.colorScheme = 'light';
+      console.log('Removed dark class from documentElement, current classes:', html.className);
+    }
+  }, [darkMode]);
 
-    return () => {
-      authListener.subscription.unsubscribe();
-    };
-  }, []);
-
+  // Check onboarding status - user needs specialty AND subspecialty to skip onboarding
+  // Note: onboarding_complete column may not exist in database, so we rely on specialty/subspecialty presence
   useEffect(() => {
     if (currentUser) {
-      loadAllData();
-    }
-  }, [currentUser]);
-
-  async function checkUser() {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        await loadUserProfile(session.user.id);
-      } else {
-        setLoading(false);
-      }
-    } catch (error) {
-      console.error('Error checking user:', error);
-      setLoading(false);
-    }
-  }
-
-  async function loadUserProfile(userId) {
-    try {
-      const { data: profile, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
-
-      if (error) throw error;
-
-      const userData = {
-        id: profile.id,
-        email: profile.email,
-        role: profile.role,
-        specialtyId: profile.primary_specialty_id,
-        subspecialtyId: profile.primary_subspecialty_id
-      };
-
-      setCurrentUser(userData);
-      
-      // Initialize analytics session
-      initAnalyticsSession(userData.id, {
-        specialtyId: userData.specialtyId,
-        subspecialtyId: userData.subspecialtyId,
-        experienceBucket: '6-10', // TODO: Add to profile
-        practiceType: 'private', // TODO: Add to profile
-        region: 'west' // TODO: Add to profile
+      // Debug: Log user's specialty info
+      console.log('👤 Current User Profile:', {
+        userId: currentUser.id?.substring(0, 8) + '...',
+        specialtyId: currentUser.specialtyId,
+        subspecialtyId: currentUser.subspecialtyId,
+        email: currentUser.email?.substring(0, 10) + '...'
       });
       
-      setLoading(false);
-    } catch (error) {
-      console.error('Error loading profile:', error);
-      setLoading(false);
+      // User needs onboarding if they're missing specialty OR subspecialty
+      // onboarding_complete flag is optional (column may not exist)
+      const needsOnboarding = 
+        !currentUser.specialtyId || 
+        !currentUser.subspecialtyId ||
+        (currentUser.onboardingComplete !== undefined && currentUser.onboardingComplete === false);
+      
+      if (needsOnboarding) {
+        setShowOnboarding(true);
+      } else if (currentUser.specialtyId && currentUser.subspecialtyId) {
+        // If both IDs are present, onboarding is complete (regardless of onboarding_complete flag)
+        setShowOnboarding(false);
+      }
     }
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.id, currentUser?.specialtyId, currentUser?.subspecialtyId, currentUser?.onboardingComplete]);
 
-  async function loadAllData() {
+  const handleOnboardingComplete = useCallback(() => {
+    setShowOnboarding(false);
+    // The useAuth hook will automatically reload the profile
+  }, []);
+
+  /** Generalist → all categories; Podiatry (no subspecialty) → Foot and Ankle; else → user's subspecialty.
+   * Special case: General Orthopedics → all Orthopedic Surgery categories.
+   * Security: browsingSubspecialtyId allows temporary browsing without changing profile.
+   * RLS policies ensure users can only access subspecialties they have permission to view.
+   */
+  const fetchCategoriesAndProceduresForUser = useCallback(async (user, browsingSubspecialtyIdOverride = null) => {
+    let loadAll = false;
+    let loadAllOrthopedicSurgery = false; // Special flag for General Orthopedics
+    // Use browsing override if provided, otherwise use user's profile subspecialty
+    let effectiveSubspecialtyId = browsingSubspecialtyIdOverride ?? user?.subspecialtyId ?? null;
+    let effectiveSubspecialtyName = null;
+
+    // Check if we're browsing a subspecialty (or using user's profile subspecialty)
+    if (effectiveSubspecialtyId) {
+      const { data: sub } = await supabase
+        .from('subspecialties')
+        .select('name, specialty_id, specialties!inner(name)')
+        .eq('id', effectiveSubspecialtyId)
+        .maybeSingle();
+      
+      if (sub) {
+        effectiveSubspecialtyName = (sub.name || '').toLowerCase();
+        const specialtyName = (sub.specialties?.name || '').toLowerCase();
+        
+        // Check if this is General Orthopedics/Generalist under Orthopedic Surgery
+        const isGeneralOrthopedics = 
+          (effectiveSubspecialtyName === SPECIALTY_SUBSPECIALTY.GENERALIST ||
+           effectiveSubspecialtyName.includes('general') && effectiveSubspecialtyName.includes('orthopedic')) &&
+          (specialtyName.includes('orthopedic') || specialtyName.includes('orthopaedic'));
+        
+        if (isGeneralOrthopedics) {
+          // Load all categories from Orthopedic Surgery specialty (all subspecialties)
+          loadAllOrthopedicSurgery = true;
+          effectiveSubspecialtyId = null; // Clear to load all orthopedic categories
+        }
+      }
+    }
+
+    // Legacy check for user's profile subspecialty (if not browsing)
+    if (!browsingSubspecialtyIdOverride && user?.subspecialtyId) {
+      const { data: sub } = await supabase
+        .from('subspecialties')
+        .select('name, specialty_id, specialties!inner(name)')
+        .eq('id', user.subspecialtyId)
+        .maybeSingle();
+      
+      if (sub) {
+        const name = (sub.name || '').toLowerCase();
+        const specialtyName = (sub.specialties?.name || '').toLowerCase();
+        
+        // Check if user's profile is General Orthopedics/Generalist under Orthopedic Surgery
+        const isGeneralOrthopedics = 
+          (name === SPECIALTY_SUBSPECIALTY.GENERALIST ||
+           name.includes('general') && name.includes('orthopedic')) &&
+          (specialtyName.includes('orthopedic') || specialtyName.includes('orthopaedic'));
+        
+        if (isGeneralOrthopedics) {
+          loadAllOrthopedicSurgery = true;
+          effectiveSubspecialtyId = null;
+        } else if (name === SPECIALTY_SUBSPECIALTY.GENERALIST) {
+          // Generalist in other specialties → load all
+          loadAll = true;
+          effectiveSubspecialtyId = null;
+        }
+      }
+    } else if (user?.specialtyId && !effectiveSubspecialtyId) {
+      const { data: spec } = await supabase
+        .from('specialties')
+        .select('name')
+        .eq('id', user.specialtyId)
+        .maybeSingle();
+      const specName = (spec?.name || '').toLowerCase();
+      if (specName === SPECIALTY_SUBSPECIALTY.PODIATRY) {
+        let ortho = null;
+        for (const orthoName of [SPECIALTY_SUBSPECIALTY.ORTHOPAEDIC_SURGERY, SPECIALTY_SUBSPECIALTY.ORTHOPEDIC_SURGERY]) {
+          const { data } = await supabase
+            .from('specialties')
+            .select('id')
+            .ilike('name', orthoName)
+            .limit(1)
+            .maybeSingle();
+          if (data?.id) {
+            ortho = data;
+            break;
+          }
+        }
+        if (ortho?.id) {
+          const { data: fa } = await supabase
+            .from('subspecialties')
+            .select('id')
+            .eq('specialty_id', ortho.id)
+            .ilike('name', SPECIALTY_SUBSPECIALTY.FOOT_AND_ANKLE)
+            .limit(1)
+            .maybeSingle();
+          if (fa?.id) effectiveSubspecialtyId = fa.id;
+        }
+      }
+      if (!effectiveSubspecialtyId) loadAll = true;
+    } else if (!effectiveSubspecialtyId) {
+      loadAll = true;
+    }
+
+    let categoriesData = [];
+    if (loadAll) {
+      // Load all categories (for true generalist or no subspecialty)
+      const { data } = await supabase.from('categories').select('*').order('order');
+      categoriesData = data || [];
+    } else if (loadAllOrthopedicSurgery) {
+      // Load all categories from Orthopedic Surgery specialty (all subspecialties)
+      // First find Orthopedic Surgery specialty
+      let orthoSpecialtyId = null;
+      for (const orthoName of [SPECIALTY_SUBSPECIALTY.ORTHOPAEDIC_SURGERY, SPECIALTY_SUBSPECIALTY.ORTHOPEDIC_SURGERY]) {
+        const { data } = await supabase
+          .from('specialties')
+          .select('id')
+          .ilike('name', orthoName)
+          .limit(1)
+          .maybeSingle();
+        if (data?.id) {
+          orthoSpecialtyId = data.id;
+          break;
+        }
+      }
+      
+      if (orthoSpecialtyId) {
+        // Get all subspecialties under Orthopedic Surgery
+        const { data: orthoSubspecialties } = await supabase
+          .from('subspecialties')
+          .select('id')
+          .eq('specialty_id', orthoSpecialtyId);
+        
+        if (orthoSubspecialties && orthoSubspecialties.length > 0) {
+          // Get all categories from all Orthopedic Surgery subspecialties
+          const { data } = await supabase
+            .from('categories')
+            .select('*')
+            .in('subspecialty_id', orthoSubspecialties.map(s => s.id))
+            .order('order');
+          categoriesData = data || [];
+        }
+      }
+    } else if (effectiveSubspecialtyId) {
+      const { data } = await supabase
+        .from('categories')
+        .select('*')
+        .eq('subspecialty_id', effectiveSubspecialtyId)
+        .order('order');
+      categoriesData = data || [];
+    }
+
+    let proceduresData = [];
+    if (categoriesData.length > 0) {
+      const { data } = await supabase
+        .from('procedures')
+        .select('*')
+        .in('category_id', categoriesData.map((c) => c.id));
+      proceduresData = data || [];
+    }
+    return { categoriesData, proceduresData };
+  }, []);
+
+  // Define loadSuggestedResources first to avoid circular dependency
+  const loadSuggestedResources = useCallback(async () => {
+    console.log('🔵 loadSuggestedResources called', {
+      isAdmin: isAdmin(currentUser),
+      currentUser: currentUser ? { role: currentUser.role, subspecialtyId: currentUser.subspecialtyId } : null
+    });
+    try {
+      if (!isAdmin(currentUser)) {
+        console.log('⚠️ loadSuggestedResources: User is not admin, skipping');
+        return;
+      }
+
+      console.log('🔵 loadSuggestedResources: Starting query...');
+      let query = supabase
+        .from('resource_suggestions')
+        .select(`
+          *,
+          suggested_by_profile:profiles!suggested_by(
+            id,
+            email,
+            primary_specialty_id,
+            primary_subspecialty_id
+          )
+        `)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false });
+
+      if (currentUser.role === 'super_admin') {
+        // Super admin sees all
+        console.log('🔵 Loading suggestions: Super admin - seeing all');
+      } else if (currentUser.role === 'specialty_admin' && currentUser.specialtyId) {
+        query = query.eq('user_specialty_id', currentUser.specialtyId);
+        console.log('🔵 Loading suggestions: Specialty admin - filtering by specialty:', currentUser.specialtyId);
+      } else if (currentUser.role === 'subspecialty_admin' && currentUser.subspecialtyId) {
+        query = query.eq('user_subspecialty_id', currentUser.subspecialtyId);
+        console.log('🔵 Loading suggestions: Subspecialty admin - filtering by subspecialty:', currentUser.subspecialtyId);
+      } else {
+        console.warn('⚠️ Loading suggestions: Unknown admin role or missing IDs:', {
+          role: currentUser.role,
+          specialtyId: currentUser.specialtyId,
+          subspecialtyId: currentUser.subspecialtyId
+        });
+      }
+
+      const { data, error } = await query;
+      
+      console.log('🔵 Suggestions query result:', {
+        count: data?.length || 0,
+        error: error?.message,
+        suggestions: data?.map(s => ({ id: s.id, title: s.title, user_subspecialty_id: s.user_subspecialty_id }))
+      });
+
+      if (error) {
+        console.warn('Error loading with specialty columns, trying fallback:', error);
+        const fallbackQuery = supabase
+          .from('resource_suggestions')
+          .select('*')
+          .eq('status', 'pending')
+          .order('created_at', { ascending: false });
+        
+        const { data: fallbackData, error: fallbackError } = await fallbackQuery;
+        if (fallbackError) throw fallbackError;
+        setSuggestedResources(fallbackData || []);
+        return;
+      }
+      
+      setSuggestedResources(data || []);
+    } catch (error) {
+      console.error('Error loading suggested resources:', error);
+      setSuggestedResources([]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.id, currentUser?.role, currentUser?.specialtyId, currentUser?.subspecialtyId]); // Only depend on specific fields
+
+  const loadAllData = useCallback(async () => {
     try {
       // Load resources
       const { data: resourcesData } = await supabase
@@ -111,84 +411,91 @@ function SurgicalTechniquesApp() {
         .select('*')
         .order('created_at', { ascending: false });
 
-      // Load user favorites
-      const { data: favoritesData } = await supabase
-        .from('favorites')
-        .select('resource_id')
-        .eq('user_id', currentUser.id);
-
-      // Load user notes
-      const { data: notesData } = await supabase
-        .from('notes')
-        .select('*')
-        .eq('user_id', currentUser.id);
-
       setResources(resourcesData || []);
-      setFavorites(favoritesData?.map(f => f.resource_id) || []);
-      
-      // Convert notes array to object
-      const notesObj = {};
-      notesData?.forEach(note => {
-        notesObj[note.resource_id] = note.note_text;
-      });
-      setNotes(notesObj);
 
-      // Load categories for user's subspecialty
-      if (currentUser?.subspecialtyId) {
-        const { data: categoriesData } = await supabase
-          .from('categories')
-          .select('*')
-          .eq('subspecialty_id', currentUser.subspecialtyId)
-          .order('order');
+      const { categoriesData, proceduresData } = await fetchCategoriesAndProceduresForUser(currentUser, browsingSubspecialtyId);
+      setCategories(categoriesData);
+      setProcedures(proceduresData);
 
-        if (categoriesData) {
-          setCategories(categoriesData);
+      // Do not auto-select a category: show all resources until the user picks a category/subcategory
+      // (selectedCategoryId stays null on load/refresh)
+
+      // Load suggested resources if user is an admin
+      if (isAdmin(currentUser)) {
+        console.log('🔵 fetchCategoriesAndProceduresForUser: Calling loadSuggestedResources for admin');
+        try {
+          await loadSuggestedResources();
+        } catch (suggestionError) {
+          console.error('❌ Error loading suggested resources (non-blocking):', suggestionError);
+          console.error('❌ Error details:', {
+            message: suggestionError?.message,
+            code: suggestionError?.code,
+            status: suggestionError?.status,
+            details: suggestionError?.details
+          });
         }
-
-        // Load all procedures for filtering
-        const { data: proceduresData } = await supabase
-          .from('procedures')
-          .select('*')
-          .in('category_id', categoriesData?.map(c => c.id) || []);
-
-        if (proceduresData) {
-          setProcedures(proceduresData);
-        }
+      } else {
+        console.log('⚠️ fetchCategoriesAndProceduresForUser: User is not admin, skipping loadSuggestedResources');
       }
 
     } catch (error) {
       console.error('Error loading data:', error);
     }
-  }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.id, currentUser?.subspecialtyId, currentUser?.specialtyId, currentUser?.role, browsingSubspecialtyId, fetchCategoriesAndProceduresForUser]);
+
+  // Load data when user is authenticated (moved after loadAllData definition)
+  // Use ref to prevent multiple loads
+  const dataLoadedRef = useRef(false);
+  useEffect(() => {
+    if (currentUser && !dataLoadedRef.current) {
+      dataLoadedRef.current = true;
+      loadAllData();
+      loadAvailableSubspecialties(); // Load subspecialties for browsing dropdown
+    } else if (!currentUser) {
+      dataLoadedRef.current = false; // Reset when user logs out
+      setBrowsingSubspecialtyId(null); // Reset browsing subspecialty on logout
+      setAvailableSubspecialties([]); // Clear subspecialties list
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.id]); // Only depend on user ID, not the whole object
+
+  // Load suggested resources when switching to Admin view
+  useEffect(() => {
+    if (currentView === VIEW_MODES.ADMIN && isAdmin(currentUser)) {
+      console.log('🔵 Switching to Admin view - loading suggested resources');
+      loadSuggestedResources().catch(error => {
+        console.error('❌ Error loading suggested resources when switching to Admin view:', error);
+      });
+    }
+  }, [currentView, currentUser, loadSuggestedResources]);
+
+  // NOTE: All the auth functions (checkUser, loadUserProfile, etc.) are now in useAuth hook!
+  // NOTE: toggleFavorite, toggleUpcomingCase, updateNote are now from hooks!
 
   async function handleAddResource(resourceData, imageFile) {
     try {
       if (!imageFile) {
-        alert('Image is required');
+        toast.error('Image is required');
         return;
       }
 
-      // Process image (resize and compress)
       const processedImage = await processResourceImage(imageFile);
-      
-      // Upload processed image
       const fileName = `resource-${Date.now()}.webp`;
-        const filePath = `resource-images/${fileName}`;
+      const filePath = `resource-images/${fileName}`;
 
-        const { error: uploadError } = await supabase.storage
-          .from('resources')
+      const { error: uploadError } = await supabase.storage
+        .from('resources')
         .upload(filePath, processedImage);
 
-        if (uploadError) throw uploadError;
+      if (uploadError) throw uploadError;
 
-        // Get public URL
-        const { data: { publicUrl } } = supabase.storage
-          .from('resources')
-          .getPublicUrl(filePath);
+      const { data: { publicUrl } } = supabase.storage
+        .from('resources')
+        .getPublicUrl(filePath);
 
       const imageUrl = publicUrl;
 
-      // Insert resource - only include duration_seconds for videos
       const insertData = {
         title: resourceData.title,
         url: resourceData.url,
@@ -200,12 +507,10 @@ function SurgicalTechniquesApp() {
         is_sponsored: false
       };
       
-      // Only add category_id if provided (column may not exist yet)
       if (resourceData.category_id) {
         insertData.category_id = resourceData.category_id;
       }
       
-      // Only add duration_seconds if it's a video and has a value
       if (resourceData.type === 'video' && resourceData.duration_seconds) {
         insertData.duration_seconds = resourceData.duration_seconds;
       }
@@ -218,24 +523,21 @@ function SurgicalTechniquesApp() {
 
       setShowAddForm(false);
       loadAllData();
-      alert('Resource added successfully!');
+      toast.success('Resource added successfully!');
     } catch (error) {
       console.error('Error adding resource:', error);
-      alert('Error adding resource: ' + error.message);
+      toast.error('Error adding resource: ' + error.message);
     }
   }
 
   async function handleSuggestResource(resourceData, imageFile) {
     try {
       if (!imageFile) {
-        alert('Image is required');
-        return;
+        toast.error('Image is required');
+        throw new Error('Image is required');
       }
 
-      // Process image (resize and compress)
       const processedImage = await processResourceImage(imageFile);
-      
-      // Upload processed image
       const fileName = `suggestion-${Date.now()}.webp`;
       const filePath = `resource-images/${fileName}`;
 
@@ -243,34 +545,44 @@ function SurgicalTechniquesApp() {
         .from('resources')
         .upload(filePath, processedImage);
 
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        console.error('Upload error:', uploadError);
+        throw uploadError;
+      }
 
-      // Get public URL
       const { data: { publicUrl } } = supabase.storage
         .from('resources')
         .getPublicUrl(filePath);
 
       const imageUrl = publicUrl;
 
-      // Insert suggestion - only include duration_seconds for videos
+      // Use specialty_id and subspecialty_id from formData if provided (for Podiatry mapping)
+      const finalSpecialtyId = resourceData.specialty_id || currentUser.specialtyId || null;
+      const finalSubspecialtyId = resourceData.subspecialty_id || currentUser.subspecialtyId || null;
+
       const insertData = {
         title: resourceData.title,
         url: resourceData.url,
         description: resourceData.description,
-        resource_type: resourceData.type || 'video',
+        resource_type: resourceData.type || RESOURCE_TYPES.VIDEO,
         image_url: imageUrl,
         keywords: resourceData.keywords || null,
         suggested_by: currentUser.id,
-        status: 'pending'
+        status: 'pending', // TODO: Use constant from utils/constants.js
+        user_specialty_id: finalSpecialtyId,
+        user_subspecialty_id: finalSubspecialtyId
       };
       
-      // Only add category_id if provided (column may not exist yet)
       if (resourceData.category_id) {
         insertData.category_id = resourceData.category_id;
       }
       
-      // Only add duration_seconds if it's a video and has a value
-      if (resourceData.type === 'video' && resourceData.duration_seconds) {
+      // Include suggested category name if user suggested a new category
+      if (resourceData.suggested_category_name) {
+        insertData.suggested_category_name = resourceData.suggested_category_name.trim();
+      }
+      
+      if (resourceData.type === RESOURCE_TYPES.VIDEO && resourceData.duration_seconds) {
         insertData.duration_seconds = resourceData.duration_seconds;
       }
       
@@ -278,23 +590,212 @@ function SurgicalTechniquesApp() {
         .from('resource_suggestions')
         .insert([insertData]);
 
-      if (error) throw error;
-
+      if (error) {
+        console.error('Database error:', error);
+        throw error;
+      }
       setShowSuggestForm(false);
-      alert('Resource suggestion submitted successfully! It will be reviewed by an admin.');
+      toast.success('Resource suggestion submitted successfully! It will be reviewed by an admin.');
     } catch (error) {
-      console.error('Error suggesting resource:', error);
-      alert('Error submitting suggestion: ' + error.message);
+      console.error('❌ Error suggesting resource:', error);
+      toast.error('Error submitting suggestion: ' + error.message);
+      throw error; // Re-throw so the modal knows there was an error
+    }
+  }
+
+  async function handleApproveSuggestion(suggestionId) {
+    try {
+      const { data: suggestion, error: fetchError } = await supabase
+        .from('resource_suggestions')
+        .select('*')
+        .eq('id', suggestionId)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      const resourceData = {
+        title: suggestion.title,
+        url: suggestion.url,
+        description: suggestion.description,
+        resource_type: suggestion.resource_type,
+        image_url: suggestion.image_url,
+        keywords: suggestion.keywords || null,
+        category_id: suggestion.category_id || null,
+        duration_seconds: suggestion.duration_seconds || null,
+        curated_by: currentUser.id // Security: Set the admin who approved this resource
+      };
+
+      const { error: insertError } = await supabase
+        .from('resources')
+        .insert([resourceData]);
+
+      if (insertError) throw insertError;
+
+      // Security: Validate input - suggestionId must be a valid UUID
+      if (!suggestionId || typeof suggestionId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(suggestionId)) {
+        throw new Error('Invalid suggestion ID');
+      }
+      
+      console.log('🔵 Updating suggestion status to approved:', {
+        suggestionId: suggestionId.substring(0, 8) + '...', // Security: Mask full UUID in logs
+        status: 'approved'
+      });
+      
+      const { data: updateData, error: updateError } = await supabase
+        .from('resource_suggestions')
+        .update({ 
+          status: 'approved', 
+          reviewed_by: currentUser.id, 
+          reviewed_at: new Date().toISOString() 
+        })
+        .eq('id', suggestionId)
+        .select();
+
+      if (updateError) {
+        // Security: Sanitize error message to prevent information leakage
+        const sanitizedMessage = updateError.message ? 
+          updateError.message.replace(/[<>]/g, '').substring(0, 100) : 
+          'Failed to update suggestion status';
+        console.error('❌ Error updating suggestion status:', {
+          code: updateError.code,
+          status: updateError.status,
+          message: sanitizedMessage
+        });
+        throw new Error(sanitizedMessage);
+      }
+      
+      console.log('✅ Suggestion status updated successfully:', updateData);
+
+      // Reload suggestions to remove approved one from the list
+      await loadSuggestedResources();
+      await loadAllData();
+      toast.success('Resource approved and added to library!');
+    } catch (error) {
+      console.error('Error approving suggestion:', error);
+      toast.error('Error approving suggestion: ' + error.message);
+    }
+  }
+
+  async function handleRejectSuggestion(suggestionId) {
+    try {
+      // Security: Validate input - suggestionId must be a valid UUID
+      if (!suggestionId || typeof suggestionId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(suggestionId)) {
+        throw new Error('Invalid suggestion ID');
+      }
+      
+      console.log('🔵 Updating suggestion status to rejected:', {
+        suggestionId: suggestionId.substring(0, 8) + '...', // Security: Mask full UUID in logs
+        status: 'rejected'
+      });
+      
+      const { data: updateData, error } = await supabase
+        .from('resource_suggestions')
+        .update({ 
+          status: 'rejected', 
+          reviewed_by: currentUser.id, 
+          reviewed_at: new Date().toISOString() 
+        })
+        .eq('id', suggestionId)
+        .select();
+
+      if (error) {
+        // Security: Sanitize error message to prevent information leakage
+        const sanitizedMessage = error.message ? 
+          error.message.replace(/[<>]/g, '').substring(0, 100) : 
+          'Failed to update suggestion status';
+        console.error('❌ Error updating suggestion status:', {
+          code: error.code,
+          status: error.status,
+          message: sanitizedMessage
+        });
+        throw new Error(sanitizedMessage);
+      }
+      
+      console.log('✅ Suggestion status updated successfully:', updateData);
+
+      await loadSuggestedResources();
+      toast.success('Resource suggestion rejected.');
+    } catch (error) {
+      console.error('Error rejecting suggestion:', error);
+      toast.error('Error rejecting suggestion: ' + error.message);
+    }
+  }
+
+  async function handleUpdateSuggestion(suggestionId, updatedData) {
+    try {
+      // Security: Validate input - suggestionId must be a valid UUID
+      if (!suggestionId || typeof suggestionId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(suggestionId)) {
+        throw new Error('Invalid suggestion ID');
+      }
+
+      // Security: Validate updatedData object
+      if (!updatedData || typeof updatedData !== 'object') {
+        throw new Error('Invalid suggestion data');
+      }
+
+      // Calculate duration_seconds if video type
+      let durationSeconds = updatedData.duration_seconds || null;
+      if (updatedData.resource_type === 'video' && updatedData.duration_hours !== undefined) {
+        const hours = parseInt(updatedData.duration_hours) || 0;
+        const minutes = parseInt(updatedData.duration_minutes) || 0;
+        const seconds = parseInt(updatedData.duration_seconds) || 0;
+        durationSeconds = hours * 3600 + minutes * 60 + seconds;
+      }
+
+      console.log('🔵 Updating suggestion:', {
+        suggestionId: suggestionId.substring(0, 8) + '...', // Security: Mask full UUID in logs
+        fields: Object.keys(updatedData)
+      });
+
+      // Prepare update data - only include fields that exist in resource_suggestions table
+      const updateData = {
+        title: updatedData.title,
+        description: updatedData.description,
+        url: updatedData.url,
+        resource_type: updatedData.resource_type,
+        image_url: updatedData.image_url,
+        keywords: updatedData.keywords || null,
+        category_id: updatedData.category_id || null,
+        duration_seconds: durationSeconds,
+        user_specialty_id: updatedData.specialty_id || null,
+        user_subspecialty_id: updatedData.subspecialty_id || null,
+      };
+
+      const { data: updateResult, error } = await supabase
+        .from('resource_suggestions')
+        .update(updateData)
+        .eq('id', suggestionId)
+        .select();
+
+      if (error) {
+        // Security: Sanitize error message to prevent information leakage
+        const sanitizedMessage = error.message ? 
+          error.message.replace(/[<>]/g, '').substring(0, 100) : 
+          'Failed to update suggestion';
+        console.error('❌ Error updating suggestion:', {
+          code: error.code,
+          status: error.status,
+          message: sanitizedMessage
+        });
+        throw new Error(sanitizedMessage);
+      }
+
+      console.log('✅ Suggestion updated successfully:', updateResult);
+
+      await loadSuggestedResources();
+      toast.success('Suggestion updated successfully!');
+    } catch (error) {
+      console.error('Error updating suggestion:', error);
+      toast.error('Error updating suggestion: ' + error.message);
+      throw error; // Re-throw so modal can handle it
     }
   }
 
   async function handleEditResource(resourceId, resourceData, imageFile) {
     try {
-      let imageUrl = resourceData.image_url; // Use the image_url from resourceData (handles removal)
+      let imageUrl = resourceData.image_url;
 
-      // If new image provided, upload it (it's already processed in the modal)
       if (imageFile) {
-        // imageFile is already processed, so upload it directly
         const fileName = `resource-${Date.now()}.webp`;
         const filePath = `resource-images/${fileName}`;
 
@@ -307,16 +808,24 @@ function SurgicalTechniquesApp() {
           throw uploadError;
         }
 
-        // Get public URL
         const { data: { publicUrl } } = supabase.storage
           .from('resources')
           .getPublicUrl(filePath);
 
         imageUrl = publicUrl;
       }
-      // If imageFile is null and resourceData.image_url is null, imageUrl stays null (removed)
 
-      // Update resource - only include optional columns if they exist and have values
+      // Security: Validate input - resourceId must be a valid UUID
+      if (!resourceId || typeof resourceId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(resourceId)) {
+        throw new Error('Invalid resource ID');
+      }
+
+      console.log('🔵 Updating resource:', {
+        resourceId: resourceId.substring(0, 8) + '...', // Security: Mask full UUID in logs
+        category_id: resourceData.category_id,
+        fields: Object.keys(resourceData)
+      });
+
       const updateData = {
         title: resourceData.title,
         url: resourceData.url,
@@ -326,46 +835,125 @@ function SurgicalTechniquesApp() {
         keywords: resourceData.keywords || null,
       };
       
-      // Always include category_id if provided (even if null to clear it)
-      // Only skip if column doesn't exist (will be handled by defensive check)
+      // Always include category_id if it's provided (even if null, to clear it)
+      // Convert to string if it's not null to ensure proper UUID format
       if (resourceData.category_id !== undefined) {
-        updateData.category_id = resourceData.category_id;
+        updateData.category_id = resourceData.category_id ? String(resourceData.category_id) : null;
+        console.log('🔵 Including category_id in update:', updateData.category_id?.substring(0, 8) + '...' || 'null');
+      } else {
+        console.log('⚠️ category_id not provided in resourceData - keeping existing category');
+        // Don't include category_id in update if not provided, to avoid clearing it
       }
       
-      // Only add duration_seconds if it's a video AND has a value (column may not exist yet - migration needed)
-      // Don't include it at all if null or not a video to avoid schema errors
       if (resourceData.type === 'video' && resourceData.duration_seconds) {
         updateData.duration_seconds = resourceData.duration_seconds;
       }
-      // Note: We don't set duration_seconds to null for non-videos to avoid errors if column doesn't exist
       
-      console.log('Updating resource with data:', updateData); // Debug log
-      console.log('Category ID being saved:', updateData.category_id);
-      
+      console.log('🔵 Final updateData:', {
+        ...updateData,
+        category_id: updateData.category_id?.substring(0, 8) + '...' || 'null'
+      });
+
       const { error, data } = await supabase
         .from('resources')
         .update(updateData)
         .eq('id', resourceId)
-        .select();
+        .select('*, category_id'); // Explicitly select category_id to verify update
 
       if (error) {
-        console.error('Error updating resource:', error);
-        // Check if error is about missing column
-        if (error.message && error.message.includes('category_id')) {
-          alert('Error: The category_id column does not exist in the database. Please run the SQL migration "add_category_id_column.sql" in your Supabase SQL editor first.');
+        // Security: Sanitize error message to prevent information leakage
+        const sanitizedMessage = error.message ? 
+          error.message.replace(/[<>]/g, '').substring(0, 100) : 
+          'Failed to update resource';
+        console.error('❌ Error updating resource:', {
+          code: error.code,
+          status: error.status,
+          message: sanitizedMessage,
+          details: error.details,
+          hint: error.hint
+        });
+        
+        // Check for specific error types
+        if (error.code === '42501' || error.status === 403) {
+          console.error('❌ RLS Policy Error: Update blocked by Row Level Security policy');
+          toast.error('Permission denied: Unable to update resource. Check RLS policies.');
+        } else if (error.message && error.message.includes('category_id')) {
+          toast.error('Error: The category_id column does not exist in the database. Please run the SQL migration "add_category_id_column.sql" in your Supabase SQL editor first.');
+        } else {
+          toast.error('Error updating resource: ' + sanitizedMessage);
         }
         throw error;
       }
       
-      console.log('Resource updated successfully:', data);
-      console.log('Updated resource category_id:', data?.[0]?.category_id);
+      // Check if update actually affected any rows
+      if (data && data.length === 0) {
+        console.warn('⚠️ Update query returned no rows - this might indicate RLS is blocking the SELECT after UPDATE');
+      }
+
+      // Log update response (data might be empty array or undefined due to RLS)
+      if (data && data.length > 0) {
+        console.log('✅ Resource updated successfully:', {
+          resourceId: resourceId.substring(0, 8) + '...',
+          updatedCategoryId: data[0].category_id?.substring(0, 8) + '...' || 'null',
+          fullResponse: {
+            id: data[0].id?.substring(0, 8) + '...',
+            title: data[0].title,
+            category_id: data[0].category_id
+          }
+        });
+        
+        // Verify the category_id was actually updated
+        if (updateData.category_id !== undefined && data[0].category_id !== updateData.category_id) {
+          console.warn('⚠️ Category ID mismatch!', {
+            expected: updateData.category_id?.substring(0, 8) + '...',
+            actual: data[0].category_id?.substring(0, 8) + '...' || 'null'
+          });
+        }
+      } else {
+        console.log('✅ Resource update query completed (no data returned - may be RLS policy)');
+      }
+
+      // Always verify by querying the database directly (bypasses RLS select restrictions)
+      if (updateData.category_id !== undefined) {
+        try {
+          const { data: verifyData, error: verifyError } = await supabase
+            .from('resources')
+            .select('id, category_id')
+            .eq('id', resourceId)
+            .single();
+          
+          if (verifyError) {
+            console.warn('⚠️ Could not verify category update:', verifyError.message);
+          } else if (verifyData) {
+            console.log('🔵 Database verification:', {
+              resourceId: resourceId.substring(0, 8) + '...',
+              category_id_in_db: verifyData.category_id?.substring(0, 8) + '...' || 'null',
+              matches_expected: verifyData.category_id === updateData.category_id
+            });
+            
+            if (verifyData.category_id !== updateData.category_id) {
+              console.error('❌ Database verification failed - category_id was not updated!', {
+                expected: updateData.category_id?.substring(0, 8) + '...',
+                actual_in_db: verifyData.category_id?.substring(0, 8) + '...' || 'null'
+              });
+              toast.error('Warning: Category update may not have persisted. Please refresh and check.');
+            } else {
+              console.log('✅ Category update verified in database');
+            }
+          }
+        } catch (verifyErr) {
+          console.warn('⚠️ Error during verification:', verifyErr.message);
+          // Don't throw - update may have succeeded even if verification fails
+        }
+      }
 
       setEditingResource(null);
-      loadAllData();
-      alert('Resource updated successfully!');
+      // Reload all data to ensure UI reflects the changes
+      await loadAllData();
+      toast.success('Resource updated successfully!');
     } catch (error) {
       console.error('Error updating resource:', error);
-      alert('Error updating resource: ' + error.message);
+      toast.error('Error updating resource: ' + error.message);
     }
   }
 
@@ -373,148 +961,161 @@ function SurgicalTechniquesApp() {
     if (!confirm('Are you sure you want to delete this resource?')) return;
 
     try {
-      const { error } = await supabase
+      // Security: Validate input - resourceId must be a valid UUID
+      if (!resourceId || typeof resourceId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(resourceId)) {
+        throw new Error('Invalid resource ID');
+      }
+      
+      console.log('🔵 Deleting resource:', { 
+        resourceId: resourceId.substring(0, 8) + '...' // Security: Mask full UUID in logs
+      });
+      
+      // Security: Delete related records first to avoid constraint violations
+      // Delete from resource_history if it exists (check by attempting delete, ignore if table doesn't exist)
+      // Note: If there's a foreign key constraint violation, it might be due to a trigger
+      // that tries to insert into resource_history when deleting the resource.
+      // In that case, we need to delete history records first, or the database constraint
+      // needs to be set to CASCADE DELETE.
+      try {
+        const { error: historyError } = await supabase
+          .from('resource_history')
+          .delete()
+          .eq('resource_id', resourceId);
+        
+        // Ignore errors if table doesn't exist (42P01 = undefined_table)
+        // Ignore foreign key violations (23503) - these might be from triggers
+        // The database constraint should handle CASCADE DELETE
+        if (historyError) {
+          if (historyError.code === '42P01') {
+            // Table doesn't exist, which is fine
+            console.log('ℹ️ resource_history table does not exist, skipping...');
+          } else if (historyError.code === '23503') {
+            // Foreign key violation - this might be from a trigger trying to insert
+            // The database constraint should handle this with CASCADE DELETE
+            console.warn('⚠️ Foreign key violation when deleting resource_history (may be from trigger):', historyError.message);
+          } else {
+            console.warn('⚠️ Warning deleting resource_history:', historyError.message);
+          }
+        }
+      } catch (historyErr) {
+        // Table might not exist, which is fine
+        console.log('ℹ️ resource_history table may not exist, continuing...');
+      }
+      
+      // Now delete the resource itself
+      // If there's a trigger that inserts into resource_history on DELETE,
+      // and that trigger violates a foreign key, we need to fix the database constraint
+      const { data: deleteData, error } = await supabase
         .from('resources')
         .delete()
-        .eq('id', resourceId);
+        .eq('id', resourceId)
+        .select();
 
-      if (error) throw error;
+      if (error) {
+        // Security: Sanitize error message to prevent information leakage
+        const sanitizedMessage = error.message ? 
+          error.message.replace(/[<>]/g, '').substring(0, 100) : 
+          'Failed to delete resource';
+        console.error('❌ Error deleting resource:', {
+          code: error.code,
+          status: error.status,
+          message: sanitizedMessage
+        });
+        throw new Error(sanitizedMessage);
+      }
 
+      console.log('✅ Resource deleted successfully:', deleteData);
       loadAllData();
-      alert('Resource deleted successfully!');
+      toast.success('Resource deleted successfully!');
     } catch (error) {
       console.error('Error deleting resource:', error);
-      alert('Error deleting resource: ' + error.message);
+      toast.error('Error deleting resource: ' + error.message);
     }
   }
 
-  async function toggleFavorite(resourceId) {
+  const canInteractWithResources = () => {
+    return currentUser?.userType === USER_TYPES.ATTENDING || currentUser?.userType === USER_TYPES.RESIDENT || currentUser?.userType === USER_TYPES.FELLOW;
+  };
+
+  async function reorderResources(newOrder) {
     try {
-      const isFavorited = favorites.includes(resourceId);
-
-      if (isFavorited) {
-        const { error } = await supabase
-          .from('favorites')
-          .delete()
-          .eq('user_id', currentUser.id)
-          .eq('resource_id', resourceId);
-
-        if (error) throw error;
-        setFavorites(favorites.filter(id => id !== resourceId));
-        
-        // Track unfavorite event
-        trackUnfavoriteEvent(resourceId, currentUser.id);
-      } else {
-        const { error } = await supabase
-          .from('favorites')
-          .insert([{
-            user_id: currentUser.id,
-            resource_id: resourceId
-          }]);
-
-        if (error) throw error;
-        setFavorites([...favorites, resourceId]);
-        
-        // Track favorite event (GOLD for analytics)
-        trackFavoriteEvent(resourceId, currentUser.id);
-      }
+      console.log('🔵 App reorderResources called:', newOrder.length, 'resources');
+      console.log('🔵 First 3 IDs:', newOrder.slice(0, 3).map(r => r.id.substring(0, 8)));
+      setResources(newOrder);
+      toast.success('Resources reordered successfully!');
     } catch (error) {
-      console.error('Error toggling favorite:', error);
+      console.error('Error reordering resources:', error);
+      toast.error('Error reordering resources: ' + error.message);
     }
   }
 
-  async function updateNote(resourceId, noteText) {
-    try {
-      if (!noteText || noteText.trim() === '') {
-        // Delete note if empty
-        const { error } = await supabase
-          .from('notes')
-          .delete()
-          .eq('user_id', currentUser.id)
-          .eq('resource_id', resourceId);
-
-        if (error) throw error;
-
-        const newNotes = { ...notes };
-        delete newNotes[resourceId];
-        setNotes(newNotes);
-      } else {
-        // Check if note exists
-        const { data: existing } = await supabase
-          .from('notes')
-          .select('id')
-          .eq('user_id', currentUser.id)
-          .eq('resource_id', resourceId)
-          .single();
-
-        if (existing) {
-          // Update existing note
-          const { error } = await supabase
-            .from('notes')
-            .update({ note_text: noteText, updated_at: new Date().toISOString() })
-            .eq('user_id', currentUser.id)
-            .eq('resource_id', resourceId);
-
-          if (error) throw error;
-        } else {
-          // Insert new note
-          const { error } = await supabase
-            .from('notes')
-            .insert([{
-              user_id: currentUser.id,
-              resource_id: resourceId,
-              note_text: noteText
-            }]);
-
-          if (error) throw error;
-        }
-
-        setNotes({ ...notes, [resourceId]: noteText });
-      }
-    } catch (error) {
-      console.error('Error updating note:', error);
-    }
-  }
-
-  // Sort resources: sponsored > favorites > regular
-  const sortResources = (resources) => {
-    return [...resources].sort((a, b) => {
+  // Memoize sort function
+  const sortResources = useCallback((resourcesToSort) => {
+    return [...resourcesToSort].sort((a, b) => {
       if (a.is_sponsored && !b.is_sponsored) return -1;
       if (!a.is_sponsored && b.is_sponsored) return 1;
       
-      const aFav = favorites.includes(a.id);
-      const bFav = favorites.includes(b.id);
+      const aFav = isFavorited(a.id);
+      const bFav = isFavorited(b.id);
       if (aFav && !bFav) return -1;
       if (!aFav && bFav) return 1;
       
       return 0;
     });
-  };
+  }, [isFavorited]);
 
-  // Filter resources
-  const getFilteredResources = () => {
+  // Memoize filtered resources for performance
+  // Security: When browsing a subspecialty, filter resources to only show those belonging to that subspecialty's categories
+  const displayedResources = useMemo(() => {
     let filtered = resources;
 
     if (showFavoritesOnly) {
-      filtered = filtered.filter(r => favorites.includes(r.id));
+      filtered = filtered.filter(r => isFavorited(r.id));
     }
 
-    // Filter by category - support both category_id (new) and procedure_id (legacy)
+    // Security: Filter by browsing subspecialty's categories (if browsing mode is active)
+    // This ensures users only see resources from the subspecialty they're browsing
+    if (browsingSubspecialtyId !== null || (categories.length > 0 && currentUser?.subspecialtyId)) {
+      // Get all category IDs for the current browsing context (browsing subspecialty or user's subspecialty)
+      const allowedCategoryIds = categories.map(c => c.id);
+      // Also include subcategories
+      const subcategoryIds = categories
+        .filter(c => c.parent_category_id)
+        .map(c => c.id);
+      const allAllowedCategoryIds = [...allowedCategoryIds, ...subcategoryIds];
+
+      // Filter resources to only show those with category_id in allowed categories
+      // OR those with procedure_id that belongs to allowed categories
+      filtered = filtered.filter(r => {
+        // Check if resource has category_id in allowed categories
+        if (r.category_id && allAllowedCategoryIds.includes(r.category_id)) {
+          return true;
+        }
+        // Check if resource has procedure_id that belongs to allowed categories
+        if (r.procedure_id) {
+          const procedureIds = procedures
+            .filter(p => allAllowedCategoryIds.includes(p.category_id))
+            .map(p => p.id);
+          return procedureIds.includes(r.procedure_id);
+        }
+        // If resource has no category_id or procedure_id, exclude it when browsing
+        // (unless it's a general resource that should be visible everywhere)
+        return false;
+      });
+    }
+
+    // Further filter by selected category if one is selected
     if (selectedCategoryId) {
-      // Get all category IDs to include (category + its subcategories)
       const categoryIds = [selectedCategoryId];
       const subcategoryIds = categories
         .filter(c => c.parent_category_id === selectedCategoryId)
         .map(c => c.id);
       const allCategoryIds = [...categoryIds, ...subcategoryIds];
 
-      // Filter resources by category_id (new way) OR procedure_id (legacy)
       filtered = filtered.filter(r => {
-        // New resources have category_id directly
         if (r.category_id && allCategoryIds.includes(r.category_id)) {
           return true;
         }
-        // Legacy resources have procedure_id - check if procedure belongs to selected category
         if (r.procedure_id) {
           const procedureIds = procedures
             .filter(p => allCategoryIds.includes(p.category_id))
@@ -526,135 +1127,328 @@ function SurgicalTechniquesApp() {
     }
 
     if (searchTerm) {
+      const searchLower = searchTerm.toLowerCase();
       filtered = filtered.filter(r => 
-        r.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        r.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        r.keywords?.toLowerCase().includes(searchTerm.toLowerCase())
+        r.title.toLowerCase().includes(searchLower) ||
+        r.description?.toLowerCase().includes(searchLower) ||
+        r.keywords?.toLowerCase().includes(searchLower)
       );
     }
 
     return sortResources(filtered);
+  }, [resources, showFavoritesOnly, selectedCategoryId, categories, procedures, searchTerm, browsingSubspecialtyId, currentUser?.subspecialtyId, isFavorited, sortResources]);
+
+  // Pagination: 10 resources per page when more than 10
+  const RESOURCES_PAGE_SIZE = 10;
+  const [resourcesPage, setResourcesPage] = useState(1);
+  const paginationTotalPages = Math.max(1, Math.ceil(displayedResources.length / RESOURCES_PAGE_SIZE));
+  const paginatedResources = useMemo(
+    () => displayedResources.slice((resourcesPage - 1) * RESOURCES_PAGE_SIZE, resourcesPage * RESOURCES_PAGE_SIZE),
+    [displayedResources, resourcesPage]
+  );
+  useEffect(() => {
+    setResourcesPage(1);
+  }, [displayedResources]);
+
+  // Sign out handler
+  const handleSignOut = async () => {
+    try {
+      endAnalyticsSession();
+      await signOut();
+      // useAuth hook will handle setting currentUser to null
+    } catch (error) {
+      console.error('Error signing out:', error);
+      toast.error('Error signing out. Please try again.');
+    }
   };
 
-  const displayedResources = getFilteredResources();
+  // Stable callbacks for main UI — MUST be defined before any early return.
+  // Inline useCallback in JSX causes Error #310: we return <LoginView /> before
+  // the main app, so those hooks never run; after sign-in we render main app
+  // and they do → "Rendered more hooks than during the previous render."
+  const handleToggleUpcomingCases = useCallback(() => setShowUpcomingCases((prev) => !prev), []);
+  const handleSettingsClick = useCallback(() => setShowSettings(true), []);
+  const handleToggleFavorites = useCallback(() => setShowFavoritesOnly((prev) => !prev), []);
+  const handleSearchChange = useCallback(
+    (term) => {
+      setSearchTerm(term);
+      if (term?.trim() && currentUser) trackSearchQuery(term, currentUser.id, 0);
+    },
+    [currentUser]
+  );
+  const handleSuggestResourceClick = useCallback(() => setShowSuggestForm(true), []);
+  const handleCategorySelect = useCallback(
+    (categoryId) => {
+      // Security: Validate category ID before processing
+      // Note: categories are already filtered server-side by user's subspecialty,
+      // but we validate client-side as defense in depth
+      const validation = validateCategoryId(categoryId, categories);
+      if (!validation.valid) {
+        console.error('Invalid category selection:', validation.error);
+        toast.error('Invalid category selection. Please try again.');
+        return;
+      }
+      
+      setSelectedCategoryId(categoryId);
+      if (categoryId && currentUser) {
+        trackCategorySelection(currentUser.id, categoryId, null);
+      }
+    },
+    [currentUser, categories, toast]
+  );
+  const handleAddResourceClick = useCallback(() => setShowAddForm(true), []);
+  const handleEditResourceClick = useCallback((resource) => setEditingResource(resource), []);
+  const handleEditCategoriesClick = useCallback(() => setShowCategoryManagement(true), []);
+  const handleShowSuggestedResourcesClick = useCallback(() => setShowSuggestedResources(true), []);
+  const handleReturnToBrowse = useCallback(() => setCurrentView(VIEW_MODES.USER), []);
+  const handleCloseCategoryManagement = useCallback(() => {
+    setShowCategoryManagement(false);
+    fetchCategoriesAndProceduresForUser(currentUser, browsingSubspecialtyId).then(({ categoriesData, proceduresData }) => {
+      setCategories(categoriesData);
+      setProcedures(proceduresData || []);
+    });
+  }, [currentUser, browsingSubspecialtyId, fetchCategoriesAndProceduresForUser]);
 
-  if (loading) {
+  // Load available subspecialties for browsing dropdown
+  // Security: RLS policies ensure users only see subspecialties they have access to
+  const loadAvailableSubspecialties = useCallback(async () => {
+    try {
+      // Load all subspecialties - RLS will filter based on user permissions
+      const { data, error } = await supabase
+        .from('subspecialties')
+        .select('id, name, specialty_id, specialties!inner(name)')
+        .order('name');
+      
+      if (error) {
+        console.error('Error loading subspecialties:', error);
+        setAvailableSubspecialties([]);
+        return;
+      }
+      
+      // Security: Validate each subspecialty ID format
+      const validatedSubspecialties = (data || []).filter(sub => {
+        const uuidValidation = validateUuid(sub.id);
+        if (!uuidValidation.valid) {
+          console.warn('Invalid subspecialty ID format, skipping:', sub.id?.substring(0, 8) + '...');
+          return false;
+        }
+        return true;
+      });
+      
+      setAvailableSubspecialties(validatedSubspecialties);
+    } catch (error) {
+      console.error('Error loading subspecialties:', error);
+      setAvailableSubspecialties([]);
+    }
+  }, []);
+
+  // Handle browsing subspecialty change
+  // Security: Validates UUID format and reloads categories/resources
+  const handleBrowsingSubspecialtyChange = useCallback(async (subspecialtyId) => {
+    // Security: Validate UUID format
+    if (subspecialtyId !== null && subspecialtyId !== '') {
+      const uuidValidation = validateUuid(subspecialtyId);
+      if (!uuidValidation.valid) {
+        console.error('Invalid subspecialty ID format:', uuidValidation.error);
+        toast.error('Invalid subspecialty selection. Please try again.');
+        return;
+      }
+      
+      // Security: Verify subspecialty exists in available list (defense in depth)
+      const subspecialtyExists = availableSubspecialties.some(sub => sub.id === subspecialtyId);
+      if (!subspecialtyExists) {
+        console.warn('Subspecialty not found in available list:', subspecialtyId?.substring(0, 8) + '...');
+        toast.error('Subspecialty not available. Please select a different one.');
+        return;
+      }
+    }
+    
+    setBrowsingSubspecialtyId(subspecialtyId);
+    setSelectedCategoryId(null); // Clear category selection when switching subspecialties
+    
+    // Reload categories and procedures for the selected subspecialty
+    try {
+      const { categoriesData, proceduresData } = await fetchCategoriesAndProceduresForUser(currentUser, subspecialtyId);
+      setCategories(categoriesData);
+      setProcedures(proceduresData);
+      
+      // Show all resources for this subspecialty until user picks a category
+      setSelectedCategoryId(null);
+    } catch (error) {
+      console.error('Error loading categories for browsing subspecialty:', error);
+      toast.error('Error loading resources. Please try again.');
+    }
+  }, [currentUser, availableSubspecialties, fetchCategoriesAndProceduresForUser, toast]);
+
+  // Only show login screen if we have no user and loading is stuck
+  // Don't timeout if we already have a user - they're logged in!
+  const [forceShowLogin, setForceShowLogin] = useState(false);
+  useEffect(() => {
+    // If we have a user, never force login screen - they're already logged in
+    if (currentUser) {
+      setForceShowLogin(false);
+      return;
+    }
+    
+    // Only timeout if no user after 2 seconds (should be instant if no session)
+    if (loading) {
+      const timeout = setTimeout(() => {
+        console.warn('Loading timeout (2s) - showing login screen (no user found)');
+        setForceShowLogin(true);
+      }, 2000); // 2 seconds - should be instant if no session
+      return () => clearTimeout(timeout);
+    } else {
+      setForceShowLogin(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]); // Only depend on loading - currentUser check is inside
+
+  // Check if we're returning from OAuth (URL has hash fragments)
+  const [checkingOAuth, setCheckingOAuth] = useState(false);
+  useEffect(() => {
+    // Check if URL has OAuth callback parameters
+    const hashParams = window.location.hash;
+    if (hashParams && (hashParams.includes('access_token') || hashParams.includes('code'))) {
+      console.log('OAuth callback detected, waiting for session...');
+      setCheckingOAuth(true);
+      // Give Supabase time to process the OAuth callback
+      const timeout = setTimeout(() => {
+        setCheckingOAuth(false);
+      }, 3000); // Wait up to 3 seconds for session
+      return () => clearTimeout(timeout);
+    } else {
+      setCheckingOAuth(false);
+    }
+  }, []);
+
+  // Show loading if checking OAuth callback or still loading (but not if we're forcing login)
+  if ((loading || checkingOAuth) && !forceShowLogin) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center transition-colors">
         <div className="text-center">
           <div className="w-16 h-16 mx-auto mb-4 border-4 border-purple-600 border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-gray-600">Loading...</p>
+          <p className="text-gray-600 dark:text-gray-300">
+            {checkingOAuth ? 'Completing sign in...' : 'Loading...'}
+          </p>
         </div>
       </div>
     );
   }
 
-  if (!currentUser) {
-    return <LoginView onLogin={checkUser} />;
+  // Show login screen if no user AND (not loading OR forceShowLogin is true)
+  // Also check if currentUser exists but has no id (invalid user state)
+  if ((!currentUser || !currentUser.id) && (!loading || forceShowLogin)) {
+    return <LoginView onLogin={refreshSession} />;
+  }
+
+  if (showOnboarding && currentUser) {
+    return (
+      <div className="relative">
+        {/* Sign Out button for testing - top right corner */}
+        <button
+          onClick={async () => {
+            await signOut();
+            setForceShowLogin(true);
+          }}
+          className="absolute top-4 right-4 z-50 px-4 py-2 text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 bg-white dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors shadow-sm"
+          title="Sign out (for testing)"
+        >
+          Sign Out
+        </button>
+        <Onboarding
+          user={currentUser}
+          onComplete={handleOnboardingComplete}
+        />
+      </div>
+    );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="gradient-bg relative overflow-hidden">
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute top-0 left-1/4 w-96 h-96 bg-pink-500 rounded-full blur-3xl"></div>
-          <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-purple-500 rounded-full blur-3xl"></div>
-        </div>
-        
-        <div className="relative max-w-7xl mx-auto px-6 py-6">
-            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
-            <div>
-              <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">Surgical Techniques</h1>
-              <p className="text-purple-200 text-xs sm:text-sm mono">Educational Resource Hub</p>
-            </div>
-
-            <div className="flex flex-wrap gap-3 sm:gap-4 items-center">
-              <span className="text-white text-xs sm:text-sm">{currentUser.email}</span>
-              
-              {currentView === 'user' && (
-                <div className="flex gap-2 glass-dark rounded-full p-1">
-                  <button
-                    onClick={() => setCurrentView('user')}
-                    className="px-4 sm:px-6 py-1.5 sm:py-2 rounded-full font-medium bg-white text-purple-900 shadow-lg text-sm sm:text-base"
-                  >
-                    Browse
-                  </button>
-                  <button
-                    onClick={() => setCurrentView('admin')}
-                    className="px-4 sm:px-6 py-1.5 sm:py-2 rounded-full font-medium text-white hover:bg-white/10 transition-all text-sm sm:text-base"
-                  >
-                    Admin
-                  </button>
-                </div>
-              )}
-
-              {currentView === 'admin' && (
-                <div className="flex gap-2 glass-dark rounded-full p-1">
-                  <button
-                    onClick={() => setCurrentView('user')}
-                    className="px-4 sm:px-6 py-1.5 sm:py-2 rounded-full font-medium text-white hover:bg-white/10 transition-all text-sm sm:text-base"
-                  >
-                    Browse
-                  </button>
-                  <button
-                    onClick={() => setCurrentView('admin')}
-                    className="px-4 sm:px-6 py-1.5 sm:py-2 rounded-full font-medium bg-white text-purple-900 shadow-lg text-sm sm:text-base"
-                  >
-                    Admin
-                  </button>
-                </div>
-              )}
-
-              <button
-                onClick={async () => {
-                  await supabase.auth.signOut();
-                  setCurrentUser(null);
-                }}
-                className="flex items-center gap-2 px-4 py-2 text-white hover:bg-white/10 rounded-lg transition-colors"
-              >
-                <LogOut size={18} />
-                Sign Out
-              </button>
-            </div>
-          </div>
-        </div>
-      </header>
+    <ErrorBoundary>
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
+        {/* Header */}
+        <Header
+          currentUser={currentUser}
+          currentView={currentView}
+          onViewChange={setCurrentView}
+          showUpcomingCases={showUpcomingCases}
+          upcomingCasesCount={upcomingCases.length}
+          onToggleUpcomingCases={handleToggleUpcomingCases}
+          onSettingsClick={handleSettingsClick}
+          onSignOut={handleSignOut}
+        />
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-12">
-        {currentView === 'user' ? (
+        {currentView === VIEW_MODES.USER ? (
           <UserView 
-            resources={displayedResources}
-            favorites={favorites}
-            notes={notes}
+            resources={paginatedResources}
+            paginationTotal={displayedResources.length}
+            paginationPage={resourcesPage}
+            paginationTotalPages={paginationTotalPages}
+            onPaginationPrevious={() => setResourcesPage((p) => Math.max(1, p - 1))}
+            onPaginationNext={() => setResourcesPage((p) => Math.min(paginationTotalPages, p + 1))}
+            allResources={resources}
+            upcomingCases={upcomingCases}
+            showUpcomingCases={showUpcomingCases}
+            onToggleUpcomingCases={handleToggleUpcomingCases}
             showFavoritesOnly={showFavoritesOnly}
             searchTerm={searchTerm}
             categories={categories}
             selectedCategoryId={selectedCategoryId}
-            onToggleFavorites={() => setShowFavoritesOnly(!showFavoritesOnly)}
-            onSearchChange={setSearchTerm}
+            onToggleFavorites={handleToggleFavorites}
+            onSearchChange={handleSearchChange}
             onToggleFavorite={toggleFavorite}
+            onToggleUpcomingCase={toggleUpcomingCase}
+            onReorderUpcomingCases={reorderUpcomingCases}
             onUpdateNote={updateNote}
-            onSuggestResource={() => setShowSuggestForm(true)}
-            onCategorySelect={setSelectedCategoryId}
+            onSuggestResource={handleSuggestResourceClick}
+            onCategorySelect={handleCategorySelect}
             currentUser={currentUser}
+            isFavorited={isFavorited}
+            getNote={getNote}
+            availableSubspecialties={availableSubspecialties}
+            browsingSubspecialtyId={browsingSubspecialtyId}
+            onBrowsingSubspecialtyChange={handleBrowsingSubspecialtyChange}
+            isInUpcomingCases={isInUpcomingCases}
           />
-        ) : (
+        ) : isAdmin(currentUser) ? (
           <AdminView
             resources={resources}
             adminTab={adminTab}
             setAdminTab={setAdminTab}
-            onAddResource={() => setShowAddForm(true)}
-            onEditResource={(resource) => setEditingResource(resource)}
+            onAddResource={handleAddResourceClick}
+            onEditResource={handleEditResourceClick}
             onDeleteResource={handleDeleteResource}
-            onEditCategories={() => setShowCategoryManagement(true)}
+            onEditCategories={handleEditCategoriesClick}
+            onReorderResources={reorderResources}
             currentUser={currentUser}
+            suggestedResources={suggestedResources || []}
+            onShowSuggestedResources={handleShowSuggestedResourcesClick}
+            onApproveSuggestion={handleApproveSuggestion}
+            onRejectSuggestion={handleRejectSuggestion}
           />
+        ) : (
+          <div className="text-center py-12">
+            <p className="text-gray-600 dark:text-gray-300">You don't have permission to access admin mode.</p>
+            <button
+              onClick={handleReturnToBrowse}
+              className="mt-4 px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+            >
+              Return to Browse
+            </button>
+          </div>
         )}
+
+        {/* Disclaimer at bottom of page */}
+        <footer className="max-w-7xl mx-auto px-4 sm:px-6 py-6 mt-8 border-t border-gray-200 dark:border-gray-700">
+          <p className="text-xs text-gray-500 dark:text-gray-400 text-center max-w-2xl mx-auto">
+            Resources on this hub are for educational purposes only. They do not constitute medical advice. Always follow your institution&apos;s guidelines and applicable standards of care. Inclusion of a resource does not imply endorsement.
+          </p>
+        </footer>
       </main>
 
-      {/* Add Resource Modal */}
+      {/* Modals */}
       {showAddForm && (
         <AddResourceModal
           currentUser={currentUser}
@@ -663,7 +1457,6 @@ function SurgicalTechniquesApp() {
         />
       )}
 
-      {/* Suggest Resource Modal */}
       {showSuggestForm && (
         <SuggestResourceModal
           currentUser={currentUser}
@@ -672,7 +1465,6 @@ function SurgicalTechniquesApp() {
         />
       )}
 
-      {/* Edit Resource Modal */}
       {editingResource && (
         <EditResourceModal
           resource={editingResource}
@@ -682,3555 +1474,66 @@ function SurgicalTechniquesApp() {
         />
       )}
 
-      {/* Category Management Modal */}
+      {showSuggestedResources && (
+        <SuggestedResourcesModal
+          suggestions={suggestedResources}
+          onApprove={handleApproveSuggestion}
+          onReject={handleRejectSuggestion}
+          onUpdate={handleUpdateSuggestion}
+          onClose={() => setShowSuggestedResources(false)}
+          currentUser={currentUser}
+        />
+      )}
+
       {showCategoryManagement && (
         <CategoryManagementModal
           currentUser={currentUser}
-          onClose={() => {
-            setShowCategoryManagement(false);
-            // Reload categories after closing modal
-            if (currentUser?.subspecialtyId) {
-              supabase
-                .from('categories')
-                .select('*')
-                .eq('subspecialty_id', currentUser.subspecialtyId)
-                .order('order')
-                .then(({ data }) => {
-                  if (data) {
-                    setCategories(data);
-                    // Also reload procedures for filtering
-                    supabase
-                      .from('procedures')
-                      .select('*')
-                      .in('category_id', data.map(c => c.id))
-                      .then(({ data: proceduresData }) => {
-                        if (proceduresData) {
-                          setProcedures(proceduresData);
-                        }
-                      });
-                  }
-                });
+          onClose={handleCloseCategoryManagement}
+        />
+      )}
+
+      {showSettings && (
+        <SettingsModal
+          currentUser={currentUser}
+          darkMode={darkMode}
+          onDarkModeToggle={(enabled) => {
+            console.log('Dark mode toggle called with:', enabled);
+            setDarkMode(enabled);
+            localStorage.setItem('darkMode', enabled.toString());
+            // The useEffect will handle the classList update, but we can also do it immediately
+            if (enabled) {
+              document.documentElement.classList.add('dark');
+            } else {
+              document.documentElement.classList.remove('dark');
             }
           }}
-        />
-      )}
-    </div>
-  );
-}
-
-function LoginView({ onLogin }) {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  async function handleLogin(e) {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-
-    try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password
-      });
-
-      if (error) throw error;
-      onLogin();
-    } catch (error) {
-      setError(error.message);
-      setLoading(false);
-    }
-  }
-
-  return (
-    <div className="min-h-screen gradient-bg flex items-center justify-center p-4">
-      <div className="glass rounded-2xl p-8 max-w-md w-full shadow-2xl">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Surgical Techniques</h1>
-        <p className="text-gray-600 mb-8">Sign in to access the resource library</p>
-
-        <form onSubmit={handleLogin} className="space-y-4">
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">Email</label>
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors"
-              placeholder="your@email.com"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">Password</label>
-            <input
-              type="password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors"
-              placeholder="••••••••"
-            />
-          </div>
-
-          {error && (
-            <div className="bg-red-50 border-2 border-red-200 rounded-xl p-3 text-red-700 text-sm">
-              {error}
-            </div>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-medium glow-button disabled:opacity-50"
-          >
-            {loading ? 'Signing in...' : 'Sign In'}
-          </button>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-function UserView({ resources, favorites, notes, showFavoritesOnly, searchTerm, categories, selectedCategoryId, onToggleFavorites, onSearchChange, onToggleFavorite, onUpdateNote, onSuggestResource, onCategorySelect, currentUser }) {
-  // Organize categories hierarchically
-  const organizedCategories = useMemo(() => {
-    if (!categories || categories.length === 0) return [];
-    const topLevel = categories.filter(c => !c.parent_category_id).sort((a, b) => (a.order || 0) - (b.order || 0));
-    return topLevel.map(cat => ({
-      ...cat,
-      subcategories: categories
-        .filter(sc => sc.parent_category_id === cat.id)
-        .sort((a, b) => (a.order || 0) - (b.order || 0))
-    }));
-  }, [categories]);
-
-  const [expandedCategories, setExpandedCategories] = useState({});
-
-  return (
-    <div className="animate-slide-up">
-      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-8 gap-4">
-        <div>
-          <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">Resource Library</h2>
-          <p className="text-gray-600 text-sm sm:text-base">Curated surgical techniques and educational materials</p>
-        </div>
-        <div className="flex flex-col sm:flex-row gap-3">
-          <button
-            onClick={onSuggestResource}
-            className="flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 rounded-xl font-medium transition-all glass border hover:border-purple-300 text-purple-700 hover:bg-purple-50 text-sm sm:text-base"
-          >
-            <Plus size={18} />
-            <span>Suggest Resource</span>
-          </button>
-        <button
-          onClick={onToggleFavorites}
-            className={`flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 rounded-xl font-medium transition-all text-sm sm:text-base ${
-            showFavoritesOnly 
-                ? 'bg-gradient-to-r from-red-500 to-pink-500 text-white shadow-lg' 
-              : 'glass border hover:border-purple-300'
-          }`}
-        >
-            <Heart size={18} fill={showFavoritesOnly ? 'currentColor' : 'none'} />
-          <span>{showFavoritesOnly ? 'All Resources' : 'Favorites'}</span>
-        </button>
-        </div>
-      </div>
-
-      {/* Two-column layout: Categories on left, Search & Resources on right */}
-      <div className="flex flex-col lg:flex-row gap-6">
-        {/* Left Sidebar - Categories */}
-        <div className="w-full lg:w-64 flex-shrink-0">
-          <div className="glass rounded-2xl p-4 shadow-lg lg:sticky lg:top-4">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">Categories</h3>
-            {organizedCategories.length === 0 ? (
-              <p className="text-sm text-gray-500">No categories available</p>
-            ) : (
-              <div className="space-y-1">
-                <button
-                  onClick={() => onCategorySelect(null)}
-                  className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    selectedCategoryId === null
-                      ? 'bg-purple-100 text-purple-700 border-2 border-purple-300'
-                      : 'text-gray-700 hover:bg-gray-100'
-                  }`}
-                >
-                  All Categories
-                </button>
-                {organizedCategories.map(category => (
-                  <div key={category.id} className="space-y-1">
-                    <button
-                      onClick={() => onCategorySelect(category.id)}
-                      className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-between ${
-                        selectedCategoryId === category.id
-                          ? 'bg-purple-100 text-purple-700 border-2 border-purple-300'
-                          : 'text-gray-700 hover:bg-gray-100'
-                      }`}
-                    >
-                      <span>{category.name}</span>
-                      {category.subcategories && category.subcategories.length > 0 && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setExpandedCategories({
-                              ...expandedCategories,
-                              [category.id]: !expandedCategories[category.id]
-                            });
-                          }}
-                          className="text-xs"
-                        >
-                          {expandedCategories[category.id] ? '▼' : '▶'}
-                        </button>
-                      )}
-                    </button>
-                    {expandedCategories[category.id] && category.subcategories && category.subcategories.length > 0 && (
-                      <div className="ml-4 space-y-1">
-                        {category.subcategories.map(subcategory => (
-                          <button
-                            key={subcategory.id}
-                            onClick={() => onCategorySelect(subcategory.id)}
-                            className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-colors ${
-                              selectedCategoryId === subcategory.id
-                                ? 'bg-purple-100 text-purple-700 border-2 border-purple-300'
-                                : 'text-gray-600 hover:bg-gray-50'
-                            }`}
-                          >
-                            └─ {subcategory.name}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Right Side - Search & Resources */}
-        <div className="flex-1 min-w-0">
-      {/* Search */}
-      <div className="glass rounded-2xl p-6 mb-6 shadow-lg">
-        <div className="relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Search resources..."
-            className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors"
-          />
-        </div>
-      </div>
-
-      {/* Resources List */}
-      <div className="space-y-4">
-        {resources.length === 0 ? (
-          <div className="glass rounded-2xl p-16 text-center shadow-lg">
-            <div className="max-w-md mx-auto">
-              <div className="w-20 h-20 mx-auto mb-6 bg-gradient-to-br from-purple-100 to-pink-100 rounded-full flex items-center justify-center">
-                <FileText size={32} className="text-purple-600" />
-              </div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">
-                {showFavoritesOnly ? 'No favorites yet' : 'No resources found'}
-              </h3>
-              <p className="text-gray-600">
-                {showFavoritesOnly 
-                  ? 'Heart some resources to see them here!' 
-                  : 'Try adjusting your search or check back later!'}
-              </p>
-            </div>
-          </div>
-        ) : (
-          resources.map((resource, index) => (
-            <ResourceCard 
-              key={resource.id} 
-              resource={resource}
-              isFavorited={favorites.includes(resource.id)}
-              note={notes[resource.id]}
-              onToggleFavorite={onToggleFavorite}
-              onUpdateNote={onUpdateNote}
-              index={index}
-              currentUser={currentUser}
-            />
-          ))
-        )}
-      </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function AdminView({ resources, adminTab, setAdminTab, onAddResource, onEditResource, onDeleteResource, onEditCategories, currentUser }) {
-  const [searchTerm, setSearchTerm] = useState('');
-
-  const filteredResources = resources.filter(r => 
-    searchTerm === '' || 
-    r.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    r.description?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  return (
-    <div className="animate-slide-up">
-      <div className="mb-6 sm:mb-8">
-        <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">Admin Dashboard</h2>
-        <p className="text-sm sm:text-base text-gray-600">Manage content and view insights</p>
-      </div>
-
-      {/* Tabs */}
-      <div className="glass rounded-2xl p-1.5 sm:p-2 mb-6 sm:mb-8 shadow-lg inline-flex gap-1 sm:gap-2 w-full sm:w-auto">
-        <button
-          onClick={() => setAdminTab('resources')}
-          className={`flex-1 sm:flex-none px-4 sm:px-6 py-2.5 sm:py-3 rounded-xl text-sm sm:text-base font-medium transition-all ${
-            adminTab === 'resources' 
-              ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg' 
-              : 'text-gray-700 hover:bg-gray-100'
-          }`}
-        >
-          Resources
-        </button>
-        <button
-          onClick={() => setAdminTab('analytics')}
-          className={`flex items-center justify-center gap-2 flex-1 sm:flex-none px-4 sm:px-6 py-2.5 sm:py-3 rounded-xl text-sm sm:text-base font-medium transition-all ${
-            adminTab === 'analytics' 
-              ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg' 
-              : 'text-gray-700 hover:bg-gray-100'
-          }`}
-        >
-          <BarChart3 size={16} className="sm:w-[18px] sm:h-[18px]" />
-          <span className="hidden xs:inline">Analytics</span>
-          <span className="xs:hidden">Stats</span>
-        </button>
-      </div>
-
-      {/* Tab Content */}
-      {adminTab === 'resources' && (
-        <ResourcesManagement
-          resources={filteredResources}
-          searchTerm={searchTerm}
-          setSearchTerm={setSearchTerm}
-          onAddResource={onAddResource}
-          onEditResource={onEditResource}
-          onDeleteResource={onDeleteResource}
-          onEditCategories={onEditCategories}
+          onUpdateProfile={async (updates) => {
+            // Transform to match updateProfile signature
+            const result = await updateProfile({
+              specialtyId: updates.specialtyId,
+              subspecialtyId: updates.subspecialtyId,
+            });
+            return result;
+          }}
+          onClose={() => setShowSettings(false)}
         />
       )}
 
-      {adminTab === 'analytics' && (
-        <AnalyticsDashboard resources={resources} />
+      {/* Confirmation Dialog */}
+      {confirmDialog && (
+        <ConfirmDialog
+          isOpen={confirmDialog.isOpen}
+          title={confirmDialog.title}
+          message={confirmDialog.message}
+          confirmText={confirmDialog.confirmText}
+          cancelText={confirmDialog.cancelText}
+          variant={confirmDialog.variant}
+          onConfirm={confirmDialog.onConfirm}
+          onCancel={confirmDialog.onCancel}
+        />
       )}
-    </div>
-  );
-}
-
-function ResourcesManagement({ resources, searchTerm, setSearchTerm, onAddResource, onEditResource, onDeleteResource, onEditCategories }) {
-  return (
-    <>
-      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-4 sm:mb-6 gap-4">
-        <div>
-          <h3 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">Manage Resources</h3>
-          <p className="text-sm sm:text-base text-gray-600">Add, edit, or remove resources from the library</p>
-        </div>
-        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
-          <button
-            onClick={onEditCategories}
-            className="flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 glass border-2 border-purple-300 text-purple-700 rounded-xl text-sm sm:text-base font-medium hover:bg-purple-50 transition-colors"
-          >
-            <Edit size={18} className="sm:w-5 sm:h-5" />
-            <span className="hidden sm:inline">Edit Categories</span>
-            <span className="sm:hidden">Categories</span>
-          </button>
-          <button
-            onClick={onAddResource}
-            className="flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 sm:py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl text-sm sm:text-base font-medium glow-button"
-          >
-            <Plus size={18} className="sm:w-5 sm:h-5" />
-            Add Resource
-          </button>
-        </div>
       </div>
-
-      {/* Search */}
-      <div className="glass rounded-2xl p-4 sm:p-6 mb-4 sm:mb-6 shadow-lg">
-        <div className="relative">
-          <Search className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search resources..."
-            className="w-full pl-10 sm:pl-12 pr-4 py-2.5 sm:py-3 border-2 border-gray-200 rounded-xl text-sm sm:text-base focus:border-purple-500 focus:outline-none transition-colors"
-          />
-        </div>
-      </div>
-
-      {/* Resources List */}
-      <div className="space-y-3 sm:space-y-4">
-        {resources.length === 0 ? (
-          <div className="glass rounded-2xl p-8 sm:p-16 text-center shadow-lg">
-            <div className="max-w-md mx-auto">
-              <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-4 sm:mb-6 bg-gradient-to-br from-purple-100 to-pink-100 rounded-full flex items-center justify-center">
-                <FileText size={24} className="text-purple-600 sm:w-8 sm:h-8" />
-              </div>
-              <h3 className="text-lg sm:text-xl font-semibold text-gray-900 mb-2">No resources found</h3>
-              <p className="text-sm sm:text-base text-gray-600">Click "Add Resource" to get started!</p>
-            </div>
-          </div>
-        ) : (
-          resources.map((resource, index) => (
-            <AdminResourceCard
-              key={resource.id}
-              resource={resource}
-              onEdit={onEditResource}
-              onDelete={onDeleteResource}
-              index={index}
-            />
-          ))
-        )}
-      </div>
-    </>
-  );
-}
-
-function AnalyticsDashboard({ resources }) {
-  const [analyticsData, setAnalyticsData] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    loadAnalytics();
-  }, []);
-
-  async function loadAnalytics() {
-    try {
-      // Load recent view counts
-      const { data: views } = await supabase
-        .from('resource_views')
-        .select('resource_id, view_duration_seconds, completed')
-        .gte('viewed_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()); // Last 30 days
-
-      // Load favorite events
-      const { data: favoriteEvents } = await supabase
-        .from('favorite_events')
-        .select('resource_id, time_to_favorite_hours, view_count_before_favorite');
-
-      // Aggregate by resource
-      const resourceStats = {};
-      
-      views?.forEach(view => {
-        if (!resourceStats[view.resource_id]) {
-          resourceStats[view.resource_id] = {
-            viewCount: 0,
-            totalDuration: 0,
-            completions: 0
-          };
-        }
-        resourceStats[view.resource_id].viewCount++;
-        resourceStats[view.resource_id].totalDuration += view.view_duration_seconds || 0;
-        if (view.completed) resourceStats[view.resource_id].completions++;
-      });
-
-      favoriteEvents?.forEach(event => {
-        if (!resourceStats[event.resource_id]) {
-          resourceStats[event.resource_id] = { viewCount: 0, totalDuration: 0, completions: 0 };
-        }
-        resourceStats[event.resource_id].favoriteCount = (resourceStats[event.resource_id].favoriteCount || 0) + 1;
-        resourceStats[event.resource_id].avgTimeToFavorite = event.time_to_favorite_hours;
-      });
-
-      setAnalyticsData(resourceStats);
-      setLoading(false);
-    } catch (error) {
-      console.error('Error loading analytics:', error);
-      setLoading(false);
-    }
-  }
-
-  if (loading) {
-    return (
-      <div className="glass rounded-2xl p-16 text-center shadow-lg">
-        <div className="w-16 h-16 mx-auto mb-4 border-4 border-purple-600 border-t-transparent rounded-full animate-spin"></div>
-        <p className="text-gray-600">Loading analytics...</p>
-      </div>
-    );
-  }
-
-  // Get top resources
-  const topResources = resources
-    .map(r => ({
-      ...r,
-      stats: analyticsData?.[r.id] || { viewCount: 0, totalDuration: 0, completions: 0, favoriteCount: 0 }
-    }))
-    .sort((a, b) => b.stats.viewCount - a.stats.viewCount)
-    .slice(0, 10);
-
-  const totalViews = Object.values(analyticsData || {}).reduce((sum, stats) => sum + stats.viewCount, 0);
-  const totalFavorites = Object.values(analyticsData || {}).reduce((sum, stats) => sum + (stats.favoriteCount || 0), 0);
-  const avgEngagement = totalViews > 0 
-    ? Object.values(analyticsData || {}).reduce((sum, stats) => sum + stats.totalDuration, 0) / totalViews / 60
-    : 0;
-
-  return (
-    <div className="space-y-6">
-      {/* Summary Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="glass rounded-2xl p-6 shadow-lg">
-          <div className="flex items-center justify-between mb-2">
-            <h4 className="text-sm font-semibold text-gray-600">Total Views (30d)</h4>
-            <TrendingUp size={20} className="text-purple-600" />
-          </div>
-          <p className="text-3xl font-bold text-gray-900">{totalViews}</p>
-          <p className="text-sm text-gray-500 mt-1">Across all resources</p>
-        </div>
-
-        <div className="glass rounded-2xl p-6 shadow-lg">
-          <div className="flex items-center justify-between mb-2">
-            <h4 className="text-sm font-semibold text-gray-600">Total Favorites</h4>
-            <Heart size={20} className="text-red-500" fill="currentColor" />
-          </div>
-          <p className="text-3xl font-bold text-gray-900">{totalFavorites}</p>
-          <p className="text-sm text-gray-500 mt-1">Learning signals</p>
-        </div>
-
-        <div className="glass rounded-2xl p-6 shadow-lg">
-          <div className="flex items-center justify-between mb-2">
-            <h4 className="text-sm font-semibold text-gray-600">Avg Time Spent</h4>
-            <BarChart3 size={20} className="text-blue-600" />
-          </div>
-          <p className="text-3xl font-bold text-gray-900">{avgEngagement.toFixed(1)}m</p>
-          <p className="text-sm text-gray-500 mt-1">Per resource view</p>
-        </div>
-      </div>
-
-      {/* Top Resources */}
-      <div className="glass rounded-2xl p-6 shadow-lg">
-        <h3 className="text-xl font-bold text-gray-900 mb-4">Top Resources (Last 30 Days)</h3>
-        <div className="space-y-3">
-          {topResources.map((resource, index) => (
-            <div key={resource.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
-              <div className="flex items-center gap-4 flex-1">
-                <span className="text-2xl font-bold text-gray-300">#{index + 1}</span>
-                <div className="flex-1">
-                  <h4 className="font-semibold text-gray-900">{resource.title}</h4>
-                  <p className="text-sm text-gray-600">
-                    {resource.stats.viewCount} views • 
-                    {resource.stats.favoriteCount || 0} favorites • 
-                    {(resource.stats.totalDuration / 60 / (resource.stats.viewCount || 1)).toFixed(1)}m avg
-                  </p>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Note about privacy */}
-      <div className="glass rounded-2xl p-6 shadow-lg border-l-4 border-purple-500">
-        <h4 className="font-semibold text-gray-900 mb-2">🔒 Privacy & Trust</h4>
-        <p className="text-sm text-gray-600">
-          All analytics are aggregated and de-identified. Individual surgeon behavior is never tracked or shared. 
-          Industry reports require minimum cohort size of N=10 surgeons.
-        </p>
-      </div>
-    </div>
-  );
-}
-
-// Continue in next message due to length...
-
-function ResourceCard({ resource, isFavorited, note, onToggleFavorite, onUpdateNote, index, currentUser }) {
-  const [showNoteInput, setShowNoteInput] = useState(false);
-  const [noteText, setNoteText] = useState(note || '');
-  const [viewTracked, setViewTracked] = useState(false);
-  const [rating, setRating] = useState(null); // Current user's rating (private)
-  const [hoveredStar, setHoveredStar] = useState(0);
-  const [loadingRating, setLoadingRating] = useState(false);
-
-  // Track view when card is visible
-  useEffect(() => {
-    if (!viewTracked && resource.id) {
-      trackResourceCoview(resource.id);
-      setViewTracked(true);
-    }
-  }, [resource.id, viewTracked]);
-
-  // Load ratings
-  useEffect(() => {
-    if (!resource.id) return;
-    
-    async function loadRatings() {
-      try {
-        // Load average rating and count
-        // Load current user's rating (private, only visible to this user)
-        if (currentUser?.id) {
-          const { data: userRating, error: userError } = await supabase
-            .from('resource_ratings')
-            .select('rating')
-            .eq('resource_id', resource.id)
-            .eq('user_id', currentUser.id)
-            .single();
-
-          if (userError && userError.code !== 'PGRST116') throw userError; // PGRST116 = no rows returned
-          
-          if (userRating) {
-            setRating(userRating.rating);
-          }
-        }
-      } catch (error) {
-        console.error('Error loading ratings:', error);
-      }
-    }
-
-    loadRatings();
-  }, [resource.id, currentUser?.id]);
-
-  async function handleRateResource(starRating) {
-    if (!currentUser?.id || loadingRating) return;
-
-    try {
-      setLoadingRating(true);
-      
-      // Check if user already rated
-      const { data: existingRating, error: checkError } = await supabase
-        .from('resource_ratings')
-        .select('id')
-        .eq('resource_id', resource.id)
-        .eq('user_id', currentUser.id)
-        .single();
-
-      if (existingRating) {
-        // Update existing rating
-        const { error: updateError } = await supabase
-          .from('resource_ratings')
-          .update({ rating: starRating })
-          .eq('id', existingRating.id);
-
-        if (updateError) throw updateError;
-      } else {
-        // Insert new rating
-        const { error: insertError } = await supabase
-          .from('resource_ratings')
-          .insert([{
-            resource_id: resource.id,
-            user_id: currentUser.id,
-            rating: starRating
-          }]);
-
-        if (insertError) throw insertError;
-      }
-
-      setRating(starRating);
-    } catch (error) {
-      console.error('Error rating resource:', error);
-      alert('Error submitting rating: ' + error.message);
-    } finally {
-      setLoadingRating(false);
-    }
-  }
-
-  const getTypeIcon = () => {
-    switch(resource.resource_type) {
-      case 'video': return <Video size={20} />;
-      case 'pdf': return <FileText size={20} />;
-      case 'article': return <FileText size={20} />;
-      default: return <Link size={20} />;
-    }
-  };
-
-  const getTypeColor = () => {
-    switch(resource.resource_type) {
-      case 'video': return 'from-red-500 to-pink-500';
-      case 'pdf': return 'from-blue-500 to-cyan-500';
-      case 'article': return 'from-green-500 to-emerald-500';
-      default: return 'from-gray-500 to-slate-500';
-    }
-  };
-
-  const getTypeLabel = () => {
-    switch(resource.resource_type) {
-      case 'pdf': return 'PDF / Guide';
-      default: return resource.resource_type;
-    }
-  };
-
-  const handleSaveNote = () => {
-    onUpdateNote(resource.id, noteText);
-    setShowNoteInput(false);
-  };
-
-  const formatDuration = (seconds) => {
-    if (!seconds) return '';
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
-    
-    if (hours > 0) {
-      return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-    }
-    return `${minutes}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  return (
-    <div 
-      className={`glass rounded-2xl p-6 shadow-lg card-hover animate-slide-up ${
-        resource.is_sponsored ? 'border-l-4 border-yellow-400' : ''
-      }`}
-      style={{ animationDelay: `${index * 0.1}s` }}
-    >
-      <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
-        {/* Image - Smaller on mobile (96px), full size on desktop (192px) */}
-        <div className="w-24 h-24 sm:w-48 sm:h-48 flex-shrink-0 rounded-xl overflow-hidden bg-gray-100 mx-auto sm:mx-0" style={{ aspectRatio: '1/1' }}>
-          {resource.image_url ? (
-          <img 
-            src={resource.image_url} 
-            alt={resource.title}
-            className="w-full h-full object-cover"
-              style={{ aspectRatio: '1/1' }}
-              loading="lazy"
-          />
-          ) : (
-            <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center" style={{ aspectRatio: '1/1' }}>
-              <FileText size={24} className="text-gray-400 sm:text-gray-400 text-sm sm:text-base" />
-        </div>
-      )}
-        </div>
-
-        {/* Content */}
-        <div className="flex-1">
-          {/* Badges */}
-          <div className="flex gap-2 mb-3">
-        {resource.is_sponsored && (
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-700 text-xs font-medium">
-            <Sparkles size={12} />
-            <span className="mono">Sponsored</span>
-          </div>
-        )}
-            <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-gradient-to-r ${getTypeColor()} text-white text-sm font-medium`}>
-          {getTypeIcon()}
-          <span className="capitalize">{getTypeLabel()}</span>
-              {resource.resource_type === 'video' && resource.duration_seconds && (
-                <span className="ml-2 text-xs bg-white/20 px-2 py-0.5 rounded">
-                  {formatDuration(resource.duration_seconds)}
-                </span>
-              )}
-            </div>
-        </div>
-
-          <h4 className="font-bold text-xl text-gray-900 mb-2">{resource.title}</h4>
-          <p className="text-gray-600 mb-3">{resource.description}</p>
-          
-          <a 
-            href={resource.url} 
-            target="_blank" 
-            rel="noopener noreferrer" 
-            className="text-purple-600 hover:text-purple-700 text-sm break-all flex items-center gap-1 mb-4"
-          >
-            <span>{resource.url}</span>
-            <ArrowRight size={14} />
-          </a>
-
-        {/* Personal Rating (Private - only visible to this user) */}
-        {currentUser && (
-          <div className="mb-4">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-xs font-semibold text-gray-700">My Rating:</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-0.5">
-                {[1, 2, 3, 4, 5].map((star) => {
-                  const isFilled = hoveredStar ? star <= hoveredStar : (rating ? star <= rating : false);
-                  return (
-                    <button
-                      key={star}
-                      onClick={() => handleRateResource(star)}
-                      onMouseEnter={() => setHoveredStar(star)}
-                      onMouseLeave={() => setHoveredStar(0)}
-                      disabled={loadingRating}
-                      className="focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <Star 
-                        size={18} 
-                        fill={isFilled ? '#FBBF24' : 'none'} 
-                        stroke={isFilled ? '#FBBF24' : '#D1D5DB'} 
-                        className={`transition-colors ${!loadingRating && currentUser ? 'hover:scale-110' : ''}`}
-                      />
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Note Display */}
-        {note && !showNoteInput && (
-          <div className="mb-4 p-3 bg-gradient-to-r from-yellow-50 to-orange-50 border border-yellow-200 rounded-xl">
-            <div className="flex justify-between items-start gap-2">
-              <p className="text-gray-700 text-sm flex-1">{note}</p>
-              <button
-                onClick={() => {
-                  setNoteText(note);
-                  setShowNoteInput(true);
-                }}
-                className="text-purple-600 hover:text-purple-700 transition-colors"
-              >
-                <Edit size={14} />
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Note Input */}
-        {showNoteInput && (
-          <div className="mb-4">
-            <textarea
-              value={noteText}
-              onChange={(e) => setNoteText(e.target.value)}
-              placeholder="Add your personal note..."
-              className="w-full p-3 border-2 border-purple-200 rounded-xl text-sm focus:border-purple-500 focus:outline-none transition-colors"
-              rows="3"
-            />
-            <div className="flex gap-2 mt-2">
-              <button
-                onClick={handleSaveNote}
-                className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg text-sm font-medium hover:shadow-lg transition-all"
-              >
-                Save
-              </button>
-              <button
-                onClick={() => {
-                  setShowNoteInput(false);
-                  setNoteText(note || '');
-                }}
-                className="px-4 py-2 border-2 border-gray-200 rounded-lg text-sm font-medium text-gray-900 hover:bg-gray-50 transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Actions */}
-        <div className="flex items-center justify-end pt-4 border-t border-gray-100">
-          <div className="flex gap-2">
-            <button
-              onClick={() => setShowNoteInput(!showNoteInput)}
-              className={`p-2.5 rounded-lg transition-all ${
-                note 
-                  ? 'bg-yellow-100 text-yellow-600 hover:bg-yellow-200' 
-                  : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-              }`}
-              title={note ? 'Edit note' : 'Add note'}
-            >
-              <StickyNote size={18} fill={note ? 'currentColor' : 'none'} />
-            </button>
-            <button
-              onClick={() => onToggleFavorite(resource.id)}
-              className={`p-2.5 rounded-lg transition-all ${
-                isFavorited 
-                  ? 'bg-red-100 text-red-500 hover:bg-red-200' 
-                  : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-              }`}
-              title={isFavorited ? 'Remove from favorites' : 'Add to favorites'}
-            >
-              <Heart size={18} fill={isFavorited ? 'currentColor' : 'none'} />
-            </button>
-          </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function AdminResourceCard({ resource, onEdit, onDelete, index }) {
-  const getTypeIcon = () => {
-    switch(resource.resource_type) {
-      case 'video': return <Video size={20} />;
-      case 'pdf': return <FileText size={20} />;
-      case 'article': return <FileText size={20} />;
-      default: return <Link size={20} />;
-    }
-  };
-
-  const getTypeColor = () => {
-    switch(resource.resource_type) {
-      case 'video': return 'from-red-500 to-pink-500';
-      case 'pdf': return 'from-blue-500 to-cyan-500';
-      case 'article': return 'from-green-500 to-emerald-500';
-      default: return 'from-gray-500 to-slate-500';
-    }
-  };
-
-  const getTypeLabel = () => {
-    switch(resource.resource_type) {
-      case 'pdf': return 'PDF / Guide';
-      default: return resource.resource_type;
-    }
-  };
-
-  return (
-    <div 
-      className={`glass rounded-2xl p-4 sm:p-6 shadow-lg card-hover animate-slide-up ${
-        resource.is_sponsored ? 'border-l-4 border-yellow-400' : ''
-      }`}
-      style={{ animationDelay: `${index * 0.05}s` }}
-    >
-      <div className="flex flex-col sm:flex-row gap-4 sm:gap-6">
-        {/* Image - Smaller on mobile (96px), full size on desktop (192px) - Square */}
-        <div className="w-24 h-24 sm:w-48 sm:h-48 flex-shrink-0 rounded-xl overflow-hidden bg-gray-100 mx-auto sm:mx-0" style={{ aspectRatio: '1/1' }}>
-          {resource.image_url ? (
-            <img 
-              src={resource.image_url} 
-              alt={resource.title}
-              className="w-full h-full object-cover"
-              style={{ aspectRatio: '1/1' }}
-              loading="lazy"
-            />
-          ) : (
-            <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center" style={{ aspectRatio: '1/1' }}>
-              <FileText size={20} className="text-gray-400 sm:text-gray-400" />
-            </div>
-          )}
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 min-w-0">
-          {/* Badges */}
-          <div className="flex flex-wrap gap-2 mb-3">
-            {resource.is_sponsored && (
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-700 text-xs font-medium">
-                <Sparkles size={12} />
-                <span className="mono">Sponsored</span>
-              </div>
-            )}
-            <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-gradient-to-r ${getTypeColor()} text-white text-xs sm:text-sm font-medium`}>
-              {getTypeIcon()}
-              <span className="capitalize">{getTypeLabel()}</span>
-            </div>
-          </div>
-
-          <h4 className="font-bold text-lg sm:text-xl text-gray-900 mb-2 break-words">{resource.title}</h4>
-          <p className="text-gray-600 mb-3 text-sm sm:text-base break-words">{resource.description}</p>
-          
-          <a 
-            href={resource.url} 
-            target="_blank" 
-            rel="noopener noreferrer" 
-            className="text-purple-600 hover:text-purple-700 text-xs sm:text-sm break-all flex items-center gap-1 mb-4"
-          >
-            <span className="truncate">{resource.url}</span>
-            <ArrowRight size={14} className="flex-shrink-0" />
-          </a>
-
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={() => onEdit(resource)}
-              className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-purple-100 text-purple-700 rounded-lg text-sm sm:text-base font-medium hover:bg-purple-200 transition-colors"
-            >
-              <Edit size={16} />
-              Edit
-            </button>
-            <button
-              onClick={() => onDelete(resource.id)}
-              className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-red-100 text-red-700 rounded-lg text-sm sm:text-base font-medium hover:bg-red-200 transition-colors"
-            >
-              <Trash2 size={16} />
-              Delete
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function AddResourceModal({ currentUser, onSubmit, onClose }) {
-  const [formData, setFormData] = useState({
-    title: '',
-    url: '',
-    type: 'video',
-    description: '',
-    duration_seconds: null,
-    keywords: ''
-  });
-  const [durationHours, setDurationHours] = useState('');
-  const [durationMinutes, setDurationMinutes] = useState('');
-  const [durationSeconds, setDurationSeconds] = useState('');
-  const [imageFile, setImageFile] = useState(null);
-  const [imagePreview, setImagePreview] = useState(null);
-  const [processingImage, setProcessingImage] = useState(false);
-  const [imageError, setImageError] = useState('');
-  const [isDragging, setIsDragging] = useState(false);
-  
-  // Specialty/Subspecialty/Category selection (Procedure removed per user request)
-  const [specialties, setSpecialties] = useState([]);
-  const [subspecialties, setSubspecialties] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [selectedSpecialty, setSelectedSpecialty] = useState(null);
-  const [selectedSubspecialty, setSelectedSubspecialty] = useState(null);
-  const [selectedCategory, setSelectedCategory] = useState(null);
-  const [canEditSpecialty, setCanEditSpecialty] = useState(false);
-  const [loadingData, setLoadingData] = useState(true);
-  const [showNewCategoryInput, setShowNewCategoryInput] = useState(false);
-  const [newCategoryName, setNewCategoryName] = useState('');
-  const [addingCategory, setAddingCategory] = useState(false);
-  const isInitialLoad = useRef(true);
-
-  // Initialize with user's specialty/subspecialty
-  useEffect(() => {
-    loadInitialData();
-  }, [currentUser]);
-
-  useEffect(() => {
-    if (selectedSpecialty && !isInitialLoad.current) {
-      loadSubspecialties(selectedSpecialty);
-    }
-  }, [selectedSpecialty]);
-
-  useEffect(() => {
-    if (selectedSubspecialty && !isInitialLoad.current) {
-      loadCategories(selectedSubspecialty);
-    }
-  }, [selectedSubspecialty]);
-
-
-  async function loadInitialData() {
-    try {
-      setLoadingData(true);
-      setImageError(''); // Clear any previous errors
-      
-      // Load all specialties
-      const { data: specialtiesData, error: specialtiesError } = await supabase
-        .from('specialties')
-        .select('*')
-        .order('order');
-      
-      if (specialtiesError) {
-        throw new Error(`Failed to load specialties: ${specialtiesError.message}`);
-      }
-      
-      setSpecialties(specialtiesData || []);
-
-      // Pre-populate with user's specialty/subspecialty if available
-      if (currentUser?.specialtyId) {
-        // Load subspecialties for this specialty first
-        const { data: subspecialtiesData, error: subspecialtiesError } = await supabase
-          .from('subspecialties')
-          .select('*')
-          .eq('specialty_id', currentUser.specialtyId)
-          .order('order');
-        
-        if (subspecialtiesError) {
-          throw new Error(`Failed to load subspecialties: ${subspecialtiesError.message}`);
-        }
-        
-        setSubspecialties(subspecialtiesData || []);
-        
-        // Now set the specialty (this will trigger useEffect, but we've already loaded subspecialties)
-        setSelectedSpecialty(String(currentUser.specialtyId));
-        
-        if (currentUser?.subspecialtyId) {
-          // Load categories for the subspecialty first
-          const { data: categoriesData, error: categoriesError } = await supabase
-            .from('categories')
-            .select('*')
-            .eq('subspecialty_id', currentUser.subspecialtyId)
-            .is('parent_category_id', null)
-            .order('order');
-          
-          if (categoriesError) {
-            throw new Error(`Failed to load categories: ${categoriesError.message}`);
-          }
-          
-          setCategories(categoriesData || []);
-          
-          // Now set the subspecialty (this will trigger useEffect, but we've already loaded categories)
-          setSelectedSubspecialty(String(currentUser.subspecialtyId));
-        }
-      }
-      
-      // Mark initial load as complete
-      isInitialLoad.current = false;
-    } catch (error) {
-      console.error('Error loading initial data:', error);
-      const errorMessage = error.message || 'Unknown error occurred';
-      setImageError(`Error loading form data: ${errorMessage}`);
-      alert(`Error loading form data:\n\n${errorMessage}\n\nPlease check the browser console for more details.`);
-    } finally {
-      setLoadingData(false);
-      isInitialLoad.current = false;
-    }
-  }
-
-  async function loadSubspecialties(specialtyId) {
-    if (!specialtyId) return;
-    const { data } = await supabase
-      .from('subspecialties')
-      .select('*')
-      .eq('specialty_id', specialtyId)
-      .order('order');
-    
-    setSubspecialties(data || []);
-    // Only clear if specialty actually changed (not on initial load)
-    if (selectedSpecialty && selectedSpecialty !== String(specialtyId)) {
-      setSelectedCategory(null);
-    }
-  }
-
-  async function loadCategories(subspecialtyId) {
-    const { data } = await supabase
-      .from('categories')
-      .select('*')
-      .eq('subspecialty_id', subspecialtyId)
-      .is('parent_category_id', null) // Top-level categories only for now
-      .order('order');
-    
-    setCategories(data || []);
-  }
-
-
-  const handleSpecialtyChange = (specialtyId) => {
-    setSelectedSpecialty(specialtyId);
-    setSelectedSubspecialty(null);
-    setSelectedCategory(null);
-    setSelectedSubcategory(null);
-    setSubcategories([]);
-    loadSubspecialties(specialtyId);
-  };
-
-  const handleSubspecialtyChange = (subspecialtyId) => {
-    setSelectedSubspecialty(subspecialtyId);
-    setSelectedCategory(null);
-    setSelectedSubcategory(null);
-    setSubcategories([]);
-    loadCategories(subspecialtyId);
-  };
-
-  const handleCategoryChange = (categoryId) => {
-    if (categoryId === 'add_new') {
-      setShowNewCategoryInput(true);
-      setSelectedCategory(null);
-      return;
-    }
-    setShowNewCategoryInput(false);
-    setSelectedCategory(categoryId);
-  };
-
-  async function handleAddNewCategory() {
-    if (!newCategoryName.trim() || !selectedSubspecialty) return;
-
-    try {
-      setAddingCategory(true);
-      const maxOrder = categories.length > 0 
-        ? Math.max(...categories.map(c => c.order || 0)) 
-        : 0;
-
-      const { data, error } = await supabase
-        .from('categories')
-        .insert([{
-          name: newCategoryName.trim(),
-          subspecialty_id: selectedSubspecialty,
-          parent_category_id: null,
-          order: maxOrder + 1,
-          depth: 0
-        }])
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      setCategories([...categories, data]);
-      setSelectedCategory(data.id);
-      setShowNewCategoryInput(false);
-      setNewCategoryName('');
-    } catch (error) {
-      console.error('Error adding category:', error);
-      alert('Error adding category: ' + error.message);
-    } finally {
-      setAddingCategory(false);
-    }
-  }
-
-
-  const processImageFile = async (file) => {
-    if (!file) {
-      setImageFile(null);
-      setImagePreview(null);
-      setImageError('');
-      return;
-    }
-
-    // Validate file
-    const validation = validateImageFile(file);
-    if (!validation.valid) {
-      setImageError(validation.error);
-      setImageFile(null);
-      setImagePreview(null);
-      return;
-    }
-
-    setImageError('');
-    setProcessingImage(true);
-
-    try {
-      // Process image (resize and compress)
-      const processedFile = await processResourceImage(file);
-      setImageFile(processedFile);
-      
-      // Create preview from processed file
-      const preview = await createImagePreview(processedFile);
-      setImagePreview(preview);
-    } catch (error) {
-      setImageError(error.message);
-      setImageFile(null);
-      setImagePreview(null);
-    } finally {
-      setProcessingImage(false);
-    }
-  };
-
-  const handleImageChange = async (e) => {
-    const file = e.target.files[0];
-    await processImageFile(file);
-  };
-
-  const handleDragEnter = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(true);
-  };
-
-  const handleDragLeave = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-  };
-
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-  };
-
-  const handleDrop = async (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-
-    const file = e.dataTransfer.files[0];
-    if (file && file.type.startsWith('image/')) {
-      await processImageFile(file);
-    } else {
-      setImageError('Please drop an image file');
-    }
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    
-    if (!imageFile) {
-      setImageError('Image is required');
-      return;
-    }
-
-    setImageError('');
-    // Include category_id in the submission
-    onSubmit({ ...formData, category_id: selectedCategory }, imageFile);
-  };
-
-  if (!currentUser) {
-    return (
-      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-        <div className="glass rounded-2xl max-w-2xl w-full p-8 shadow-2xl">
-          <p className="text-gray-600">Loading user data...</p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-slide-up">
-      <div className="glass rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
-        <div className="p-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Add New Resource</h2>
-          <p className="text-gray-600 mb-6">Add a surgical technique resource to the library</p>
-          
-          {imageError && (
-            <div className="mb-4 p-4 bg-red-50 border-2 border-red-200 rounded-xl">
-              <p className="text-sm text-red-700 font-medium">{imageError}</p>
-            </div>
-          )}
-          
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Specialty/Subspecialty Selection */}
-            <div className="bg-purple-50 rounded-xl p-4 border-2 border-purple-200">
-              <div className="flex items-center justify-between mb-3">
-                <label className="block text-sm font-semibold text-gray-700">
-                  Specialty & Subspecialty
-                </label>
-                {!canEditSpecialty && (selectedSpecialty || selectedSubspecialty) && (
-                  <button
-                    type="button"
-                    onClick={() => setCanEditSpecialty(true)}
-                    className="text-xs px-3 py-1.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-                  >
-                    <Edit size={12} className="inline mr-1" />
-                    Edit
-                  </button>
-                )}
-              </div>
-              
-              {loadingData ? (
-                <p className="text-sm text-gray-500">Loading...</p>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Specialty */}
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1.5">Specialty</label>
-                    <select
-                      value={selectedSpecialty || ''}
-                      onChange={(e) => handleSpecialtyChange(e.target.value)}
-                      disabled={!canEditSpecialty && !!selectedSpecialty}
-                      className="w-full px-3 py-2 text-sm bg-white text-gray-900 border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none transition-colors disabled:bg-gray-100 disabled:text-gray-700 disabled:cursor-not-allowed"
-                      required
-                    >
-                      <option value="">Select specialty...</option>
-                      {specialties.map(s => (
-                        <option key={s.id} value={s.id}>{s.name}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Subspecialty */}
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1.5">Subspecialty</label>
-                    <select
-                      value={selectedSubspecialty || ''}
-                      onChange={(e) => handleSubspecialtyChange(e.target.value)}
-                      disabled={(!canEditSpecialty && !!selectedSubspecialty) || !selectedSpecialty}
-                      className="w-full px-3 py-2 text-sm bg-white text-gray-900 border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none transition-colors disabled:bg-gray-100 disabled:text-gray-700 disabled:cursor-not-allowed"
-                      required
-                    >
-                      <option value="">Select subspecialty...</option>
-                      {subspecialties.map(s => (
-                        <option key={s.id} value={s.id}>{s.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Category Selection */}
-            {selectedSubspecialty && (
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Category *</label>
-                {showNewCategoryInput ? (
-                  <div className="space-y-2">
-                    <input
-                      type="text"
-                      value={newCategoryName}
-                      onChange={(e) => setNewCategoryName(e.target.value)}
-                      onKeyPress={(e) => e.key === 'Enter' && handleAddNewCategory()}
-                      placeholder="Enter new category name..."
-                      className="w-full px-4 py-3 border-2 border-purple-500 rounded-xl focus:border-purple-600 focus:outline-none transition-colors"
-                      autoFocus
-                    />
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={handleAddNewCategory}
-                        disabled={addingCategory || !newCategoryName.trim()}
-                        className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {addingCategory ? 'Adding...' : 'Add'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowNewCategoryInput(false);
-                          setNewCategoryName('');
-                        }}
-                        className="px-4 py-2 border-2 border-gray-200 rounded-lg font-medium text-gray-900 hover:bg-gray-50 transition-colors"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <select
-                    required
-                    value={selectedCategory || ''}
-                    onChange={(e) => handleCategoryChange(e.target.value)}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors"
-                  >
-                    <option value="">Select category...</option>
-                    {categories.map(cat => (
-                      <option key={cat.id} value={cat.id}>{cat.name}</option>
-                    ))}
-                    <option value="add_new" className="font-semibold text-purple-600">
-                      + Add new category
-                    </option>
-                  </select>
-                )}
-              </div>
-            )}
-
-
-            {/* Image Upload */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Resource Image * 
-                <span className="text-xs font-normal text-gray-500 ml-2">(Max 2MB, will be resized to 800x800px - square format)</span>
-              </label>
-              
-              {processingImage ? (
-                <div className="flex flex-col items-center justify-center w-full border-2 border-dashed border-purple-300 rounded-xl bg-purple-50" style={{ aspectRatio: '1/1', minHeight: '180px' }}>
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mb-2"></div>
-                  <span className="text-sm text-gray-600">Processing image...</span>
-                </div>
-              ) : imagePreview ? (
-                <div className="relative" style={{ aspectRatio: '1/1' }}>
-                  <img src={imagePreview} alt="Preview" className="w-full h-full object-cover rounded-xl border-2 border-gray-200" />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setImageFile(null);
-                      setImagePreview(null);
-                      setImageError('');
-                      // Reset file input
-                      const fileInput = document.querySelector('input[type="file"]');
-                      if (fileInput) fileInput.value = '';
-                    }}
-                    className="absolute top-2 right-2 p-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
-                  >
-                    <X size={16} />
-                  </button>
-                  <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/70 text-white text-xs rounded">
-                    800x800px (1:1)
-                  </div>
-                </div>
-              ) : (
-                <label 
-                  className={`flex flex-col items-center justify-center w-full border-2 border-dashed rounded-xl cursor-pointer transition-colors ${
-                    isDragging 
-                      ? 'border-purple-500 bg-purple-100 scale-105' 
-                      : 'border-gray-300 hover:border-purple-500 bg-gray-50'
-                  }`}
-                  style={{ aspectRatio: '1/1', minHeight: '180px' }}
-                  onDragEnter={handleDragEnter}
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  onDrop={handleDrop}
-                >
-                  <Upload size={32} className={`${isDragging ? 'text-purple-600' : 'text-gray-400'} mb-2 transition-colors`} />
-                  <span className={`text-sm font-medium transition-colors ${isDragging ? 'text-purple-700' : 'text-gray-600'}`}>
-                    {isDragging ? 'Drop image here' : 'Click to upload or drag & drop'}
-                  </span>
-                  <span className="text-xs text-gray-500 mt-1">Square format (1:1)</span>
-                  <span className="text-xs text-gray-400 mt-0.5">PNG, JPG, WEBP (Max 2MB)</span>
-                  <div className="text-xs text-gray-400 mt-2 pt-2 border-t border-gray-200">
-                    <p className="font-medium mb-1">How to screenshot:</p>
-                    <p className="mb-0.5">Windows: Press <span className="font-mono bg-gray-100 px-1 rounded">Windows + Shift + S</span> or use Snipping Tool</p>
-                    <p>Mac: Press <span className="font-mono bg-gray-100 px-1 rounded">Cmd + Shift + 4</span> to capture selected area</p>
-                  </div>
-                  <input 
-                    type="file" 
-                    className="hidden" 
-                    accept="image/*" 
-                    onChange={handleImageChange}
-                    required
-                  />
-                </label>
-              )}
-              
-              {imageError && (
-                <p className="mt-2 text-sm text-red-600">{imageError}</p>
-              )}
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Resource Title *</label>
-              <input
-                type="text"
-                required
-                value={formData.title}
-                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors"
-                placeholder="e.g., Ankle Arthroscopy Technique"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">URL *</label>
-              <input
-                type="url"
-                required
-                value={formData.url}
-                onChange={(e) => setFormData({ ...formData, url: e.target.value })}
-                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors"
-                placeholder="https://..."
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Resource Type *</label>
-              <select
-                required
-                value={formData.type}
-                onChange={(e) => setFormData({ ...formData, type: e.target.value, duration_seconds: e.target.value !== 'video' ? null : formData.duration_seconds })}
-                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors"
-              >
-                <option value="video">Video</option>
-                <option value="pdf">PDF / Technique Guide</option>
-                <option value="article">Article</option>
-                <option value="other">Other</option>
-              </select>
-            </div>
-
-            {/* Duration field - only for videos */}
-            {formData.type === 'video' && (
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Video Duration *</label>
-                <div className="flex gap-2 items-center">
-                  <input
-                    type="number"
-                    min="0"
-                    max="23"
-                    value={durationHours}
-                    onChange={(e) => {
-                      const hrs = e.target.value === '' ? '' : parseInt(e.target.value) || 0;
-                      setDurationHours(e.target.value);
-                      const totalSeconds = (hrs === '' ? 0 : hrs) * 3600 + 
-                                         (parseInt(durationMinutes) || 0) * 60 + 
-                                         (parseInt(durationSeconds) || 0);
-                      setFormData({ ...formData, duration_seconds: totalSeconds || null });
-                    }}
-                    className="w-20 px-3 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors text-center"
-                    placeholder="H"
-                  />
-                  <span className="text-gray-600 font-semibold">:</span>
-                  <input
-                    type="number"
-                    min="0"
-                    max="59"
-                    value={durationMinutes}
-                    onChange={(e) => {
-                      const mins = e.target.value === '' ? '' : parseInt(e.target.value) || 0;
-                      setDurationMinutes(e.target.value);
-                      const totalSeconds = (parseInt(durationHours) || 0) * 3600 + 
-                                         (mins === '' ? 0 : mins) * 60 + 
-                                         (parseInt(durationSeconds) || 0);
-                      setFormData({ ...formData, duration_seconds: totalSeconds || null });
-                    }}
-                    className="w-20 px-3 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors text-center"
-                    placeholder="MM"
-                  />
-                  <span className="text-gray-600 font-semibold">:</span>
-                  <input
-                    type="number"
-                    min="0"
-                    max="59"
-                    value={durationSeconds}
-                    onChange={(e) => {
-                      const secs = e.target.value === '' ? '' : parseInt(e.target.value) || 0;
-                      setDurationSeconds(e.target.value);
-                      const totalSeconds = (parseInt(durationHours) || 0) * 3600 + 
-                                         (parseInt(durationMinutes) || 0) * 60 + 
-                                         (secs === '' ? 0 : secs);
-                      setFormData({ ...formData, duration_seconds: totalSeconds || null });
-                    }}
-                    className="w-20 px-3 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors text-center"
-                    placeholder="SS"
-                  />
-                </div>
-                <p className="text-xs text-gray-500 mt-1">Format: H:MM:SS (e.g., 0:05:30 for 5 minutes 30 seconds)</p>
-              </div>
-            )}
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Description *</label>
-              <textarea
-                required
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors"
-                rows="4"
-                placeholder="Brief description of the resource..."
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Key Words</label>
-              <input
-                type="text"
-                value={formData.keywords || ''}
-                onChange={(e) => setFormData({ ...formData, keywords: e.target.value })}
-                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors"
-                placeholder="Enter key words separated by commas (e.g., bunion, MIS, osteotomy)"
-              />
-              <p className="text-xs text-gray-500 mt-1">Optional: Add key words to help with searchability</p>
-            </div>
-
-            <div className="flex justify-end gap-3 pt-4 border-t-2 border-gray-100">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-6 py-3 border-2 border-gray-200 rounded-xl font-medium text-gray-900 hover:bg-gray-50 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={!imageFile || (formData.type === 'video' && !formData.duration_seconds)}
-                className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-medium glow-button disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Add Resource
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function SuggestResourceModal({ currentUser, onSubmit, onClose }) {
-  const [formData, setFormData] = useState({
-    title: '',
-    url: '',
-    type: 'video',
-    description: '',
-    duration_seconds: null,
-    keywords: ''
-  });
-  const [durationHours, setDurationHours] = useState('');
-  const [durationMinutes, setDurationMinutes] = useState('');
-  const [durationSeconds, setDurationSeconds] = useState('');
-  const [imageFile, setImageFile] = useState(null);
-  const [imagePreview, setImagePreview] = useState(null);
-  const [processingImage, setProcessingImage] = useState(false);
-  const [imageError, setImageError] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
-  
-  // Specialty/Subspecialty/Category selection (Procedure removed per user request)
-  const [specialties, setSpecialties] = useState([]);
-  const [subspecialties, setSubspecialties] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [selectedSpecialty, setSelectedSpecialty] = useState(null);
-  const [selectedSubspecialty, setSelectedSubspecialty] = useState(null);
-  const [selectedCategory, setSelectedCategory] = useState(null);
-  const [canEditSpecialty, setCanEditSpecialty] = useState(false);
-  const [loadingData, setLoadingData] = useState(true);
-  const [showNewCategoryInput, setShowNewCategoryInput] = useState(false);
-  const [newCategoryName, setNewCategoryName] = useState('');
-  const [addingCategory, setAddingCategory] = useState(false);
-  const isInitialLoad = useRef(true);
-
-  // Initialize with user's specialty/subspecialty
-  useEffect(() => {
-    if (currentUser) {
-      loadInitialData();
-    }
-  }, [currentUser]);
-
-  useEffect(() => {
-    if (selectedSpecialty && !isInitialLoad.current) {
-      // Load subspecialties when specialty is selected
-      loadSubspecialties(selectedSpecialty);
-    }
-  }, [selectedSpecialty]);
-
-  useEffect(() => {
-    if (selectedSubspecialty && !isInitialLoad.current) {
-      loadCategories(selectedSubspecialty);
-    }
-  }, [selectedSubspecialty]);
-
-
-  async function loadInitialData() {
-    try {
-      setLoadingData(true);
-      setImageError(''); // Clear any previous errors
-      
-      // Load all specialties
-      const { data: specialtiesData, error: specialtiesError } = await supabase
-        .from('specialties')
-        .select('*')
-        .order('order');
-      
-      if (specialtiesError) {
-        throw new Error(`Failed to load specialties: ${specialtiesError.message}`);
-      }
-      
-      setSpecialties(specialtiesData || []);
-
-      // Pre-populate with user's specialty/subspecialty if available
-      if (currentUser?.specialtyId) {
-        // Load subspecialties for this specialty first
-        const { data: subspecialtiesData, error: subspecialtiesError } = await supabase
-          .from('subspecialties')
-          .select('*')
-          .eq('specialty_id', currentUser.specialtyId)
-          .order('order');
-        
-        if (subspecialtiesError) {
-          throw new Error(`Failed to load subspecialties: ${subspecialtiesError.message}`);
-        }
-        
-        setSubspecialties(subspecialtiesData || []);
-        
-        // Now set the specialty (this will trigger useEffect, but we've already loaded subspecialties)
-        setSelectedSpecialty(String(currentUser.specialtyId));
-        
-        if (currentUser?.subspecialtyId) {
-          // Load categories for the subspecialty first
-          const { data: categoriesData, error: categoriesError } = await supabase
-            .from('categories')
-            .select('*')
-            .eq('subspecialty_id', currentUser.subspecialtyId)
-            .is('parent_category_id', null)
-            .order('order');
-          
-          if (categoriesError) {
-            throw new Error(`Failed to load categories: ${categoriesError.message}`);
-          }
-          
-          setCategories(categoriesData || []);
-          
-          // Now set the subspecialty (this will trigger useEffect, but we've already loaded categories)
-          setSelectedSubspecialty(String(currentUser.subspecialtyId));
-        }
-      }
-      
-      // Mark initial load as complete
-      isInitialLoad.current = false;
-    } catch (error) {
-      console.error('Error loading initial data:', error);
-      const errorMessage = error.message || 'Unknown error occurred';
-      setImageError(`Error loading form data: ${errorMessage}`);
-      alert(`Error loading form data:\n\n${errorMessage}\n\nPlease check the browser console for more details.`);
-    } finally {
-      setLoadingData(false);
-      isInitialLoad.current = false;
-    }
-  }
-
-  async function loadSubspecialties(specialtyId) {
-    const { data } = await supabase
-      .from('subspecialties')
-      .select('*')
-      .eq('specialty_id', specialtyId)
-      .order('order');
-    
-    setSubspecialties(data || []);
-    // Clear category when specialty changes
-    setSelectedCategory(null);
-  }
-
-  async function loadCategories(subspecialtyId) {
-    const { data } = await supabase
-      .from('categories')
-      .select('*')
-      .eq('subspecialty_id', subspecialtyId)
-      .is('parent_category_id', null) // Top-level categories only for now
-      .order('order');
-    
-    setCategories(data || []);
-  }
-
-
-  const handleSpecialtyChange = (specialtyId) => {
-    setSelectedSpecialty(specialtyId);
-    setSelectedSubspecialty(null);
-    setSelectedCategory(null);
-    setSelectedSubcategory(null);
-    setSubcategories([]);
-    loadSubspecialties(specialtyId);
-  };
-
-  const handleSubspecialtyChange = (subspecialtyId) => {
-    setSelectedSubspecialty(subspecialtyId);
-    setSelectedCategory(null);
-    setSelectedSubcategory(null);
-    setSubcategories([]);
-    loadCategories(subspecialtyId);
-  };
-
-  const handleCategoryChange = (categoryId) => {
-    if (categoryId === 'add_new') {
-      setShowNewCategoryInput(true);
-      setSelectedCategory(null);
-      return;
-    }
-    setShowNewCategoryInput(false);
-    setSelectedCategory(categoryId);
-  };
-
-  async function handleAddNewCategory() {
-    if (!newCategoryName.trim() || !selectedSubspecialty) return;
-
-    try {
-      setAddingCategory(true);
-      const maxOrder = categories.length > 0 
-        ? Math.max(...categories.map(c => c.order || 0)) 
-        : 0;
-
-      const { data, error } = await supabase
-        .from('categories')
-        .insert([{
-          name: newCategoryName.trim(),
-          subspecialty_id: selectedSubspecialty,
-          parent_category_id: null,
-          order: maxOrder + 1,
-          depth: 0
-        }])
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      setCategories([...categories, data]);
-      setSelectedCategory(data.id);
-      setShowNewCategoryInput(false);
-      setNewCategoryName('');
-    } catch (error) {
-      console.error('Error adding category:', error);
-      alert('Error adding category: ' + error.message);
-    } finally {
-      setAddingCategory(false);
-    }
-  }
-
-
-  const processImageFile = async (file) => {
-    if (!file) {
-      setImageFile(null);
-      setImagePreview(null);
-      setImageError('');
-      return;
-    }
-
-    // Validate file
-    const validation = validateImageFile(file);
-    if (!validation.valid) {
-      setImageError(validation.error);
-      setImageFile(null);
-      setImagePreview(null);
-      return;
-    }
-
-    setImageError('');
-    setProcessingImage(true);
-
-    try {
-      // Process image (resize and compress)
-      const processedFile = await processResourceImage(file);
-      setImageFile(processedFile);
-      
-      // Create preview from processed file
-      const preview = await createImagePreview(processedFile);
-      setImagePreview(preview);
-    } catch (error) {
-      setImageError(error.message);
-      setImageFile(null);
-      setImagePreview(null);
-    } finally {
-      setProcessingImage(false);
-    }
-  };
-
-  const handleImageChange = async (e) => {
-    const file = e.target.files[0];
-    await processImageFile(file);
-  };
-
-  const handleDragEnter = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(true);
-  };
-
-  const handleDragLeave = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-  };
-
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-  };
-
-  const handleDrop = async (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-
-    const file = e.dataTransfer.files[0];
-    if (file && file.type.startsWith('image/')) {
-      await processImageFile(file);
-    } else {
-      setImageError('Please drop an image file');
-    }
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    
-    if (!imageFile) {
-      setImageError('Image is required');
-      return;
-    }
-
-    setImageError('');
-    setSubmitting(true);
-    
-    try {
-      // Include category_id in the submission
-      await onSubmit({ ...formData, category_id: selectedCategory }, imageFile);
-      // Reset form
-      setFormData({
-        title: '',
-        url: '',
-        type: 'video',
-        description: ''
-      });
-      setImageFile(null);
-      setImagePreview(null);
-      setSelectedCategory(null);
-      setSelectedSubspecialty(null);
-      setSelectedSpecialty(null);
-    } catch (error) {
-      console.error('Error submitting suggestion:', error);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  if (!currentUser) {
-    return (
-      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-        <div className="glass rounded-2xl max-w-2xl w-full p-8 shadow-2xl">
-          <p className="text-gray-600">Loading user data...</p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-slide-up">
-      <div className="glass rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
-        <div className="p-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Suggest New Resource</h2>
-          <p className="text-gray-600 mb-6">Submit a resource for review. An admin will review it before it appears in the library.</p>
-          
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Specialty/Subspecialty Selection */}
-            <div className="bg-purple-50 rounded-xl p-4 border-2 border-purple-200">
-              <div className="flex items-center justify-between mb-3">
-                <label className="block text-sm font-semibold text-gray-700">
-                  Specialty & Subspecialty
-                </label>
-                {!canEditSpecialty && (selectedSpecialty || selectedSubspecialty) && (
-                  <button
-                    type="button"
-                    onClick={() => setCanEditSpecialty(true)}
-                    className="text-xs px-3 py-1.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-                  >
-                    <Edit size={12} className="inline mr-1" />
-                    Edit
-                  </button>
-                )}
-              </div>
-              
-              {loadingData ? (
-                <p className="text-sm text-gray-500">Loading...</p>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Specialty */}
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1.5">Specialty</label>
-                    <select
-                      value={selectedSpecialty || ''}
-                      onChange={(e) => handleSpecialtyChange(e.target.value)}
-                      disabled={!canEditSpecialty && !!selectedSpecialty}
-                      className="w-full px-3 py-2 text-sm bg-white text-gray-900 border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none transition-colors disabled:bg-gray-100 disabled:text-gray-700 disabled:cursor-not-allowed"
-                      required
-                    >
-                      <option value="">Select specialty...</option>
-                      {specialties.map(s => (
-                        <option key={s.id} value={s.id}>{s.name}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Subspecialty */}
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1.5">Subspecialty</label>
-                    <select
-                      value={selectedSubspecialty || ''}
-                      onChange={(e) => handleSubspecialtyChange(e.target.value)}
-                      disabled={(!canEditSpecialty && !!selectedSubspecialty) || !selectedSpecialty}
-                      className="w-full px-3 py-2 text-sm bg-white text-gray-900 border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none transition-colors disabled:bg-gray-100 disabled:text-gray-700 disabled:cursor-not-allowed"
-                      required
-                    >
-                      <option value="">Select subspecialty...</option>
-                      {subspecialties.map(s => (
-                        <option key={s.id} value={s.id}>{s.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Category Selection */}
-            {selectedSubspecialty && (
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Category *</label>
-                {showNewCategoryInput ? (
-                  <div className="space-y-2">
-                    <input
-                      type="text"
-                      value={newCategoryName}
-                      onChange={(e) => setNewCategoryName(e.target.value)}
-                      onKeyPress={(e) => e.key === 'Enter' && handleAddNewCategory()}
-                      placeholder="Enter new category name..."
-                      className="w-full px-4 py-3 border-2 border-purple-500 rounded-xl focus:border-purple-600 focus:outline-none transition-colors"
-                      autoFocus
-                    />
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={handleAddNewCategory}
-                        disabled={addingCategory || !newCategoryName.trim()}
-                        className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {addingCategory ? 'Adding...' : 'Add'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowNewCategoryInput(false);
-                          setNewCategoryName('');
-                        }}
-                        className="px-4 py-2 border-2 border-gray-200 rounded-lg font-medium text-gray-900 hover:bg-gray-50 transition-colors"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <select
-                    required
-                    value={selectedCategory || ''}
-                    onChange={(e) => handleCategoryChange(e.target.value)}
-                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors"
-                  >
-                    <option value="">Select category...</option>
-                    {categories.map(cat => (
-                      <option key={cat.id} value={cat.id}>{cat.name}</option>
-                    ))}
-                    <option value="add_new" className="font-semibold text-purple-600">
-                      + Add new category
-                    </option>
-                  </select>
-                )}
-              </div>
-            )}
-
-
-            {/* Image Upload */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Resource Image * 
-                <span className="text-xs font-normal text-gray-500 ml-2">(Max 2MB, will be resized to 800x800px - square format)</span>
-              </label>
-              
-              {processingImage ? (
-                <div className="flex flex-col items-center justify-center w-full border-2 border-dashed border-purple-300 rounded-xl bg-purple-50" style={{ aspectRatio: '1/1', minHeight: '180px' }}>
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mb-2"></div>
-                  <span className="text-sm text-gray-600">Processing image...</span>
-                </div>
-              ) : imagePreview ? (
-                <div className="relative" style={{ aspectRatio: '1/1' }}>
-                  <img src={imagePreview} alt="Preview" className="w-full h-full object-cover rounded-xl border-2 border-gray-200" />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setImageFile(null);
-                      setImagePreview(null);
-                      setImageError('');
-                      const fileInput = document.querySelector('input[type="file"]');
-                      if (fileInput) fileInput.value = '';
-                    }}
-                    className="absolute top-2 right-2 p-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
-                  >
-                    <X size={16} />
-                  </button>
-                  <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/70 text-white text-xs rounded">
-                    800x800px (1:1)
-                  </div>
-                </div>
-              ) : (
-                <label 
-                  className={`flex flex-col items-center justify-center w-full border-2 border-dashed rounded-xl cursor-pointer transition-colors ${
-                    isDragging 
-                      ? 'border-purple-500 bg-purple-100 scale-105' 
-                      : 'border-gray-300 hover:border-purple-500 bg-gray-50'
-                  }`}
-                  style={{ aspectRatio: '1/1', minHeight: '180px' }}
-                  onDragEnter={handleDragEnter}
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  onDrop={handleDrop}
-                >
-                  <Upload size={32} className={`${isDragging ? 'text-purple-600' : 'text-gray-400'} mb-2 transition-colors`} />
-                  <span className={`text-sm font-medium transition-colors ${isDragging ? 'text-purple-700' : 'text-gray-600'}`}>
-                    {isDragging ? 'Drop image here' : 'Click to upload or drag & drop'}
-                  </span>
-                  <span className="text-xs text-gray-500 mt-1">Square format (1:1)</span>
-                  <span className="text-xs text-gray-400 mt-0.5">PNG, JPG, WEBP (Max 2MB)</span>
-                  <div className="text-xs text-gray-400 mt-2 pt-2 border-t border-gray-200">
-                    <p className="font-medium mb-1">How to screenshot:</p>
-                    <p className="mb-0.5">Windows: Press <span className="font-mono bg-gray-100 px-1 rounded">Windows + Shift + S</span> or use Snipping Tool</p>
-                    <p>Mac: Press <span className="font-mono bg-gray-100 px-1 rounded">Cmd + Shift + 4</span> to capture selected area</p>
-                  </div>
-                  <input 
-                    type="file" 
-                    className="hidden" 
-                    accept="image/*" 
-                    onChange={handleImageChange}
-                    required
-                  />
-                </label>
-              )}
-              
-              {imageError && (
-                <p className="mt-2 text-sm text-red-600">{imageError}</p>
-              )}
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Resource Title *</label>
-              <input
-                type="text"
-                required
-                value={formData.title}
-                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors"
-                placeholder="e.g., Ankle Arthroscopy Technique"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">URL *</label>
-              <input
-                type="url"
-                required
-                value={formData.url}
-                onChange={(e) => setFormData({ ...formData, url: e.target.value })}
-                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors"
-                placeholder="https://..."
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Resource Type *</label>
-              <select
-                required
-                value={formData.type}
-                onChange={(e) => setFormData({ ...formData, type: e.target.value, duration_seconds: e.target.value !== 'video' ? null : formData.duration_seconds })}
-                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors"
-              >
-                <option value="video">Video</option>
-                <option value="pdf">PDF / Technique Guide</option>
-                <option value="article">Article</option>
-                <option value="other">Other</option>
-              </select>
-            </div>
-
-            {/* Duration field - only for videos */}
-            {formData.type === 'video' && (
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Video Duration *</label>
-                <div className="flex gap-2 items-center">
-                  <input
-                    type="number"
-                    min="0"
-                    max="23"
-                    value={durationHours}
-                    onChange={(e) => {
-                      const hrs = e.target.value === '' ? '' : parseInt(e.target.value) || 0;
-                      setDurationHours(e.target.value);
-                      const totalSeconds = (hrs === '' ? 0 : hrs) * 3600 + 
-                                         (parseInt(durationMinutes) || 0) * 60 + 
-                                         (parseInt(durationSeconds) || 0);
-                      setFormData({ ...formData, duration_seconds: totalSeconds || null });
-                    }}
-                    className="w-20 px-3 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors text-center"
-                    placeholder="H"
-                  />
-                  <span className="text-gray-600 font-semibold">:</span>
-                  <input
-                    type="number"
-                    min="0"
-                    max="59"
-                    value={durationMinutes}
-                    onChange={(e) => {
-                      const mins = e.target.value === '' ? '' : parseInt(e.target.value) || 0;
-                      setDurationMinutes(e.target.value);
-                      const totalSeconds = (parseInt(durationHours) || 0) * 3600 + 
-                                         (mins === '' ? 0 : mins) * 60 + 
-                                         (parseInt(durationSeconds) || 0);
-                      setFormData({ ...formData, duration_seconds: totalSeconds || null });
-                    }}
-                    className="w-20 px-3 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors text-center"
-                    placeholder="MM"
-                  />
-                  <span className="text-gray-600 font-semibold">:</span>
-                  <input
-                    type="number"
-                    min="0"
-                    max="59"
-                    value={durationSeconds}
-                    onChange={(e) => {
-                      const secs = e.target.value === '' ? '' : parseInt(e.target.value) || 0;
-                      setDurationSeconds(e.target.value);
-                      const totalSeconds = (parseInt(durationHours) || 0) * 3600 + 
-                                         (parseInt(durationMinutes) || 0) * 60 + 
-                                         (secs === '' ? 0 : secs);
-                      setFormData({ ...formData, duration_seconds: totalSeconds || null });
-                    }}
-                    className="w-20 px-3 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors text-center"
-                    placeholder="SS"
-                  />
-                </div>
-                <p className="text-xs text-gray-500 mt-1">Format: H:MM:SS (e.g., 0:05:30 for 5 minutes 30 seconds)</p>
-              </div>
-            )}
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Description *</label>
-              <textarea
-                required
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors"
-                rows="4"
-                placeholder="Brief description of the resource..."
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Key Words</label>
-              <input
-                type="text"
-                value={formData.keywords || ''}
-                onChange={(e) => setFormData({ ...formData, keywords: e.target.value })}
-                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors"
-                placeholder="Enter key words separated by commas (e.g., bunion, MIS, osteotomy)"
-              />
-              <p className="text-xs text-gray-500 mt-1">Optional: Add key words to help with searchability</p>
-            </div>
-
-            <div className="flex justify-end gap-3 pt-4 border-t-2 border-gray-100">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-6 py-3 border-2 border-gray-200 rounded-xl font-medium hover:bg-gray-50 transition-colors"
-                disabled={submitting}
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={submitting || !imageFile || (formData.type === 'video' && !formData.duration_seconds)}
-                className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-medium glow-button disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {submitting ? 'Submitting...' : 'Submit Suggestion'}
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function EditResourceModal({ resource, currentUser, onSubmit, onClose }) {
-  // Parse duration_seconds into hours, minutes, seconds
-  const parseDuration = (seconds) => {
-    if (!seconds) return { hours: '', minutes: '', seconds: '' };
-    const hrs = Math.floor(seconds / 3600);
-    const mins = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
-    return { hours: hrs.toString(), minutes: mins.toString(), seconds: secs.toString() };
-  };
-
-  const initialDuration = parseDuration(resource.duration_seconds);
-  
-  const [formData, setFormData] = useState({
-    title: resource.title || '',
-    url: resource.url || '',
-    type: resource.resource_type || 'video',
-    description: resource.description || '',
-    keywords: resource.keywords || '',
-    duration_seconds: resource.duration_seconds || null
-  });
-  const [durationHours, setDurationHours] = useState(initialDuration.hours);
-  const [durationMinutes, setDurationMinutes] = useState(initialDuration.minutes);
-  const [durationSeconds, setDurationSeconds] = useState(initialDuration.seconds);
-  const [imageFile, setImageFile] = useState(null);
-  const [imagePreview, setImagePreview] = useState(null);
-  const [processingImage, setProcessingImage] = useState(false);
-  const [imageError, setImageError] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
-
-  // Specialty/Subspecialty/Category selection
-  const [specialties, setSpecialties] = useState([]);
-  const [subspecialties, setSubspecialties] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [selectedSpecialty, setSelectedSpecialty] = useState(null);
-  const [selectedSubspecialty, setSelectedSubspecialty] = useState(null);
-  const [selectedCategory, setSelectedCategory] = useState(null);
-  const [selectedSubcategory, setSelectedSubcategory] = useState(null);
-  const [subcategories, setSubcategories] = useState([]);
-  const [loadingData, setLoadingData] = useState(true);
-  const isInitialLoad = useRef(true);
-
-  // Load initial data - get category, subspecialty hierarchy for prepopulation
-  useEffect(() => {
-    loadInitialData();
-  }, [resource.id]);
-
-  useEffect(() => {
-    if (selectedSpecialty && !isInitialLoad.current) {
-      loadSubspecialties(selectedSpecialty);
-    }
-  }, [selectedSpecialty]);
-
-  useEffect(() => {
-    if (selectedSubspecialty && !isInitialLoad.current) {
-      loadCategories(selectedSubspecialty);
-    }
-  }, [selectedSubspecialty]);
-
-
-  // Initialize preview with existing image if available
-  useEffect(() => {
-    if (resource.image_url && !imagePreview && !imageFile) {
-      setImagePreview(resource.image_url);
-    }
-  }, [resource.image_url]);
-
-  async function loadInitialData() {
-    try {
-      isInitialLoad.current = true;
-      setLoadingData(true);
-      
-      // Load all specialties
-      const { data: specialtiesData } = await supabase
-        .from('specialties')
-        .select('*')
-        .order('order');
-      setSpecialties(specialtiesData || []);
-
-      let didPrepopulate = false;
-
-      // 1) If resource has procedure_id, use procedure -> category -> subspecialty -> specialty
-      if (resource.procedure_id) {
-        const { data: procedureRow, error: procErr } = await supabase
-          .from('procedures')
-          .select('id, category_id')
-          .eq('id', resource.procedure_id)
-          .single();
-        
-        if (!procErr && procedureRow) {
-          const { data: categoryRow, error: catErr } = await supabase
-            .from('categories')
-            .select('id, subspecialty_id')
-            .eq('id', procedureRow.category_id)
-            .single();
-          
-          if (!catErr && categoryRow) {
-            const { data: subspecialtyRow, error: subErr } = await supabase
-              .from('subspecialties')
-              .select('id, specialty_id')
-              .eq('id', categoryRow.subspecialty_id)
-              .single();
-            
-            if (!subErr && subspecialtyRow) {
-              didPrepopulate = true;
-              const [
-                { data: subspecialtiesData, error: subsErr },
-                { data: categoriesData, error: catsErr },
-              ] = await Promise.all([
-                supabase.from('subspecialties').select('*').eq('specialty_id', subspecialtyRow.specialty_id).order('order'),
-                supabase.from('categories').select('*').eq('subspecialty_id', subspecialtyRow.id).is('parent_category_id', null).order('order'),
-              ]);
-              if (subsErr || catsErr) throw subsErr || catsErr;
-              setSubspecialties(subspecialtiesData || []);
-              setCategories(categoriesData || []);
-              setSelectedSpecialty(String(subspecialtyRow.specialty_id));
-              setSelectedSubspecialty(String(subspecialtyRow.id));
-              setSelectedCategory(String(categoryRow.id));
-            }
-          }
-        }
-      }
-
-      // 2) Else if resource has category_id, use category -> subspecialty -> specialty
-      if (!didPrepopulate && resource.category_id) {
-        const { data: categoryRow, error: catErr } = await supabase
-          .from('categories')
-          .select('id, subspecialty_id, parent_category_id')
-          .eq('id', resource.category_id)
-          .single();
-        if (!catErr && categoryRow) {
-          const { data: subspecialtyRow, error: subErr } = await supabase
-            .from('subspecialties')
-            .select('id, specialty_id')
-            .eq('id', categoryRow.subspecialty_id)
-            .single();
-          if (!subErr && subspecialtyRow) {
-            didPrepopulate = true;
-            const [
-              { data: subspecialtiesData, error: subsErr },
-              { data: categoriesData, error: catsErr },
-            ] = await Promise.all([
-              supabase.from('subspecialties').select('*').eq('specialty_id', subspecialtyRow.specialty_id).order('order'),
-              supabase.from('categories').select('*').eq('subspecialty_id', subspecialtyRow.id).is('parent_category_id', null).order('order'),
-            ]);
-            if (subsErr || catsErr) throw subsErr || catsErr;
-            setSubspecialties(subspecialtiesData || []);
-            setCategories(categoriesData || []);
-            setSelectedSpecialty(String(subspecialtyRow.specialty_id));
-            setSelectedSubspecialty(String(subspecialtyRow.id));
-            
-            // Check if the selected category is a subcategory
-            const isSubcategory = categoryRow.parent_category_id !== null;
-            if (isSubcategory) {
-              // It's a subcategory - set parent category and load subcategories
-              setSelectedCategory(String(categoryRow.parent_category_id));
-              await loadSubcategories(categoryRow.parent_category_id);
-              setSelectedSubcategory(String(categoryRow.id));
-            } else {
-              // It's a top-level category
-              setSelectedCategory(String(categoryRow.id));
-              await loadSubcategories(categoryRow.id);
-            }
-          }
-        }
-      }
-
-      // 3) Else use currentUser's specialty/subspecialty (admin profile)
-      if (!didPrepopulate && currentUser?.specialtyId) {
-        const { data: subspecialtiesData, error: subsErr } = await supabase
-          .from('subspecialties')
-          .select('*')
-          .eq('specialty_id', currentUser.specialtyId)
-          .order('order');
-        if (!subsErr && subspecialtiesData?.length) {
-          setSubspecialties(subspecialtiesData);
-          setSelectedSpecialty(String(currentUser.specialtyId));
-          if (currentUser.subspecialtyId) {
-            const { data: categoriesData, error: catsErr } = await supabase
-              .from('categories')
-              .select('*')
-              .eq('subspecialty_id', currentUser.subspecialtyId)
-              .order('depth')
-              .order('order');
-            if (!catsErr) {
-              setCategories(categoriesData || []);
-              setSelectedSubspecialty(String(currentUser.subspecialtyId));
-            }
-          }
-        }
-      }
-      
-      isInitialLoad.current = false;
-    } catch (error) {
-      console.error('Error loading initial data:', error);
-      alert('Error loading category data: ' + error.message);
-    } finally {
-      setLoadingData(false);
-      isInitialLoad.current = false;
-    }
-  }
-
-  async function loadSubspecialties(specialtyId) {
-    if (!specialtyId) return;
-    const { data } = await supabase
-      .from('subspecialties')
-      .select('*')
-      .eq('specialty_id', specialtyId)
-      .order('order');
-    setSubspecialties(data || []);
-    if (selectedSubspecialty && !data?.find(s => String(s.id) === String(selectedSubspecialty))) {
-      setSelectedSubspecialty(null);
-      setSelectedCategory(null);
-    }
-  }
-
-  async function loadCategories(subspecialtyId) {
-    if (!subspecialtyId) return;
-    // Load ONLY top-level categories (no subcategories)
-    const { data } = await supabase
-      .from('categories')
-      .select('*')
-      .eq('subspecialty_id', subspecialtyId)
-      .is('parent_category_id', null)
-      .order('order');
-    setCategories(data || []);
-    // Clear subcategories when subspecialty changes
-    setSubcategories([]);
-    setSelectedSubcategory(null);
-    // Only clear selectedCategory if it doesn't belong to this subspecialty
-    if (selectedCategory && data) {
-      const categoryExists = data.some(c => String(c.id) === String(selectedCategory));
-      if (!categoryExists) {
-        setSelectedCategory(null);
-      }
-    }
-  }
-
-  async function loadSubcategories(categoryId) {
-    if (!categoryId) {
-      setSubcategories([]);
-      setSelectedSubcategory(null);
-      return;
-    }
-    // Load subcategories for the selected category
-    const { data } = await supabase
-      .from('categories')
-      .select('*')
-      .eq('parent_category_id', categoryId)
-      .order('order');
-    setSubcategories(data || []);
-    // Clear selected subcategory if it's not in the new list
-    if (selectedSubcategory && data) {
-      const subcategoryExists = data.some(c => String(c.id) === String(selectedSubcategory));
-      if (!subcategoryExists) {
-        setSelectedSubcategory(null);
-      }
-    }
-  }
-
-  const handleSpecialtyChange = (specialtyId) => {
-    setSelectedSpecialty(specialtyId);
-    setSelectedSubspecialty(null);
-    setSelectedCategory(null);
-    setSelectedSubcategory(null);
-    setSubcategories([]);
-    loadSubspecialties(specialtyId);
-  };
-
-  const handleSubspecialtyChange = (subspecialtyId) => {
-    setSelectedSubspecialty(subspecialtyId);
-    setSelectedCategory(null);
-    setSelectedSubcategory(null);
-    setSubcategories([]);
-    loadCategories(subspecialtyId);
-  };
-
-  const handleCategoryChange = (categoryId) => {
-    console.log('EditResourceModal handleCategoryChange called with:', categoryId);
-    const newCategoryId = categoryId && categoryId !== '' ? categoryId : null;
-    setSelectedCategory(newCategoryId);
-    setSelectedSubcategory(null); // Clear subcategory when category changes
-    loadSubcategories(newCategoryId);
-  };
-
-  const handleSubcategoryChange = (subcategoryId) => {
-    console.log('EditResourceModal handleSubcategoryChange called with:', subcategoryId);
-    setSelectedSubcategory(subcategoryId && subcategoryId !== '' ? subcategoryId : null);
-  };
-
-
-  const processImageFile = async (file) => {
-    if (!file) {
-      // If no file selected, keep existing image
-      return;
-    }
-
-    // Validate file
-    const validation = validateImageFile(file);
-    if (!validation.valid) {
-      setImageError(validation.error);
-      setImageFile(null);
-      return;
-    }
-
-    setImageError('');
-    setProcessingImage(true);
-
-    try {
-      // Process image (resize and compress)
-      const processedFile = await processResourceImage(file);
-      setImageFile(processedFile);
-      
-      // Create preview from processed file
-      const preview = await createImagePreview(processedFile);
-      setImagePreview(preview);
-    } catch (error) {
-      setImageError(error.message);
-      setImageFile(null);
-      setImagePreview(null);
-    } finally {
-      setProcessingImage(false);
-    }
-  };
-
-  const handleImageChange = async (e) => {
-    const file = e.target.files[0];
-    await processImageFile(file);
-  };
-
-  const handleDragEnter = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(true);
-  };
-
-  const handleDragLeave = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-  };
-
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-  };
-
-  const handleDrop = async (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-
-    const file = e.dataTransfer.files[0];
-    if (file && file.type.startsWith('image/')) {
-      await processImageFile(file);
-    } else {
-      setImageError('Please drop an image file');
-    }
-  };
-
-  const handleRemoveImage = () => {
-    setImageFile(null);
-    setImagePreview(null);
-    setImageError('');
-    // Reset file input
-    const fileInput = document.querySelector('input[type="file"]');
-    if (fileInput) fileInput.value = '';
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    
-    setImageError('');
-    setSubmitting(true);
-    
-    try {
-      // Determine image URL:
-      // - If new image uploaded, it will be handled in handleEditResource
-      // - If image removed (no preview and no file), set to null
-      // - Otherwise keep existing image
-      let imageUrl = resource.image_url;
-      if (!imagePreview && !imageFile) {
-        // User removed the image
-        imageUrl = null;
-      }
-      
-      // Use subcategory if selected, otherwise use category
-      const finalCategoryId = selectedSubcategory && selectedSubcategory !== '' 
-        ? selectedSubcategory 
-        : (selectedCategory && selectedCategory !== '' ? selectedCategory : null);
-      
-      const resourceData = {
-        ...formData,
-        image_url: imageUrl,
-        category_id: finalCategoryId
-      };
-      
-      console.log('EditResourceModal submitting - selectedCategory:', selectedCategory, 'category_id:', resourceData.category_id);
-      
-      await onSubmit(resourceData, imageFile); // imageFile will be null if not changed
-    } catch (error) {
-      console.error('Error updating resource:', error);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-slide-up">
-      <div className="glass rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
-        <div className="p-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Edit Resource</h2>
-          <p className="text-gray-600 mb-6">Update resource details. Upload a new image to replace the existing one.</p>
-          
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Image Upload/Preview */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Resource Image
-                <span className="text-xs font-normal text-gray-500 ml-2">(Max 2MB, will be resized to 800x450px)</span>
-              </label>
-              
-              {processingImage ? (
-                <div className="flex flex-col items-center justify-center w-full border-2 border-dashed border-purple-300 rounded-xl bg-purple-50" style={{ aspectRatio: '1/1', minHeight: '180px' }}>
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mb-2"></div>
-                  <span className="text-sm text-gray-600">Processing image...</span>
-                </div>
-              ) : imagePreview ? (
-                <div className="relative" style={{ aspectRatio: '1/1' }}>
-                  <img src={imagePreview} alt="Preview" className="w-full h-full object-cover rounded-xl border-2 border-gray-200" />
-                  <button
-                    type="button"
-                    onClick={handleRemoveImage}
-                    className="absolute top-2 right-2 p-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
-                  >
-                    <X size={16} />
-                  </button>
-                  <div className="absolute bottom-2 left-2 px-2 py-1 bg-black/70 text-white text-xs rounded">
-                    800x800px (1:1)
-                  </div>
-                  <label className="absolute bottom-2 right-2 px-3 py-1.5 bg-purple-600 text-white text-xs rounded-lg cursor-pointer hover:bg-purple-700 transition-colors">
-                    Change Image
-                    <input 
-                      type="file" 
-                      className="hidden" 
-                      accept="image/*" 
-                      onChange={handleImageChange}
-                    />
-                  </label>
-                </div>
-              ) : (
-                <label 
-                  className={`flex flex-col items-center justify-center w-full border-2 border-dashed rounded-xl cursor-pointer transition-all ${
-                    isDragging 
-                      ? 'border-purple-500 bg-purple-100 scale-105 shadow-lg' 
-                      : 'border-gray-300 hover:border-purple-500 bg-gray-50'
-                  }`}
-                  style={{ aspectRatio: '1/1', minHeight: '180px' }}
-                  onDragEnter={handleDragEnter}
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  onDrop={handleDrop}
-                >
-                  <Upload size={32} className={`${isDragging ? 'text-purple-600' : 'text-gray-400'} mb-2 transition-colors`} />
-                  <span className={`text-sm font-medium transition-colors ${isDragging ? 'text-purple-700' : 'text-gray-600'}`}>
-                    {isDragging ? 'Drop image here' : 'Click to upload or drag & drop'}
-                  </span>
-                  <span className="text-xs text-gray-500 mt-1">Square format (1:1)</span>
-                  <span className="text-xs text-gray-400 mt-0.5">PNG, JPG, WEBP (Max 2MB)</span>
-                  <div className="text-xs text-gray-400 mt-2 pt-2 border-t border-gray-200">
-                    <p className="font-medium mb-1">How to screenshot:</p>
-                    <p className="mb-0.5">Windows: Press <span className="font-mono bg-gray-100 px-1 rounded">Windows + Shift + S</span> or use Snipping Tool</p>
-                    <p>Mac: Press <span className="font-mono bg-gray-100 px-1 rounded">Cmd + Shift + 4</span> to capture selected area</p>
-                  </div>
-                  <input 
-                    type="file" 
-                    className="hidden" 
-                    accept="image/*" 
-                    onChange={handleImageChange}
-                  />
-                </label>
-              )}
-              
-              {imageError && (
-                <p className="mt-2 text-sm text-red-600">{imageError}</p>
-              )}
-            </div>
-
-            {/* Specialty/Subspecialty/Category Selection */}
-            {loadingData ? (
-              <div className="text-center py-4">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto"></div>
-                <p className="text-sm text-gray-500 mt-2">Loading categories...</p>
-              </div>
-            ) : (
-              <>
-                <div className="bg-purple-50 rounded-xl p-4 border-2 border-purple-200">
-                  <label className="block text-sm font-semibold text-gray-700 mb-3">
-                    Specialty & Subspecialty
-                  </label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {/* Specialty */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1.5">Specialty</label>
-                      <select
-                        value={selectedSpecialty || ''}
-                        onChange={(e) => handleSpecialtyChange(e.target.value)}
-                        className="w-full px-3 py-2 text-sm bg-white text-gray-900 border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none transition-colors"
-                      >
-                        <option value="">Select specialty...</option>
-                        {specialties.map(s => (
-                          <option key={s.id} value={String(s.id)}>{s.name}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* Subspecialty */}
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1.5">Subspecialty</label>
-                      <select
-                        value={selectedSubspecialty || ''}
-                        onChange={(e) => handleSubspecialtyChange(e.target.value)}
-                        disabled={!selectedSpecialty}
-                        className="w-full px-3 py-2 text-sm bg-white text-gray-900 border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none transition-colors disabled:bg-gray-100 disabled:text-gray-700 disabled:cursor-not-allowed"
-                      >
-                        <option value="">Select subspecialty...</option>
-                        {subspecialties.map(s => (
-                          <option key={s.id} value={String(s.id)}>{s.name}</option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Category Selection */}
-                {selectedSubspecialty && (
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">Category</label>
-                    <select
-                      value={selectedCategory || ''}
-                      onChange={(e) => handleCategoryChange(e.target.value)}
-                      className="w-full px-4 py-3 bg-white text-gray-900 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors"
-                    >
-                      <option value="">Select category...</option>
-                      {categories.map(cat => (
-                        <option key={cat.id} value={String(cat.id)}>{cat.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
-                {/* Subcategory Selection - only show if category has subcategories */}
-                {selectedCategory && subcategories.length > 0 && (
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">Subcategory (Optional)</label>
-                    <select
-                      value={selectedSubcategory || ''}
-                      onChange={(e) => handleSubcategoryChange(e.target.value)}
-                      className="w-full px-4 py-3 bg-white text-gray-900 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors"
-                    >
-                      <option value="">No subcategory</option>
-                      {subcategories.map(subcat => (
-                        <option key={subcat.id} value={String(subcat.id)}>{subcat.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
-              </>
-            )}
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Resource Title *</label>
-              <input
-                type="text"
-                required
-                value={formData.title}
-                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors"
-                placeholder="e.g., Ankle Arthroscopy Technique"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">URL *</label>
-              <input
-                type="url"
-                required
-                value={formData.url}
-                onChange={(e) => setFormData({ ...formData, url: e.target.value })}
-                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors"
-                placeholder="https://..."
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Resource Type *</label>
-              <select
-                required
-                value={formData.type}
-                onChange={(e) => setFormData({ ...formData, type: e.target.value, duration_seconds: e.target.value !== 'video' ? null : formData.duration_seconds })}
-                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors"
-              >
-                <option value="video">Video</option>
-                <option value="pdf">PDF / Technique Guide</option>
-                <option value="article">Article</option>
-                <option value="other">Other</option>
-              </select>
-            </div>
-
-            {/* Duration field - only for videos */}
-            {formData.type === 'video' && (
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Video Duration *</label>
-                <div className="flex gap-2 items-center">
-                  <input
-                    type="number"
-                    min="0"
-                    max="23"
-                    value={durationHours}
-                    onChange={(e) => {
-                      const hrs = e.target.value === '' ? '' : parseInt(e.target.value) || 0;
-                      setDurationHours(e.target.value);
-                      const totalSeconds = (hrs === '' ? 0 : hrs) * 3600 + 
-                                         (parseInt(durationMinutes) || 0) * 60 + 
-                                         (parseInt(durationSeconds) || 0);
-                      setFormData({ ...formData, duration_seconds: totalSeconds || null });
-                    }}
-                    className="w-20 px-3 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors text-center"
-                    placeholder="H"
-                  />
-                  <span className="text-gray-600 font-semibold">:</span>
-                  <input
-                    type="number"
-                    min="0"
-                    max="59"
-                    value={durationMinutes}
-                    onChange={(e) => {
-                      const mins = e.target.value === '' ? '' : parseInt(e.target.value) || 0;
-                      setDurationMinutes(e.target.value);
-                      const totalSeconds = (parseInt(durationHours) || 0) * 3600 + 
-                                         (mins === '' ? 0 : mins) * 60 + 
-                                         (parseInt(durationSeconds) || 0);
-                      setFormData({ ...formData, duration_seconds: totalSeconds || null });
-                    }}
-                    className="w-20 px-3 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors text-center"
-                    placeholder="MM"
-                  />
-                  <span className="text-gray-600 font-semibold">:</span>
-                  <input
-                    type="number"
-                    min="0"
-                    max="59"
-                    value={durationSeconds}
-                    onChange={(e) => {
-                      const secs = e.target.value === '' ? '' : parseInt(e.target.value) || 0;
-                      setDurationSeconds(e.target.value);
-                      const totalSeconds = (parseInt(durationHours) || 0) * 3600 + 
-                                         (parseInt(durationMinutes) || 0) * 60 + 
-                                         (secs === '' ? 0 : secs);
-                      setFormData({ ...formData, duration_seconds: totalSeconds || null });
-                    }}
-                    className="w-20 px-3 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors text-center"
-                    placeholder="SS"
-                  />
-                </div>
-                <p className="text-xs text-gray-500 mt-1">Format: H:MM:SS (e.g., 0:05:30 for 5 minutes 30 seconds)</p>
-              </div>
-            )}
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Description *</label>
-              <textarea
-                required
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors"
-                rows="4"
-                placeholder="Brief description of the resource..."
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Key Words</label>
-              <input
-                type="text"
-                value={formData.keywords || ''}
-                onChange={(e) => setFormData({ ...formData, keywords: e.target.value })}
-                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors"
-                placeholder="Enter key words separated by commas (e.g., bunion, MIS, osteotomy)"
-              />
-              <p className="text-xs text-gray-500 mt-1">Optional: Add key words to help with searchability</p>
-            </div>
-
-            <div className="flex justify-end gap-3 pt-4 border-t-2 border-gray-100">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-6 py-3 border-2 border-gray-200 rounded-xl font-medium text-gray-900 hover:bg-gray-50 transition-colors"
-                disabled={submitting}
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={submitting || (formData.type === 'video' && !formData.duration_seconds)}
-                className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-medium glow-button disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {submitting ? 'Updating...' : 'Update Resource'}
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function CategoryManagementModal({ currentUser, onClose }) {
-  const [allCategories, setAllCategories] = useState([]); // All categories flat
-  const [categories, setCategories] = useState([]); // Organized hierarchically
-  const [loading, setLoading] = useState(true);
-  const [newCategoryName, setNewCategoryName] = useState('');
-  const [addingCategory, setAddingCategory] = useState(false);
-  const [editingId, setEditingId] = useState(null);
-  const [editingName, setEditingName] = useState('');
-  const [draggedItem, setDraggedItem] = useState(null);
-  const [dropIndex, setDropIndex] = useState(null); // Track where item will be dropped
-  const [dropPosition, setDropPosition] = useState(null); // 'above' or 'below'
-  const [newSubcategoryNames, setNewSubcategoryNames] = useState({}); // { categoryId: name }
-  const [addingSubcategory, setAddingSubcategory] = useState({}); // { categoryId: true/false }
-  const [expandedCategories, setExpandedCategories] = useState({}); // Track which categories are expanded
-
-  useEffect(() => {
-    loadCategories();
-  }, []);
-
-  // Organize categories hierarchically
-  useEffect(() => {
-    if (allCategories.length === 0) {
-      setCategories([]);
-      return;
-    }
-
-    const topLevel = allCategories.filter(c => !c.parent_category_id).sort((a, b) => (a.order || 0) - (b.order || 0));
-    const organized = topLevel.map(cat => ({
-      ...cat,
-      subcategories: allCategories
-        .filter(sc => sc.parent_category_id === cat.id)
-        .sort((a, b) => (a.order || 0) - (b.order || 0))
-    }));
-    setCategories(organized);
-  }, [allCategories]);
-
-  async function loadCategories() {
-    if (!currentUser?.subspecialtyId) {
-      setLoading(false);
-      return;
-    }
-
-    try {
-      setLoading(true);
-      // Load ALL categories (both top-level and subcategories)
-      const { data, error } = await supabase
-        .from('categories')
-        .select('*')
-        .eq('subspecialty_id', currentUser.subspecialtyId)
-        .order('order');
-
-      if (error) throw error;
-      setAllCategories(data || []);
-    } catch (error) {
-      console.error('Error loading categories:', error);
-      alert('Error loading categories: ' + error.message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleAddCategory() {
-    if (!newCategoryName.trim()) return;
-
-    try {
-      setAddingCategory(true);
-      const maxOrder = allCategories.filter(c => !c.parent_category_id).length > 0 
-        ? Math.max(...allCategories.filter(c => !c.parent_category_id).map(c => c.order || 0)) 
-        : 0;
-
-      const { data, error } = await supabase
-        .from('categories')
-        .insert([{
-          name: newCategoryName.trim(),
-          subspecialty_id: currentUser.subspecialtyId,
-          parent_category_id: null,
-          order: maxOrder + 1,
-          depth: 0
-        }])
-        .select()
-        .single();
-
-      if (error) throw error;
-      
-      setAllCategories([...allCategories, data]);
-      setNewCategoryName('');
-    } catch (error) {
-      console.error('Error adding category:', error);
-      alert('Error adding category: ' + error.message);
-    } finally {
-      setAddingCategory(false);
-    }
-  }
-
-  async function handleAddSubcategory(parentCategoryId) {
-    const subcategoryName = newSubcategoryNames[parentCategoryId];
-    if (!subcategoryName?.trim()) return;
-
-    try {
-      setAddingSubcategory({ ...addingSubcategory, [parentCategoryId]: true });
-      const parentSubcategories = allCategories.filter(c => c.parent_category_id === parentCategoryId);
-      const maxOrder = parentSubcategories.length > 0 
-        ? Math.max(...parentSubcategories.map(c => c.order || 0)) 
-        : 0;
-
-      const { data, error } = await supabase
-        .from('categories')
-        .insert([{
-          name: subcategoryName.trim(),
-          subspecialty_id: currentUser.subspecialtyId,
-          parent_category_id: parentCategoryId,
-          order: maxOrder + 1,
-          depth: 1
-        }])
-        .select()
-        .single();
-
-      if (error) throw error;
-      
-      setAllCategories([...allCategories, data]);
-      setNewSubcategoryNames({ ...newSubcategoryNames, [parentCategoryId]: '' });
-      setExpandedCategories({ ...expandedCategories, [parentCategoryId]: true });
-    } catch (error) {
-      console.error('Error adding subcategory:', error);
-      alert('Error adding subcategory: ' + error.message);
-    } finally {
-      setAddingSubcategory({ ...addingSubcategory, [parentCategoryId]: false });
-    }
-  }
-
-  async function handleUpdateCategory(categoryId, newName) {
-    if (!newName.trim()) {
-      setEditingId(null);
-      setEditingName('');
-      return;
-    }
-
-    try {
-      const { error } = await supabase
-        .from('categories')
-        .update({ name: newName.trim() })
-        .eq('id', categoryId);
-
-      if (error) throw error;
-
-      setAllCategories(allCategories.map(cat => 
-        cat.id === categoryId ? { ...cat, name: newName.trim() } : cat
-      ));
-      setEditingId(null);
-      setEditingName('');
-    } catch (error) {
-      console.error('Error updating category:', error);
-      alert('Error updating category: ' + error.message);
-    }
-  }
-
-  async function handleDeleteCategory(categoryId) {
-    const category = allCategories.find(c => c.id === categoryId);
-    const hasSubcategories = allCategories.some(c => c.parent_category_id === categoryId);
-    
-    if (hasSubcategories) {
-      if (!confirm('This category has subcategories. Deleting it will also delete all subcategories. Are you sure?')) {
-        return;
-      }
-    } else {
-      if (!confirm('Are you sure you want to delete this category? This cannot be undone.')) {
-        return;
-      }
-    }
-
-    try {
-      // Delete subcategories first if any
-      if (hasSubcategories) {
-        const { error: subError } = await supabase
-          .from('categories')
-          .delete()
-          .eq('parent_category_id', categoryId);
-
-        if (subError) throw subError;
-      }
-
-      // Delete the category
-      const { error } = await supabase
-        .from('categories')
-        .delete()
-        .eq('id', categoryId);
-
-      if (error) throw error;
-
-      setAllCategories(allCategories.filter(cat => cat.id !== categoryId && cat.parent_category_id !== categoryId));
-    } catch (error) {
-      console.error('Error deleting category:', error);
-      alert('Error deleting category: ' + error.message);
-    }
-  }
-
-  async function handleReorder(newOrder) {
-    try {
-      // Update all categories with new order
-      const updates = newOrder.map((cat, index) => ({
-        id: cat.id,
-        order: index + 1
-      }));
-
-      for (const update of updates) {
-        const { error } = await supabase
-          .from('categories')
-          .update({ order: update.order })
-          .eq('id', update.id);
-
-        if (error) throw error;
-      }
-
-      setCategories(newOrder);
-    } catch (error) {
-      console.error('Error reordering categories:', error);
-      alert('Error reordering categories: ' + error.message);
-      loadCategories(); // Reload on error
-    }
-  }
-
-  const handleDragStart = (e, index) => {
-    setDraggedItem(index);
-    e.dataTransfer.effectAllowed = 'move';
-  };
-
-  const handleDragOver = (e, index) => {
-    e.preventDefault();
-    e.stopPropagation();
-    e.dataTransfer.dropEffect = 'move';
-    
-    if (draggedItem === null) {
-      setDropIndex(null);
-      setDropPosition(null);
-      return;
-    }
-
-    // Don't show indicator on the item being dragged
-    if (draggedItem === index) {
-      setDropIndex(null);
-      setDropPosition(null);
-      return;
-    }
-
-    const rect = e.currentTarget.getBoundingClientRect();
-    const mouseY = e.clientY;
-    const elementMiddle = rect.top + rect.height / 2;
-    
-    // Determine if dropping above or below based on mouse position
-    const position = mouseY < elementMiddle ? 'above' : 'below';
-    
-    // Calculate the final drop index
-    let finalIndex;
-    if (position === 'above') {
-      // Dropping above this item
-      finalIndex = index;
-      // If dragging from below, adjust index
-      if (draggedItem > index) {
-        finalIndex = index;
-      }
-    } else {
-      // Dropping below this item
-      finalIndex = index + 1;
-      // If dragging from above, adjust index
-      if (draggedItem < index) {
-        finalIndex = index + 1;
-      }
-    }
-    
-    setDropIndex(finalIndex);
-    setDropPosition(position);
-  };
-
-  const handleDragLeave = () => {
-    setDropIndex(null);
-    setDropPosition(null);
-  };
-
-  const handleDrop = (e, index) => {
-    e.preventDefault();
-    if (draggedItem === null) {
-      setDropIndex(null);
-      setDropPosition(null);
-      setDraggedItem(null);
-      return;
-    }
-
-    // Use dropIndex if set, otherwise use the index from the drop target
-    const finalDropIndex = dropIndex !== null ? dropIndex : index;
-    
-    if (draggedItem === finalDropIndex) {
-      setDropIndex(null);
-      setDropPosition(null);
-      setDraggedItem(null);
-      return;
-    }
-
-    const newCategories = [...categories];
-    const [removed] = newCategories.splice(draggedItem, 1);
-    newCategories.splice(finalDropIndex, 0, removed);
-
-    handleReorder(newCategories);
-    setDraggedItem(null);
-    setDropIndex(null);
-    setDropPosition(null);
-  };
-
-  if (!currentUser?.subspecialtyId) {
-    return (
-      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-        <div className="glass rounded-2xl p-8 max-w-md w-full shadow-2xl">
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">Category Management</h2>
-          <p className="text-gray-600 mb-6">Please select a subspecialty in your profile to manage categories.</p>
-          <button
-            onClick={onClose}
-            className="w-full px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-medium"
-          >
-            Close
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-slide-up">
-      <div className="glass rounded-2xl p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
-        <div className="flex justify-between items-center mb-6">
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900">Manage Categories</h2>
-            <p className="text-gray-600 text-sm mt-1">Add, rename, delete, and reorder categories and subcategories</p>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            <X size={24} className="text-gray-600" />
-          </button>
-        </div>
-
-        {/* Add New Category */}
-        <div className="mb-6 p-4 bg-purple-50 rounded-xl border-2 border-purple-200">
-          <label className="block text-sm font-semibold text-gray-700 mb-2">Add New Category</label>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={newCategoryName}
-              onChange={(e) => setNewCategoryName(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && handleAddCategory()}
-              placeholder="Category name..."
-              className="flex-1 px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none transition-colors"
-            />
-            <button
-              onClick={handleAddCategory}
-              disabled={addingCategory || !newCategoryName.trim()}
-              className="px-5 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {addingCategory ? 'Adding...' : 'Add'}
-            </button>
-          </div>
-        </div>
-
-        {/* Categories List */}
-        {loading ? (
-          <div className="text-center py-8">
-            <div className="w-8 h-8 mx-auto border-4 border-purple-600 border-t-transparent rounded-full animate-spin"></div>
-          </div>
-        ) : categories.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">
-            <p>No categories yet. Add one above!</p>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {categories.map((category, index) => (
-              <div key={category.id} className="space-y-2">
-                {/* Drop indicator line above this category */}
-                {dropIndex === index && dropPosition === 'above' && draggedItem !== null && draggedItem !== index && (
-                  <div className="h-1.5 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full mx-4 shadow-lg animate-pulse"></div>
-                )}
-                
-                {/* Category */}
-                <div
-                  draggable
-                  onDragStart={(e) => handleDragStart(e, index)}
-                  onDragOver={(e) => handleDragOver(e, index)}
-                  onDragLeave={handleDragLeave}
-                  onDrop={(e) => handleDrop(e, index)}
-                  className={`flex items-center gap-3 p-4 bg-white rounded-xl border-2 transition-all ${
-                    draggedItem === index 
-                      ? 'opacity-50 border-purple-400 scale-95' 
-                      : (dropIndex === index && dropPosition === 'above') || (dropIndex === index + 1 && dropPosition === 'below')
-                      ? 'border-purple-400 shadow-md'
-                      : 'border-gray-200 hover:border-purple-300'
-                  }`}
-                >
-                  <GripVertical size={20} className="text-gray-400 cursor-move" />
-                  
-                  {editingId === category.id ? (
-                    <input
-                      type="text"
-                      value={editingName}
-                      onChange={(e) => setEditingName(e.target.value)}
-                      onBlur={() => handleUpdateCategory(category.id, editingName)}
-                      onKeyPress={(e) => {
-                        if (e.key === 'Enter') {
-                          handleUpdateCategory(category.id, editingName);
-                        } else if (e.key === 'Escape') {
-                          setEditingId(null);
-                          setEditingName('');
-                        }
-                      }}
-                      autoFocus
-                      className="flex-1 px-3 py-2 border-2 border-purple-500 rounded-lg focus:outline-none"
-                    />
-                  ) : (
-                    <span className="flex-1 text-gray-900 font-medium">{category.name}</span>
-                  )}
-
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => {
-                        setExpandedCategories({
-                          ...expandedCategories,
-                          [category.id]: !expandedCategories[category.id]
-                        });
-                      }}
-                      className="p-2 text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
-                      title={expandedCategories[category.id] ? "Collapse" : "Expand"}
-                    >
-                      {expandedCategories[category.id] ? (
-                        <span className="text-xs">▼</span>
-                      ) : (
-                        <span className="text-xs">▶</span>
-                      )}
-                    </button>
-                    <button
-                      onClick={() => {
-                        setEditingId(category.id);
-                        setEditingName(category.name);
-                      }}
-                      className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
-                      title="Rename"
-                    >
-                      <Edit size={18} />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteCategory(category.id)}
-                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                      title="Delete"
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Drop indicator line below this category */}
-                {dropIndex === index + 1 && dropPosition === 'below' && draggedItem !== null && draggedItem !== index && (
-                  <div className="h-1.5 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full mx-4 shadow-lg animate-pulse"></div>
-                )}
-
-                {/* Subcategories */}
-                {expandedCategories[category.id] && (
-                  <div className="ml-8 space-y-2">
-                    {category.subcategories && category.subcategories.length > 0 && (
-                      category.subcategories.map((subcategory, subIndex) => (
-                        <div
-                          key={subcategory.id}
-                          className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200"
-                        >
-                          <span className="text-xs text-gray-400">└─</span>
-                          {editingId === subcategory.id ? (
-                            <input
-                              type="text"
-                              value={editingName}
-                              onChange={(e) => setEditingName(e.target.value)}
-                              onBlur={() => handleUpdateCategory(subcategory.id, editingName)}
-                              onKeyPress={(e) => {
-                                if (e.key === 'Enter') {
-                                  handleUpdateCategory(subcategory.id, editingName);
-                                } else if (e.key === 'Escape') {
-                                  setEditingId(null);
-                                  setEditingName('');
-                                }
-                              }}
-                              autoFocus
-                              className="flex-1 px-3 py-2 border-2 border-purple-500 rounded-lg focus:outline-none text-sm"
-                            />
-                          ) : (
-                            <span className="flex-1 text-gray-800 text-sm">{subcategory.name}</span>
-                          )}
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => {
-                                setEditingId(subcategory.id);
-                                setEditingName(subcategory.name);
-                              }}
-                              className="p-1.5 text-purple-600 hover:bg-purple-50 rounded transition-colors"
-                              title="Rename"
-                            >
-                              <Edit size={14} />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteCategory(subcategory.id)}
-                              className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
-                              title="Delete"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                    
-                    {/* Add Subcategory Input */}
-                    <div className="p-3 bg-purple-50 rounded-lg border border-purple-200">
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          value={newSubcategoryNames[category.id] || ''}
-                          onChange={(e) => setNewSubcategoryNames({
-                            ...newSubcategoryNames,
-                            [category.id]: e.target.value
-                          })}
-                          onKeyPress={(e) => e.key === 'Enter' && handleAddSubcategory(category.id)}
-                          placeholder="Add subcategory..."
-                          className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded focus:border-purple-500 focus:outline-none"
-                        />
-                        <button
-                          onClick={() => handleAddSubcategory(category.id)}
-                          disabled={addingSubcategory[category.id] || !newSubcategoryNames[category.id]?.trim()}
-                          className="px-3 py-1.5 text-sm bg-purple-600 text-white rounded font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          {addingSubcategory[category.id] ? '...' : 'Add'}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-
-        <div className="mt-6 flex justify-end">
-          <button
-            onClick={onClose}
-            className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-medium"
-          >
-            Done
-          </button>
-        </div>
-      </div>
-    </div>
+    </ErrorBoundary>
   );
 }
 
