@@ -24,7 +24,13 @@ import { supabase } from '../lib/supabase';
 import { trackFavoriteEvent, trackUnfavoriteEvent } from '../lib/analytics';
 import { ERROR_MESSAGES } from '../utils/constants';
 
-export function useFavorites(userId) {
+/**
+ * @param {string} userId - Current user ID
+ * @param {Object} [options] - Optional config
+ * @param {boolean} [options.trackAnalytics] - If true, record favorite/unfavorite in analytics (Surgeon/Resident-Fellow only). Default false.
+ */
+export function useFavorites(userId, options = {}) {
+  const { trackAnalytics = false } = options;
   // State
   const [favorites, setFavorites] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -399,8 +405,10 @@ export function useFavorites(userId) {
         // Reload favorites to ensure consistency with database
         await loadFavorites();
         
-        // Track analytics
-        trackUnfavoriteEvent(resourceId, userId);
+        // Track analytics only for Surgeon/Resident-Fellow
+        if (trackAnalytics) {
+          trackUnfavoriteEvent(resourceId, userId);
+        }
         
         // Update favorite count on resource (non-critical)
         supabase
@@ -527,8 +535,10 @@ export function useFavorites(userId) {
         
         if (insertError) throw insertError;
         
-        // Track analytics for each
-        newFavorites.forEach((id) => trackFavoriteEvent(id, userId));
+        // Track analytics for each (Surgeon/Resident-Fellow only)
+        if (trackAnalytics) {
+          newFavorites.forEach((id) => trackFavoriteEvent(id, userId));
+        }
         
         return { success: true, count: newFavorites.length };
       } catch (err) {

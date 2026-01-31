@@ -1,6 +1,6 @@
 # Surgery Techniques App – Testing Progress
 
-**Last updated:** 2026-01-27  
+**Last updated:** 2026-01-31  
 **Tester:** Theresa Sandoval  
 
 This document summarizes the manual testing completed so far against the master checklist in `TESTING_DOCUMENT.md`.
@@ -86,14 +86,10 @@ This document summarizes the manual testing completed so far against the master 
     - `userType` allowlist (`surgeon`, `industry`, `student`, `trainee`).
     - No PII in logs; user‑facing errors are sanitized.
 
-### 2.3 Existing User (Skip Onboarding) – ⏳ PENDING
-- **To test next:**
-  - Use a profile where:
-    - `primary_specialty_id` and `primary_subspecialty_id` are set.
-    - `onboarding_complete = true`.
-  - Log in and confirm:
-    - Onboarding screen does **not** appear.
-    - Main app loads directly.
+### 2.3 Existing User (Skip Onboarding) – ✅ PASS (2026-01-31)
+- **Expected:** User with completed profile (specialty/subspecialty set) skips onboarding; main app loads directly.
+- **How tested:** Logged in with Sports Medicine user (existing profile with specialty/subspecialty set); onboarding did **not** appear; main app loaded directly.
+- **Result:** Pass.
 
 ---
 
@@ -112,32 +108,21 @@ This document summarizes the manual testing completed so far against the master 
     - If user has a normal subspecialty → restricts categories to that subspecialty.
     - Uses `procedures` table with `in('category_id', ...)` to fetch resources per category.
 
-### 3.2 Generalist User – ⏳ PENDING
+### 3.2 Generalist User – ✅ PASS (2026-01-31)
 - **Expected behavior:**
-  - User with subspecialty **Generalist** should see **all categories** across subspecialties.
-  - Categories should be clearly attributable to their underlying subspecialties.
-- **Implementation hook:**
-  - `fetchCategoriesAndProceduresForUser` checks the subspecialty name:
-    - If it equals `SPECIALTY_SUBSPECIALTY.GENERALIST` → `loadAll = true` and loads all categories.
-- **Remaining work:**
-  - Create/identify a **Generalist** profile in Supabase.
-  - Run through the 3.2 steps and log results.
+  - User with subspecialty **General Orthopedics** (under Orthopedic Surgery) sees **all Orthopedic Surgery categories** (all subspecialties).
+- **How tested:**
+  - Created new user via app onboarding; chose **Orthopedic Surgery → General Orthopedics**.
+  - Main app showed all Ortho categories; Suggest Resource modal pre-populated with Orthopedic Surgery / General Orthopedics.
+- **Fix applied:** `App.jsx` now calls `refreshProfile()` after onboarding complete so `currentUser` gets updated `specialtyId`/`subspecialtyId`; Suggest Resource pre-population then works.
+- **Additional:** Sports Medicine surgeon created via app onboarding (Orthopedic Surgery → Sports Medicine) – categories and Suggest Resource pre-population both worked.
+- **Subspecialty with no categories (e.g. Sports Medicine):** When a user has a subspecialty but no categories exist for that subspecialty yet, they now see **no resources** (not Foot & Ankle). Fixes applied: (1) `displayedResources` filter runs whenever user has `subspecialtyId` (not only when `categories.length > 0`); (2) `loadAllData` re-runs when profile gains `specialtyId`/`subspecialtyId` so categories match the loaded profile (fixes case where profile loaded after initial load).
 
-### 3.3 Podiatry User – ⏳ PENDING (logic implemented)
-- **Implementation (already in code):**
-  - If the user’s **specialty** is Podiatry and they have **no subspecialty**:
-    - `fetchCategoriesAndProceduresForUser`:
-      - Resolves Orthopedic Surgery’s ID (UK/US spelling variants handled).
-      - Resolves the **Foot & Ankle** subspecialty ID under Orthopedic Surgery.
-      - Sets `effectiveSubspecialtyId` to that Foot & Ankle ID.
-      - Loads categories and procedures for Foot & Ankle.
-- **To test:**
-  - In `profiles`, set:
-    - `primary_specialty_id` → Podiatry row.
-    - `primary_subspecialty_id = NULL`.
-  - Log in and verify:
-    - Categories shown match Orthopedic Surgery → Foot & Ankle view.
-    - Resources load without errors.
+### 3.3 Podiatry User – ✅ PASS (2026-01-31)
+- **Expected:** Podiatry user (specialty = Podiatry, subspecialty = NULL) sees Foot & Ankle categories; Suggest Resource shows Podiatry (not Orthopedic Surgery).
+- **How tested:** New Podiatry user via app onboarding; existing user fixed via Supabase (Option A: `primary_specialty_id` = Podiatry id, `primary_subspecialty_id` = NULL).
+- **Fix applied:** Onboarding now saves **Podiatry** specialty + **NULL** subspecialty (no longer saves mapped Ortho + Foot & Ankle). Category loading in App still maps Podiatry → Foot & Ankle for categories only.
+- **Result:** Categories match Foot & Ankle; Suggest Resource pre-populates with Podiatry; no “Non-Podiatry user detected” for Podiatry users.
 
 ---
 
@@ -194,10 +179,10 @@ This document summarizes the manual testing completed so far against the master 
 | 1.3     | Logout & Re-login                | ✅ Passed  | Clean logout → login works                              |
 | 2.1     | Onboarding State                 | ✅ Done    | Onboarding enabled; uses specialty/subspecialty/flag    |
 | 2.2     | New User Onboarding              | ✅ Passed  | Includes Podiatry mapping → Foot & Ankle                |
-| 2.3     | Existing User Skip Onboarding    | ⏳ Pending | To verify with completed profile                        |
+| 2.3     | Existing User Skip Onboarding    | ✅ Passed | Sports Medicine login; no onboarding; main app direct; subspecialty filtering fix |
 | 3.1     | Categories – Regular User        | ✅ Passed  | Subspecialty‑scoped categories & resources              |
-| 3.2     | Categories – Generalist User     | ⏳ Pending | Requires Generalist test profile                        |
-| 3.3     | Categories – Podiatry User       | ⏳ Pending | Logic implemented; test with Podiatry profile           |
+| 3.2     | Categories – Generalist User     | ✅ Passed | General Orthopedics + Sports Medicine via app onboarding; pre-population fix |
+| 3.3     | Categories – Podiatry User       | ✅ Passed | Onboarding saves Podiatry + null; Suggest Resource shows Podiatry; Option A for existing profile |
 | 7.2     | Dark Mode Toggle                 | ✅ Partial | Toggle works; visual polish still in progress           |
 
 All other tests from `TESTING_DOCUMENT.md` (4.x–10.x) are **not yet executed** and remain to be tested.

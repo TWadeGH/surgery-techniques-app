@@ -22,7 +22,7 @@ import {
 } from './hooks';
 
 // Import utilities
-import { isAdmin, canRateOrFavorite, isSurgeon } from './utils/helpers';
+import { isAdmin, canRateOrFavorite, isSurgeon, includeInAnalytics } from './utils/helpers';
 import { VIEW_MODES, USER_TYPES, ADMIN_TABS, RESOURCE_TYPES, SPECIALTY_SUBSPECIALTY } from './utils/constants';
 import { validateCategoryId, validateUuid } from './utils/validators';
 
@@ -62,7 +62,8 @@ function SurgicalTechniquesApp() {
     loading: authLoading,
     updateProfile,
     signOut,
-    refreshSession
+    refreshSession,
+    refreshProfile
   } = useAuth();
   
   // Use authLoading as the main loading state
@@ -76,7 +77,7 @@ function SurgicalTechniquesApp() {
   const [searchTerm, setSearchTerm] = useState('');
 
   // Favorites, Notes, Upcoming Cases
-  const { isFavorited, toggleFavorite } = useFavorites(userId);
+  const { isFavorited, toggleFavorite } = useFavorites(userId, { trackAnalytics: includeInAnalytics(currentUser) });
   const { getNote, updateNote } = useNotes(userId);
   const {
     upcomingCases,
@@ -163,10 +164,15 @@ function SurgicalTechniquesApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.id, currentUser?.specialtyId, currentUser?.subspecialtyId, currentUser?.onboardingComplete]);
 
-  const handleOnboardingComplete = useCallback(() => {
+  const handleOnboardingComplete = useCallback(async () => {
     setShowOnboarding(false);
-    // The useAuth hook will automatically reload the profile
-  }, []);
+    // Reload profile so currentUser gets updated specialty/subspecialty from DB
+    try {
+      await refreshProfile();
+    } catch (err) {
+      console.warn('Profile reload after onboarding failed (non-blocking):', err);
+    }
+  }, [refreshProfile]);
 
   /** Generalist → all categories; Podiatry (no subspecialty) → Foot and Ankle; else → user's subspecialty.
    * Special case: General Orthopedics → all Orthopedic Surgery categories.
@@ -445,20 +451,31 @@ function SurgicalTechniquesApp() {
   }, [currentUser?.id, currentUser?.subspecialtyId, currentUser?.specialtyId, currentUser?.role, browsingSubspecialtyId, fetchCategoriesAndProceduresForUser]);
 
   // Load data when user is authenticated (moved after loadAllData definition)
-  // Use ref to prevent multiple loads
+  // Re-run when profile gains specialty/subspecialty so categories match (e.g. after profile load after timeout)
   const dataLoadedRef = useRef(false);
+  const lastLoadedProfileRef = useRef({ specialtyId: null, subspecialtyId: null });
   useEffect(() => {
-    if (currentUser && !dataLoadedRef.current) {
+    if (!currentUser) {
+      dataLoadedRef.current = false;
+      lastLoadedProfileRef.current = { specialtyId: null, subspecialtyId: null };
+      setBrowsingSubspecialtyId(null);
+      setAvailableSubspecialties([]);
+      return;
+    }
+    const hasProfile = currentUser.specialtyId != null || currentUser.subspecialtyId != null;
+    const last = lastLoadedProfileRef.current;
+    const profileChanged = last.specialtyId !== currentUser.specialtyId || last.subspecialtyId !== currentUser.subspecialtyId;
+    if (hasProfile && profileChanged) {
+      dataLoadedRef.current = false;
+    }
+    if (!dataLoadedRef.current) {
       dataLoadedRef.current = true;
+      lastLoadedProfileRef.current = { specialtyId: currentUser.specialtyId ?? null, subspecialtyId: currentUser.subspecialtyId ?? null };
       loadAllData();
-      loadAvailableSubspecialties(); // Load subspecialties for browsing dropdown
-    } else if (!currentUser) {
-      dataLoadedRef.current = false; // Reset when user logs out
-      setBrowsingSubspecialtyId(null); // Reset browsing subspecialty on logout
-      setAvailableSubspecialties([]); // Clear subspecialties list
+      loadAvailableSubspecialties();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser?.id]); // Only depend on user ID, not the whole object
+  }, [currentUser?.id, currentUser?.specialtyId, currentUser?.subspecialtyId]);
 
   // Load suggested resources when switching to Admin view
   useEffect(() => {
@@ -1073,9 +1090,9 @@ function SurgicalTechniquesApp() {
       filtered = filtered.filter(r => isFavorited(r.id));
     }
 
-    // Security: Filter by browsing subspecialty's categories (if browsing mode is active)
-    // This ensures users only see resources from the subspecialty they're browsing
-    if (browsingSubspecialtyId !== null || (categories.length > 0 && currentUser?.subspecialtyId)) {
+    // Security: Filter by subspecialty whenever user has one (or is browsing one).
+    // If their subspecialty has no categories yet (e.g. Sports Medicine), show no resources.
+    if (browsingSubspecialtyId !== null || currentUser?.subspecialtyId != null) {
       // Get all category IDs for the current browsing context (browsing subspecialty or user's subspecialty)
       const allowedCategoryIds = categories.map(c => c.id);
       // Also include subcategories

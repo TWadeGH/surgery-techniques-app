@@ -24,6 +24,7 @@ import {
 import { supabase } from '../../lib/supabase';
 import { trackResourceCoview, trackRatingEvent } from '../../lib/analytics';
 import { USER_TYPES } from '../../utils/constants';
+import { includeInAnalytics } from '../../utils/helpers';
 import { useToast } from '../common';
 
 /**
@@ -97,8 +98,8 @@ function canUserRate(user) {
   
   const userType = user.userType.toLowerCase().trim();
   
-  // Security: Allowlist of valid user types (prevents injection)
-  const ALLOWED_USER_TYPES = ['surgeon', 'attending', 'trainee', 'resident', 'fellow'];
+  // Security: Allowlist of valid user types (all 4 onboarding options can rate)
+  const ALLOWED_USER_TYPES = ['surgeon', 'attending', 'trainee', 'resident', 'fellow', 'industry', 'student', 'other'];
   
   return ALLOWED_USER_TYPES.includes(userType);
 }
@@ -151,13 +152,13 @@ function ResourceCard({
   const [loadingRating, setLoadingRating] = useState(false);
   const [showFullDescriptionPopover, setShowFullDescriptionPopover] = useState(false);
 
-  // Track view when card is visible
+  // Track view when card is visible (analytics: Surgeon and Resident/Fellow only)
   useEffect(() => {
-    if (!viewTracked && resource.id) {
+    if (!viewTracked && resource.id && includeInAnalytics(currentUser)) {
       trackResourceCoview(resource.id);
       setViewTracked(true);
     }
-  }, [resource.id, viewTracked]);
+  }, [resource.id, viewTracked, currentUser]);
 
   // Load user's rating
   useEffect(() => {
@@ -257,7 +258,9 @@ function ResourceCard({
       }
 
       setRating(starRating);
-      trackRatingEvent(currentUser.id, resource.id, starRating, resource.category_id);
+      if (includeInAnalytics(currentUser)) {
+        trackRatingEvent(currentUser.id, resource.id, starRating, resource.category_id);
+      }
     } catch (error) {
       // Security: Sanitize error message to prevent XSS and information leakage
       const sanitizedMessage = error?.message ? 

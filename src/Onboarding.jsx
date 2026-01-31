@@ -240,16 +240,18 @@ export default function Onboarding({ user, onComplete }) {
       let specialtyId = selectedSpecialty;
       let subspecialtyId = selectedSubspecialty;
       
-      // Special case: Podiatry maps to Orthopedic Surgery + Foot and Ankle
+      // Podiatry: store Podiatry specialty + NULL subspecialty so user is recognized as Podiatry
+      // (e.g. Suggest Resource, analytics). Category loading in App maps Podiatry → Foot & Ankle.
       if (isPodiatry) {
-        const mapping = await mapPodiatryToFootAnkle();
-        specialtyId = mapping.specialtyId;
-        subspecialtyId = mapping.subspecialtyId;
+        subspecialtyId = null;
       }
       
       // Security: Validate IDs before saving
-      if (!specialtyId || !subspecialtyId) {
-        throw new Error('Specialty and subspecialty are required');
+      if (!specialtyId) {
+        throw new Error('Specialty is required');
+      }
+      if (!isPodiatry && !subspecialtyId) {
+        throw new Error('Subspecialty is required');
       }
       
       // Security: Validate user_type
@@ -262,7 +264,7 @@ export default function Onboarding({ user, onComplete }) {
       // - We only enforce that they are present, not that they follow a specific UUID shape
       //   because this project currently uses all-zero UUIDs in Seed data.
       const specialtyIdStr = String(specialtyId).trim();
-      const subspecialtyIdStr = String(subspecialtyId).trim();
+      const subspecialtyIdStr = subspecialtyId != null ? String(subspecialtyId).trim() : null;
       
       // Security: Validate user_type against allowlist (prevent injection)
       const allowedUserTypes = ['surgeon', 'industry', 'student', 'trainee'];
@@ -271,10 +273,11 @@ export default function Onboarding({ user, onComplete }) {
       }
       
       // Prepare update data - ensure IDs are properly formatted
+      // Podiatry: store Podiatry specialty ID + null subspecialty so user is identified as Podiatry
       const updateData = {
         user_type: userType, // Should be: 'surgeon', 'industry', 'student', etc.
-        primary_specialty_id: specialtyIdStr, // UUID as string
-        primary_subspecialty_id: subspecialtyIdStr, // UUID as string
+        primary_specialty_id: specialtyIdStr, // UUID as string (Podiatry id when isPodiatry)
+        primary_subspecialty_id: isPodiatry ? null : subspecialtyIdStr, // null for Podiatry
         // Note: onboarding_complete column may not exist in all database schemas
         // The presence of specialty/subspecialty IDs is sufficient to determine onboarding status
         // onboarding_complete: true  // Commented out - column doesn't exist in current schema
@@ -284,16 +287,13 @@ export default function Onboarding({ user, onComplete }) {
       console.log('Updating profile - validation:', { 
         userType, 
         specialtyIdLength: specialtyIdStr.length,
-        subspecialtyIdLength: subspecialtyIdStr.length,
+        subspecialtyIdLength: subspecialtyIdStr?.length ?? 0,
         specialtyIdType: typeof specialtyId,
         subspecialtyIdType: typeof subspecialtyId,
-        isPodiatryMapping: isPodiatry
+        isPodiatry
       });
       
       // Security: Validate specialty/subspecialty exist without logging PII
-      // Note: For Podiatry mapping, the IDs won't be in the specialties/subspecialties arrays
-      // because we're mapping to Orthopedic Surgery + Foot and Ankle
-      // So we skip this validation for Podiatry and trust the mapping function
       if (!isPodiatry) {
         const selectedSpecialtyObj = specialties.find(s => s.id === specialtyId);
         const selectedSubspecialtyObj = subspecialties.find(s => s.id === subspecialtyId);
@@ -304,14 +304,12 @@ export default function Onboarding({ user, onComplete }) {
           throw new Error('Selected subspecialty not found. Please try again.');
         }
       } else {
-        // For Podiatry, verify the mapped IDs are valid (not null/empty)
-        if (!specialtyIdStr || specialtyIdStr === 'null' || specialtyIdStr === 'undefined') {
-          throw new Error('Podiatry mapping failed. Please try again.');
+        // Podiatry: verify selected specialty (Podiatry) is present
+        const podiatrySpecialtyObj = specialties.find(s => s.id === specialtyId);
+        if (!podiatrySpecialtyObj) {
+          throw new Error('Selected specialty not found. Please try again.');
         }
-        if (!subspecialtyIdStr || subspecialtyIdStr === 'null' || subspecialtyIdStr === 'undefined') {
-          throw new Error('Podiatry mapping failed. Please try again.');
-        }
-        console.log('Podiatry mapping validated - IDs are present');
+        console.log('Podiatry profile validated - saving Podiatry specialty, null subspecialty');
       }
       
       const { data, error } = await supabase
@@ -460,7 +458,7 @@ export default function Onboarding({ user, onComplete }) {
           <div style={styles.stepDot(step === 3)} />
         </div>
 
-        {/* Step 1: User Type */}
+        {/* Step 1: User Type - Security: allowlist enforced in handleComplete */}
         {step === 1 && (
           <div>
             <h2 style={{ marginBottom: '20px', fontSize: '24px' }}>What describes you best?</h2>
@@ -481,11 +479,24 @@ export default function Onboarding({ user, onComplete }) {
             <div
               style={{
                 ...styles.card,
+                ...(userType === 'trainee' ? styles.cardSelected : {})
+              }}
+              onClick={() => setUserType('trainee')}
+            >
+              <div style={styles.cardTitle}>🩺 Resident / Fellow</div>
+              <div style={styles.cardDescription}>
+                Resident or fellow in surgical training
+              </div>
+            </div>
+
+            <div
+              style={{
+                ...styles.card,
                 ...(userType === 'industry' ? styles.cardSelected : {})
               }}
               onClick={() => setUserType('industry')}
             >
-              <div style={styles.cardTitle}>🏢 Medical Device Industry</div>
+              <div style={styles.cardTitle}>🏢 Medical Industry</div>
               <div style={styles.cardDescription}>
                 Device company representative, product specialist, or industry professional
               </div>
@@ -498,9 +509,9 @@ export default function Onboarding({ user, onComplete }) {
               }}
               onClick={() => setUserType('student')}
             >
-              <div style={styles.cardTitle}>📚 Student</div>
+              <div style={styles.cardTitle}>📚 Student / Other</div>
               <div style={styles.cardDescription}>
-                Medical student, resident, or fellow learning surgical techniques
+                Medical student or other
               </div>
             </div>
 
@@ -521,9 +532,13 @@ export default function Onboarding({ user, onComplete }) {
         {step === 2 && (
           <div>
             <h2 style={{ marginBottom: '20px', fontSize: '24px' }}>
-              {userType === 'surgeon' ? 'What is your specialty?' : 'Which specialty interests you?'}
+              {userType === 'surgeon' || userType === 'trainee' ? 'What is your specialty?' : 'Which specialty interests you?'}
             </h2>
-            
+            {(userType === 'industry' || userType === 'student') && (
+              <p style={{ fontSize: '13px', color: '#666', marginBottom: '16px' }}>
+                You can change the specialty you&apos;re viewing later in Settings.
+              </p>
+            )}
             {specialties.map(specialty => {
               const isPodiatrySpecialty = specialty.name.toLowerCase().includes(SPECIALTY_SUBSPECIALTY.PODIATRY) ||
                                           specialty.name.toLowerCase() === 'podiatry';
@@ -622,9 +637,13 @@ export default function Onboarding({ user, onComplete }) {
           return (
           <div>
             <h2 style={{ marginBottom: '20px', fontSize: '24px' }}>
-              {userType === 'surgeon' ? 'What is your subspecialty?' : 'Which subspecialty interests you?'}
+              {userType === 'surgeon' || userType === 'trainee' ? 'What is your subspecialty?' : 'Which subspecialty interests you?'}
             </h2>
-            
+            {(userType === 'industry' || userType === 'student') && (
+              <p style={{ fontSize: '13px', color: '#666', marginBottom: '16px' }}>
+                You can change the subspecialty you&apos;re viewing later in Settings.
+              </p>
+            )}
             {subspecialties.length === 0 ? (
               <div style={{ 
                 padding: '20px', 

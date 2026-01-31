@@ -43,12 +43,28 @@ export function isTrainee(user) {
   return user?.userType === 'trainee';
 }
 
+/** Allowlisted user types that can use favorites, notes, ratings, upcoming cases (all 4 onboarding options). */
+const USER_TYPES_CAN_INTERACT = ['surgeon', 'attending', 'trainee', 'resident', 'fellow', 'industry', 'student', 'other'];
+
 /**
- * Check if user can rate/favorite resources (surgeons and trainees only)
+ * Check if user can rate/favorite/use notes/upcoming cases.
+ * Security: Allowlist only; all four onboarding options (Surgeon, Resident/Fellow, Industry, Student/Other) are allowed.
  * @param {Object} user - User object
  * @returns {boolean}
  */
 export function canRateOrFavorite(user) {
+  if (!user?.userType || typeof user.userType !== 'string') return false;
+  const type = user.userType.toLowerCase().trim();
+  return USER_TYPES_CAN_INTERACT.includes(type);
+}
+
+/**
+ * Whether to include this user in analytics (Surgeon and Resident/Fellow only).
+ * Security: Used to gate tracking calls; no PII in analytics.
+ * @param {Object} user - User object
+ * @returns {boolean}
+ */
+export function includeInAnalytics(user) {
   return isSurgeon(user) || isTrainee(user);
 }
 

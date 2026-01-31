@@ -106,8 +106,8 @@ export default function Header({
     
     const userType = currentUser.userType.toLowerCase().trim();
     
-    // Security: Allowlist of valid user types (prevents injection)
-    const ALLOWED_USER_TYPES = ['surgeon', 'attending', 'trainee', 'resident', 'fellow'];
+    // Security: Allowlist of valid user types (all 4 onboarding options can use upcoming cases)
+    const ALLOWED_USER_TYPES = ['surgeon', 'attending', 'trainee', 'resident', 'fellow', 'industry', 'student', 'other'];
     
     return ALLOWED_USER_TYPES.includes(userType);
   })();

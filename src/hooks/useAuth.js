@@ -22,6 +22,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { initAnalyticsSession, endAnalyticsSession } from '../lib/analytics';
 import { ERROR_MESSAGES } from '../utils/constants';
+import { includeInAnalytics } from '../utils/helpers';
 
 // Global flag to prevent duplicate auth subscriptions across all instances
 // This is necessary because React Fast Refresh can cause multiple hook instances
@@ -293,12 +294,14 @@ export function useAuth() {
       setLoading(false); // Ensure loading is false after profile update
       console.log('✅ User state updated with profile successfully');
       
-      // Initialize analytics session
+      // Initialize analytics session (Surgeon and Resident/Fellow only)
       try {
-        initAnalyticsSession(userId, {
-          specialtyId: transformedProfile.specialtyId,
-          subspecialtyId: transformedProfile.subspecialtyId,
-        });
+        if (includeInAnalytics(transformedProfile)) {
+          initAnalyticsSession(userId, {
+            specialtyId: transformedProfile.specialtyId,
+            subspecialtyId: transformedProfile.subspecialtyId,
+          });
+        }
       } catch (analyticsError) {
         console.warn('Analytics initialization failed (non-blocking):', analyticsError);
       }
