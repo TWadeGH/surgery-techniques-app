@@ -170,6 +170,17 @@ This document summarizes the manual testing completed so far against the master 
 
 ---
 
+## Test 6: Admin Features – ✅ PASS
+
+- **6.1 Admin View Access:** Admin tab; switch to admin view; dashboard and resources list visible; analytics (if present) visible.
+- **6.2 Add Resource:** Add Resource form; required fields; submit; success; resource appears in admin list and user view.
+- **6.3 Edit Resource:** Edit from admin list; modal pre-filled; save; success; changes visible in admin and user view.
+- **6.4 Category Management:** Manage Categories modal; categories/procedures visible; close cleanly.
+- **6.5 Analytics Dashboard:** Analytics section loads; metrics or empty state; no indefinite spinners or errors.
+- **Optional (5.2):** Suggested Resources banner; modal; approve/reject/edit; no errors.
+
+---
+
 ## 6. Summary of Test Status vs. Master Checklist
 
 | Test ID | Area                              | Status     | Notes                                                    |
@@ -183,7 +194,8 @@ This document summarizes the manual testing completed so far against the master 
 | 3.1     | Categories – Regular User        | ✅ Passed  | Subspecialty‑scoped categories & resources              |
 | 3.2     | Categories – Generalist User     | ✅ Passed | General Orthopedics + Sports Medicine via app onboarding; pre-population fix |
 | 3.3     | Categories – Podiatry User       | ✅ Passed | Onboarding saves Podiatry + null; Suggest Resource shows Podiatry; Option A for existing profile |
+| 6       | Admin Features                   | ✅ Passed | 6.1–6.5 + optional 5.2 (suggested resources)            |
 | 7.2     | Dark Mode Toggle                 | ✅ Partial | Toggle works; visual polish still in progress           |
 
-All other tests from `TESTING_DOCUMENT.md` (4.x–10.x) are **not yet executed** and remain to be tested.
+Tests 4, 5 (remaining), 7 (remaining), 8, 9, 10 from `TESTING_DOCUMENT.md` remain to be tested.
 

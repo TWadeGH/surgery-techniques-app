@@ -51,6 +51,7 @@ const EmptyState = memo(function EmptyState({ showFavoritesOnly }) {
  * @param {Function} props.onToggleUpcomingCase - Callback for toggling upcoming case
  * @param {Object} props.currentUser - Current user object
  * @param {boolean} props.showFavoritesOnly - Whether showing favorites only
+ * @param {Function} props.onReportResource - Callback to open report modal for a resource
  */
 function ResourceList({
   resources,
@@ -64,6 +65,7 @@ function ResourceList({
   onToggleUpcomingCase,
   currentUser,
   showFavoritesOnly = false,
+  onReportResource,
 }) {
   // Safety check for resources
   if (!resources || !Array.isArray(resources)) {
@@ -122,6 +124,7 @@ function ResourceList({
           isUpcomingCase={upcomingCaseResourceIds.has(resource.id)}
           index={index}
           currentUser={currentUser}
+          onReportResource={onReportResource}
         />
       ))}
     </div>

@@ -44,8 +44,11 @@ import {
   EditResourceModal,
   CategoryManagementModal,
   SuggestedResourcesModal,
-  SettingsModal
+  SettingsModal,
+  ReportResourceModal,
+  ReportedResourcesModal
 } from './components/modals';
+import { LegalModal, TermsAcceptanceModal } from './components/legal';
 
 function SurgicalTechniquesApp() {
   // Toast notifications
@@ -91,6 +94,7 @@ function SurgicalTechniquesApp() {
   // ========================================
 
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [legalPage, setLegalPage] = useState(null);
   const [currentView, setCurrentView] = useState(VIEW_MODES.USER);
   const [showSettings, setShowSettings] = useState(false);
   const [darkMode, setDarkMode] = useState(() => {
@@ -105,6 +109,9 @@ function SurgicalTechniquesApp() {
   const [adminTab, setAdminTab] = useState('resources');
   const [suggestedResources, setSuggestedResources] = useState([]);
   const [showSuggestedResources, setShowSuggestedResources] = useState(false);
+  const [reportedResources, setReportedResources] = useState([]);
+  const [showReportedResources, setShowReportedResources] = useState(false);
+  const [resourceToReport, setResourceToReport] = useState(null);
   const [showUpcomingCases, setShowUpcomingCases] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [showSuggestForm, setShowSuggestForm] = useState(false);
@@ -135,30 +142,20 @@ function SurgicalTechniquesApp() {
     }
   }, [darkMode]);
 
-  // Check onboarding status - user needs specialty AND subspecialty to skip onboarding
-  // Note: onboarding_complete column may not exist in database, so we rely on specialty/subspecialty presence
+  // Check onboarding status.
+  // If onboarding_complete === true (from DB), skip onboarding (e.g. Podiatry has no subspecialty).
+  // Otherwise require specialty and subspecialty so Podiatry/null-subspecialty users aren't stuck in onboarding.
   useEffect(() => {
     if (currentUser) {
-      // Debug: Log user's specialty info
-      console.log('👤 Current User Profile:', {
-        userId: currentUser.id?.substring(0, 8) + '...',
-        specialtyId: currentUser.specialtyId,
-        subspecialtyId: currentUser.subspecialtyId,
-        email: currentUser.email?.substring(0, 10) + '...'
-      });
-      
-      // User needs onboarding if they're missing specialty OR subspecialty
-      // onboarding_complete flag is optional (column may not exist)
-      const needsOnboarding = 
-        !currentUser.specialtyId || 
-        !currentUser.subspecialtyId ||
-        (currentUser.onboardingComplete !== undefined && currentUser.onboardingComplete === false);
-      
-      if (needsOnboarding) {
-        setShowOnboarding(true);
-      } else if (currentUser.specialtyId && currentUser.subspecialtyId) {
-        // If both IDs are present, onboarding is complete (regardless of onboarding_complete flag)
+      const hasOnboardingCompleteFlag = currentUser.onboardingComplete === true;
+      const hasSpecialtyAndSubspecialty = currentUser.specialtyId && currentUser.subspecialtyId;
+
+      if (hasOnboardingCompleteFlag) {
         setShowOnboarding(false);
+      } else if (hasSpecialtyAndSubspecialty) {
+        setShowOnboarding(false);
+      } else {
+        setShowOnboarding(true);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -409,6 +406,30 @@ function SurgicalTechniquesApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.id, currentUser?.role, currentUser?.specialtyId, currentUser?.subspecialtyId]); // Only depend on specific fields
 
+  const loadReportedResources = useCallback(async () => {
+    try {
+      if (!isAdmin(currentUser)) return;
+      let query = supabase
+        .from('resource_reports')
+        .select('*, resources(*)')
+        .order('created_at', { ascending: false });
+      if (currentUser.role === 'super_admin') {
+        // see all
+      } else if (currentUser.role === 'specialty_admin' && currentUser.specialtyId) {
+        query = query.eq('resource_specialty_id', currentUser.specialtyId);
+      } else if (currentUser.role === 'subspecialty_admin' && currentUser.subspecialtyId) {
+        query = query.eq('resource_subspecialty_id', currentUser.subspecialtyId);
+      }
+      const { data, error } = await query;
+      if (error) throw error;
+      setReportedResources(data || []);
+    } catch (error) {
+      console.error('Error loading reported resources:', error);
+      setReportedResources([]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.id, currentUser?.role, currentUser?.specialtyId, currentUser?.subspecialtyId]);
+
   const loadAllData = useCallback(async () => {
     try {
       // Load resources
@@ -426,7 +447,7 @@ function SurgicalTechniquesApp() {
       // Do not auto-select a category: show all resources until the user picks a category/subcategory
       // (selectedCategoryId stays null on load/refresh)
 
-      // Load suggested resources if user is an admin
+      // Load suggested and reported resources if user is an admin
       if (isAdmin(currentUser)) {
         console.log('🔵 fetchCategoriesAndProceduresForUser: Calling loadSuggestedResources for admin');
         try {
@@ -440,6 +461,11 @@ function SurgicalTechniquesApp() {
             details: suggestionError?.details
           });
         }
+        try {
+          await loadReportedResources();
+        } catch (reportError) {
+          console.error('Error loading reported resources (non-blocking):', reportError);
+        }
       } else {
         console.log('⚠️ fetchCategoriesAndProceduresForUser: User is not admin, skipping loadSuggestedResources');
       }
@@ -448,7 +474,7 @@ function SurgicalTechniquesApp() {
       console.error('Error loading data:', error);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser?.id, currentUser?.subspecialtyId, currentUser?.specialtyId, currentUser?.role, browsingSubspecialtyId, fetchCategoriesAndProceduresForUser]);
+  }, [currentUser?.id, currentUser?.subspecialtyId, currentUser?.specialtyId, currentUser?.role, browsingSubspecialtyId, fetchCategoriesAndProceduresForUser, loadReportedResources]);
 
   // Load data when user is authenticated (moved after loadAllData definition)
   // Re-run when profile gains specialty/subspecialty so categories match (e.g. after profile load after timeout)
@@ -477,15 +503,17 @@ function SurgicalTechniquesApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.id, currentUser?.specialtyId, currentUser?.subspecialtyId]);
 
-  // Load suggested resources when switching to Admin view
+  // Load suggested and reported resources when switching to Admin view
   useEffect(() => {
     if (currentView === VIEW_MODES.ADMIN && isAdmin(currentUser)) {
-      console.log('🔵 Switching to Admin view - loading suggested resources');
       loadSuggestedResources().catch(error => {
         console.error('❌ Error loading suggested resources when switching to Admin view:', error);
       });
+      loadReportedResources().catch(error => {
+        console.error('Error loading reported resources when switching to Admin view:', error);
+      });
     }
-  }, [currentView, currentUser, loadSuggestedResources]);
+  }, [currentView, currentUser, loadSuggestedResources, loadReportedResources]);
 
   // NOTE: All the auth functions (checkUser, loadUserProfile, etc.) are now in useAuth hook!
   // NOTE: toggleFavorite, toggleUpcomingCase, updateNote are now from hooks!
@@ -1217,6 +1245,40 @@ function SurgicalTechniquesApp() {
   const handleEditResourceClick = useCallback((resource) => setEditingResource(resource), []);
   const handleEditCategoriesClick = useCallback(() => setShowCategoryManagement(true), []);
   const handleShowSuggestedResourcesClick = useCallback(() => setShowSuggestedResources(true), []);
+  const handleShowReportedResourcesClick = useCallback(() => setShowReportedResources(true), []);
+  const handleReportResource = useCallback((resource) => setResourceToReport(resource), []);
+  const handleReportSuccess = useCallback(() => {
+    setResourceToReport(null);
+    if (isAdmin(currentUser)) loadReportedResources();
+  }, [currentUser, loadReportedResources]);
+  const handleDismissReport = useCallback(async (reportId) => {
+    try {
+      const { error } = await supabase
+        .from('resource_reports')
+        .update({ status: 'dismissed', reviewed_by: currentUser?.id, reviewed_at: new Date().toISOString() })
+        .eq('id', reportId);
+      if (error) throw error;
+      toast.success('Report dismissed.');
+      await loadReportedResources();
+    } catch (error) {
+      console.error('Error dismissing report:', error);
+      toast.error('Failed to dismiss report.');
+    }
+  }, [currentUser?.id, loadReportedResources]);
+  const handleMarkReviewedReport = useCallback(async (reportId) => {
+    try {
+      const { error } = await supabase
+        .from('resource_reports')
+        .update({ status: 'reviewed', reviewed_by: currentUser?.id, reviewed_at: new Date().toISOString() })
+        .eq('id', reportId);
+      if (error) throw error;
+      toast.success('Report marked as reviewed.');
+      await loadReportedResources();
+    } catch (error) {
+      console.error('Error marking report reviewed:', error);
+      toast.error('Failed to update report.');
+    }
+  }, [currentUser?.id, loadReportedResources]);
   const handleReturnToBrowse = useCallback(() => setCurrentView(VIEW_MODES.USER), []);
   const handleCloseCategoryManagement = useCallback(() => {
     setShowCategoryManagement(false);
@@ -1380,6 +1442,19 @@ function SurgicalTechniquesApp() {
     );
   }
 
+  // Gate: user finished onboarding but has not accepted Terms and Conditions
+  if (currentUser?.onboardingComplete && !currentUser?.termsAcceptedAt) {
+    return (
+      <TermsAcceptanceModal
+        isOpen={true}
+        onAccept={async () => {
+          await updateProfile({ termsAcceptedAt: new Date().toISOString() });
+          await refreshProfile();
+        }}
+      />
+    );
+  }
+
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
@@ -1428,6 +1503,7 @@ function SurgicalTechniquesApp() {
             browsingSubspecialtyId={browsingSubspecialtyId}
             onBrowsingSubspecialtyChange={handleBrowsingSubspecialtyChange}
             isInUpcomingCases={isInUpcomingCases}
+            onReportResource={handleReportResource}
           />
         ) : isAdmin(currentUser) ? (
           <AdminView
@@ -1442,8 +1518,12 @@ function SurgicalTechniquesApp() {
             currentUser={currentUser}
             suggestedResources={suggestedResources || []}
             onShowSuggestedResources={handleShowSuggestedResourcesClick}
+            reportedResources={reportedResources || []}
+            onShowReportedResources={handleShowReportedResourcesClick}
             onApproveSuggestion={handleApproveSuggestion}
             onRejectSuggestion={handleRejectSuggestion}
+            onDismissReport={handleDismissReport}
+            onMarkReviewedReport={handleMarkReviewedReport}
           />
         ) : (
           <div className="text-center py-12">
@@ -1457,13 +1537,36 @@ function SurgicalTechniquesApp() {
           </div>
         )}
 
-        {/* Disclaimer at bottom of page */}
-        <footer className="max-w-7xl mx-auto px-4 sm:px-6 py-6 mt-8 border-t border-gray-200 dark:border-gray-700">
-          <p className="text-xs text-gray-500 dark:text-gray-400 text-center max-w-2xl mx-auto">
-            Resources on this hub are for educational purposes only. They do not constitute medical advice. Always follow your institution&apos;s guidelines and applicable standards of care. Inclusion of a resource does not imply endorsement.
-          </p>
+        {/* Legal Footer */}
+        <footer className="border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 mt-auto">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
+            <p className="text-center text-sm text-gray-600 dark:text-gray-400 mb-2">
+              © 2026 TWH Systems, LLC.
+            </p>
+            <nav className="flex flex-wrap justify-center gap-x-1 gap-y-1 text-sm">
+              <button type="button" onClick={() => setLegalPage('terms')} className="text-gray-600 dark:text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 transition-colors">Terms</button>
+              <span className="text-gray-400 dark:text-gray-500" aria-hidden="true">•</span>
+              <button type="button" onClick={() => setLegalPage('privacy')} className="text-gray-600 dark:text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 transition-colors">Privacy</button>
+              <span className="text-gray-400 dark:text-gray-500" aria-hidden="true">•</span>
+              <button type="button" onClick={() => setLegalPage('copyright')} className="text-gray-600 dark:text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 transition-colors">Copyright</button>
+              <span className="text-gray-400 dark:text-gray-500" aria-hidden="true">•</span>
+              <button type="button" onClick={() => setLegalPage('sponsorship')} className="text-gray-600 dark:text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 transition-colors">Sponsorship</button>
+              <span className="text-gray-400 dark:text-gray-500" aria-hidden="true">•</span>
+              <button type="button" onClick={() => setLegalPage('about')} className="text-gray-600 dark:text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 transition-colors">About</button>
+              <span className="text-gray-400 dark:text-gray-500" aria-hidden="true">•</span>
+              <button type="button" onClick={() => setLegalPage('contact')} className="text-gray-600 dark:text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 transition-colors">Contact</button>
+            </nav>
+          </div>
         </footer>
       </main>
+
+      {/* Legal pages modal */}
+      {legalPage && (
+        <LegalModal
+          page={legalPage}
+          onClose={() => setLegalPage(null)}
+        />
+      )}
 
       {/* Modals */}
       {showAddForm && (
@@ -1498,6 +1601,27 @@ function SurgicalTechniquesApp() {
           onReject={handleRejectSuggestion}
           onUpdate={handleUpdateSuggestion}
           onClose={() => setShowSuggestedResources(false)}
+          currentUser={currentUser}
+        />
+      )}
+
+      {resourceToReport && (
+        <ReportResourceModal
+          resource={resourceToReport}
+          onClose={() => setResourceToReport(null)}
+          onSuccess={handleReportSuccess}
+          currentUser={currentUser}
+        />
+      )}
+
+      {showReportedResources && (
+        <ReportedResourcesModal
+          reports={reportedResources}
+          onDismiss={handleDismissReport}
+          onMarkReviewed={handleMarkReviewedReport}
+          onEditResource={handleEditResourceClick}
+          onDeleteResource={handleDeleteResource}
+          onClose={() => setShowReportedResources(false)}
           currentUser={currentUser}
         />
       )}

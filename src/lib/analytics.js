@@ -194,6 +194,19 @@ export function trackSponsoredClick(resourceId) {
   }]).then();
 }
 
+// Track resource link click (external link; for analytics and sponsor targeting)
+export function trackResourceLinkClick(resourceId, userId, sourceType) {
+  const platform = typeof navigator !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ? 'mobile' : 'web';
+  supabase.from('resource_link_clicks').insert([{
+    resource_id: resourceId,
+    user_id: userId || null,
+    source_type: sourceType || null,
+    device_type: getDeviceType(),
+    platform,
+    timestamp: new Date()
+  }]).then(() => {}).catch(() => {});
+}
+
 // Track search query
 export async function trackSearchQuery(query, userId, resultCount = 0) {
   // Security: Validate input to prevent injection

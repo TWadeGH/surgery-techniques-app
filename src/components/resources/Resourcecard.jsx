@@ -19,11 +19,13 @@ import {
   Star, 
   Sparkles, 
   ArrowRight,
-  X
+  X,
+  Flag
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import { trackResourceCoview, trackRatingEvent } from '../../lib/analytics';
-import { USER_TYPES } from '../../utils/constants';
+import { trackResourceCoview, trackRatingEvent, trackResourceLinkClick } from '../../lib/analytics';
+import { USER_TYPES, SOURCE_DISPLAY, CONTENT_TYPE_LABELS, EXTERNAL_LINK_DISCLOSURE } from '../../utils/constants';
+import ExternalLinkModal from '../modals/ExternalLinkModal';
 import { includeInAnalytics } from '../../utils/helpers';
 import { useToast } from '../common';
 
@@ -78,9 +80,10 @@ function getTypeColor(type) {
  * @returns {string} Display label
  */
 function getTypeLabel(type) {
+  if (type && CONTENT_TYPE_LABELS[type]) return CONTENT_TYPE_LABELS[type];
   switch(type) {
     case 'pdf': return 'PDF / Guide';
-    default: return type;
+    default: return type ? type.charAt(0).toUpperCase() + type.slice(1) : 'Link';
   }
 }
 
@@ -118,6 +121,27 @@ function getSafeResourceHref(url) {
   return /^https?:\/\//i.test(u) ? u : null;
 }
 
+/** "View on [Source]" button label from source_type or source_name */
+function getViewOnLabel(resource) {
+  const st = resource?.source_type;
+  if (st && SOURCE_DISPLAY[st]) return `View on ${SOURCE_DISPLAY[st]}`;
+  if (resource?.source_name) return `View on ${resource.source_name}`;
+  return 'View on External Site';
+}
+
+/** Source line: "Source: YouTube • Video • 9:12" */
+function getSourceLine(resource) {
+  const st = resource?.source_type;
+  const sourceLabel = (st && SOURCE_DISPLAY[st]) || resource?.source_name || 'External';
+  const typeKey = resource?.content_type || resource?.resource_type;
+  const typeLabel = (typeKey && CONTENT_TYPE_LABELS[typeKey]) || (typeKey && typeKey.charAt(0).toUpperCase() + typeKey.slice(1)) || 'Link';
+  const parts = [`Source: ${sourceLabel}`, typeLabel];
+  if (resource?.resource_type === 'video' && resource?.duration_seconds) {
+    parts.push(formatDuration(resource.duration_seconds));
+  }
+  return parts.join(' · ');
+}
+
 /**
  * ResourceCard Component
  * 
@@ -131,6 +155,7 @@ function getSafeResourceHref(url) {
  * @param {boolean} props.isUpcomingCase - Whether resource is in upcoming cases
  * @param {number} props.index - Index for animation delay
  * @param {Object} props.currentUser - Current user object
+ * @param {Function} props.onReportResource - Callback to open report modal for this resource
  */
 function ResourceCard({
   resource, 
@@ -141,7 +166,8 @@ function ResourceCard({
   onToggleUpcomingCase, 
   isUpcomingCase, 
   index, 
-  currentUser 
+  currentUser,
+  onReportResource
 }) {
   const toast = useToast();
   const [showNoteInput, setShowNoteInput] = useState(false);
@@ -151,6 +177,7 @@ function ResourceCard({
   const [hoveredStar, setHoveredStar] = useState(0);
   const [loadingRating, setLoadingRating] = useState(false);
   const [showFullDescriptionPopover, setShowFullDescriptionPopover] = useState(false);
+  const [showExternalLinkModal, setShowExternalLinkModal] = useState(false);
 
   // Track view when card is visible (analytics: Surgeon and Resident/Fellow only)
   useEffect(() => {
@@ -303,6 +330,16 @@ function ResourceCard({
   const canFavorite = canUserRate(currentUser); // Same logic as canRate
   const safeResourceHref = getSafeResourceHref(resource?.url);
 
+  const handleViewExternalClick = () => setShowExternalLinkModal(true);
+  const handleExternalContinue = () => {
+    const href = getSafeResourceHref(resource?.url);
+    if (href) {
+      trackResourceLinkClick(resource.id, currentUser?.id, resource?.source_type);
+      window.open(href, '_blank', 'noopener,noreferrer');
+    }
+    setShowExternalLinkModal(false);
+  };
+
   return (
     <div 
       className={`glass rounded-lg p-3 shadow-md card-hover animate-slide-up ${
@@ -331,6 +368,9 @@ function ResourceCard({
         <div className="flex-1">
           {/* Badges */}
           <div className="flex gap-1.5 mb-1.5 flex-wrap">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-gray-600 dark:text-gray-300 text-xs font-medium">
+              Third-party content
+            </div>
             {resource.is_sponsored && (
               <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-800 rounded-lg text-yellow-700 dark:text-yellow-300 text-xs font-medium">
                 <Sparkles size={12} />
@@ -407,23 +447,32 @@ function ResourceCard({
               </div>
             </>
           )}
-          
-          {/* Resource Link — href restricted to http/https for security */}
+
+          {/* Source line: Source • Type • Duration */}
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">
+            {getSourceLine(resource)}
+          </p>
+
+          {/* View on [Source] button — opens confirmation modal then external link */}
           {safeResourceHref ? (
-            <a 
-              href={safeResourceHref} 
-              target="_blank" 
-              rel="noopener noreferrer" 
-              className="text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 text-xs break-all flex items-center gap-1 mb-2"
-            >
-              <span>{resource.url}</span>
-              <ArrowRight size={14} />
-            </a>
-          ) : (
+            <>
+              <button
+                type="button"
+                onClick={handleViewExternalClick}
+                className="inline-flex items-center gap-2 px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-colors mb-2"
+              >
+                <ArrowRight size={14} />
+                {getViewOnLabel(resource)}
+              </button>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                {EXTERNAL_LINK_DISCLOSURE.CARD_DISCLAIMER} {EXTERNAL_LINK_DISCLOSURE.COPYRIGHT_REPORT}
+              </p>
+            </>
+          ) : resource?.url ? (
             <span className="text-gray-500 dark:text-gray-400 text-xs break-all flex items-center gap-1 mb-2">
-              {resource.url || '(no link)'}
+              {resource.url}
             </span>
-          )}
+          ) : null}
 
           {/* Personal Rating - Show if user can rate OR if they have an existing rating */}
           {(canRate || rating) && (
@@ -511,86 +560,108 @@ function ResourceCard({
             </div>
           )}
 
-          {/* Action Buttons */}
-          <div className="flex items-center justify-end pt-4 border-t border-gray-100 dark:border-gray-700">
-            <div className="flex gap-2">
+          {/* Action Buttons — overflow-visible so tooltips show */}
+          <div className="flex items-center justify-end pt-4 border-t border-gray-100 dark:border-gray-700 overflow-visible">
+            <div className="flex gap-2 flex-wrap overflow-visible">
               {/* Note Button */}
-              <button
-                onClick={() => setShowNoteInput(!showNoteInput)}
-                className={`p-2.5 rounded-lg transition-all ${
-                  note 
-                    ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400 hover:bg-yellow-200 dark:hover:bg-yellow-900/50' 
-                    : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                }`}
-                title={note ? 'Edit Note' : 'Add Note'}
-                aria-label={note ? 'Edit Note' : 'Add Note'}
-              >
-                <StickyNote size={18} fill={note ? 'currentColor' : 'none'} strokeWidth={note ? 0 : 2} />
-              </button>
+              <div className="group relative">
+                <button
+                  onClick={() => setShowNoteInput(!showNoteInput)}
+                  className={`p-2.5 rounded-lg transition-all ${
+                    note 
+                      ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400 hover:bg-yellow-200 dark:hover:bg-yellow-900/50' 
+                      : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                  }`}
+                  aria-label={note ? 'Edit note' : 'Add note'}
+                >
+                  <StickyNote size={18} fill={note ? 'currentColor' : 'none'} strokeWidth={note ? 0 : 2} />
+                </button>
+                <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1.5 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded shadow-lg whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 pointer-events-none z-50">
+                  {note ? 'Edit your personal note for this resource' : 'Add a personal note for this resource'}
+                </span>
+              </div>
 
               {/* Favorite Button - Show for all users, but only allow interaction for surgeons/trainees */}
               {/* Security: Client-side disabled state + server-side RLS enforces permissions */}
               {onToggleFavorite && (
-                <button
-                  onClick={() => {
-                    // Security: Double-check permission before calling (defense in depth)
-                    if (canFavorite && onToggleFavorite) {
-                      onToggleFavorite(resource.id);
-                    }
-                  }}
-                  disabled={!canFavorite}
-                  className={`p-2.5 rounded-lg transition-all ${
-                    isFavorited 
-                      ? 'bg-red-100 dark:bg-red-900/30 text-red-500 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50' 
-                      : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                  } ${!canFavorite ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  title={canFavorite ? (isFavorited ? 'Remove from Favorites' : 'Add to Favorites') : 'Favorites available for Surgeons and Trainees'}
-                  aria-label={canFavorite ? (isFavorited ? 'Remove from Favorites' : 'Add to Favorites') : 'Favorites not available'}
-                >
-                  <Heart size={18} fill={isFavorited ? 'currentColor' : 'none'} strokeWidth={isFavorited ? 0 : 2} />
-                </button>
+                <div className="group relative">
+                  <button
+                    onClick={() => canFavorite && onToggleFavorite && onToggleFavorite(resource.id)}
+                    disabled={!canFavorite}
+                    className={`p-2.5 rounded-lg transition-all ${
+                      isFavorited 
+                        ? 'bg-red-100 dark:bg-red-900/30 text-red-500 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50' 
+                        : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                    } ${!canFavorite ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    aria-label={canFavorite ? (isFavorited ? 'Remove from Favorites' : 'Add to Favorites') : 'Favorites not available'}
+                  >
+                    <Heart size={18} fill={isFavorited ? 'currentColor' : 'none'} strokeWidth={isFavorited ? 0 : 2} />
+                  </button>
+                  <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1.5 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded shadow-lg whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 pointer-events-none z-50">
+                    {canFavorite ? (isFavorited ? 'Remove this resource from your Favorites list' : 'Save this resource to your Favorites list') : 'Favorites available for Surgeons and Trainees'}
+                  </span>
+                </div>
               )}
 
               {/* Upcoming Case Button - Show for all users, but only allow interaction for surgeons/trainees */}
               {/* Security: Client-side disabled state + server-side RLS enforces permissions */}
               {onToggleUpcomingCase && (
+                <div className="group relative">
                 <button
-                  onClick={() => {
-                    // Security: Double-check permission before calling (defense in depth)
-                    if (canFavorite && onToggleUpcomingCase) {
-                      onToggleUpcomingCase(resource.id);
-                    }
-                  }}
+                  onClick={() => canFavorite && onToggleUpcomingCase(resource.id)}
                   disabled={!canFavorite}
                   className={`p-2.5 rounded-lg transition-all ${
                     isUpcomingCase 
                       ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900/50' 
                       : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
                   } ${!canFavorite ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  title={canFavorite ? (isUpcomingCase ? 'Remove from Upcoming Cases' : 'Add to Upcoming Cases') : 'Upcoming Cases available for Surgeons and Trainees'}
                   aria-label={canFavorite ? (isUpcomingCase ? 'Remove from Upcoming Cases' : 'Add to Upcoming Cases') : 'Upcoming Cases not available'}
                 >
                   <Plus size={18} className={isUpcomingCase ? 'rotate-45' : ''} strokeWidth={2} />
                 </button>
+                <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1.5 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded shadow-lg whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 pointer-events-none z-50">
+                  {canFavorite ? (isUpcomingCase ? 'Remove this resource from your Upcoming Cases list' : 'Add this resource to your Upcoming Cases for a future procedure') : 'Upcoming Cases available for Surgeons and Trainees'}
+                </span>
+                </div>
               )}
+
+              {/* Report Link — flag only */}
+              <div className="group relative">
+                <button
+                  type="button"
+                  onClick={() => onReportResource?.(resource)}
+                  className="p-2.5 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 hover:bg-amber-50 hover:text-amber-600 dark:hover:bg-amber-900/20 dark:hover:text-amber-400 transition-all"
+                  aria-label="Report link"
+                >
+                  <Flag size={18} />
+                </button>
+                <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1.5 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded shadow-lg whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 pointer-events-none z-50">
+                  Report this link — report a problem or copyright concern
+                </span>
+              </div>
             </div>
           </div>
         </div>
       </div>
+
+      <ExternalLinkModal
+        isOpen={showExternalLinkModal}
+        onClose={() => setShowExternalLinkModal(false)}
+        onContinue={handleExternalContinue}
+        resourceTitle={resource?.title}
+        sourceLabel={(resource?.source_type && SOURCE_DISPLAY[resource.source_type]) || resource?.source_name}
+      />
     </div>
   );
 }
 
 // Memoize ResourceCard to prevent unnecessary re-renders
-// Only re-render if props actually change
-export default memo(ResourceCard, (prevProps, nextProps) => {
-  // Custom comparison function for better performance
-  return (
-    prevProps.resource?.id === nextProps.resource?.id &&
-    prevProps.isFavorited === nextProps.isFavorited &&
-    prevProps.note === nextProps.note &&
-    prevProps.isUpcomingCase === nextProps.isUpcomingCase &&
-    prevProps.index === nextProps.index &&
-    prevProps.currentUser?.id === nextProps.currentUser?.id
-  );
-});
+export default memo(ResourceCard, (prevProps, nextProps) => (
+  prevProps.resource?.id === nextProps.resource?.id &&
+  prevProps.isFavorited === nextProps.isFavorited &&
+  prevProps.note === nextProps.note &&
+  prevProps.isUpcomingCase === nextProps.isUpcomingCase &&
+  prevProps.index === nextProps.index &&
+  prevProps.currentUser?.id === nextProps.currentUser?.id &&
+  prevProps.onReportResource === nextProps.onReportResource
+));

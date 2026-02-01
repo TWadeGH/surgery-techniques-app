@@ -267,6 +267,7 @@ export function useAuth() {
         createdAt: profile.created_at,
         updatedAt: profile.updated_at,
         onboardingComplete: profile.onboarding_complete,
+        termsAcceptedAt: profile.terms_accepted_at ?? null,
       };
       
       // Debug: Log profile data
@@ -703,6 +704,7 @@ export function useAuth() {
       if (updates.specialtyId !== undefined) dbUpdates.primary_specialty_id = updates.specialtyId;
       if (updates.subspecialtyId !== undefined) dbUpdates.primary_subspecialty_id = updates.subspecialtyId;
       if (updates.onboardingComplete !== undefined) dbUpdates.onboarding_complete = updates.onboardingComplete;
+      if (updates.termsAcceptedAt !== undefined) dbUpdates.terms_accepted_at = updates.termsAcceptedAt;
       
       const { error } = await supabase
         .from('profiles')

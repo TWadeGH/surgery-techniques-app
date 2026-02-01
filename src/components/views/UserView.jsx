@@ -45,6 +45,7 @@ import { canRateOrFavorite } from '../../utils/helpers';
  * @param {number} props.paginationTotalPages - Total number of pages
  * @param {Function} props.onPaginationPrevious - Callback for Previous
  * @param {Function} props.onPaginationNext - Callback for Next
+ * @param {Function} props.onReportResource - Callback to open report modal for a resource
  */
 function UserView({ 
   resources, 
@@ -76,6 +77,7 @@ function UserView({
   paginationTotalPages = 1,
   onPaginationPrevious,
   onPaginationNext,
+  onReportResource,
 }) {
   // Organize categories hierarchically
   const organizedCategories = useMemo(() => {
@@ -453,6 +455,7 @@ function UserView({
                       onToggleUpcomingCase={onToggleUpcomingCase}
                       isUpcomingCase={true}
                       currentUser={currentUser}
+                      onReportResource={onReportResource}
                     />
                   </div>
                 </div>
@@ -591,8 +594,8 @@ function UserView({
           {/* Resources List */}
           <ResourceList
             resources={resources}
-            favorites={[]} // Not used - hooks provide isFavorited function
-            notes={{}} // Not used - hooks provide getNote function
+            favorites={[]}
+            notes={{}}
             upcomingCases={upcomingCases}
             onToggleFavorite={onToggleFavorite}
             onUpdateNote={onUpdateNote}
@@ -601,6 +604,7 @@ function UserView({
             showFavoritesOnly={showFavoritesOnly}
             isFavorited={isFavorited}
             getNote={getNote}
+            onReportResource={onReportResource}
           />
 
           {/* Pagination: [Next] when >10 resources; [Previous] and [Next] when on page 2+ */}

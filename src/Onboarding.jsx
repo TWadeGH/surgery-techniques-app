@@ -1,447 +1,213 @@
 import { useState, useEffect } from 'react'
 import { supabase } from './lib/supabase'
 import { SPECIALTY_SUBSPECIALTY } from './utils/constants'
+import { TermsAcceptanceModal } from './components/legal'
+
+// Surgeon-only onboarding options (single-select)
+const PRACTICE_SETTING_OPTIONS = [
+  { value: 'academic', label: 'Academic / Teaching Hospital' },
+  { value: 'private_practice', label: 'Private Practice' },
+  { value: 'hospital_employed', label: 'Hospital-employed' },
+  { value: 'asc', label: 'Ambulatory Surgery Center (ASC)' },
+  { value: 'government_military', label: 'Government / Military' },
+  { value: 'industry_non_clinical', label: 'Industry / Non-clinical' },
+  { value: 'other', label: 'Other' },
+]
+const PRIMARY_OR_OPTIONS = [
+  { value: 'hospital_or', label: 'Hospital OR' },
+  { value: 'asc', label: 'Ambulatory Surgery Center (ASC)' },
+  { value: 'mixed', label: 'Mixed' },
+  { value: 'not_applicable', label: 'Not applicable (industry/academic)' },
+]
+const YEARS_PRACTICING_OPTIONS = [
+  { value: '0_2', label: '0–2 years' },
+  { value: '3_5', label: '3–5 years' },
+  { value: '6_10', label: '6–10 years' },
+  { value: '11_20', label: '11–20 years' },
+  { value: '21_plus', label: '21+ years' },
+]
+const ANNUAL_CASE_VOLUME_OPTIONS = [
+  { value: '0_50', label: '0–50' },
+  { value: '51_100', label: '51–100' },
+  { value: '101_200', label: '101–200' },
+  { value: '201_400', label: '201–400' },
+  { value: '401_plus', label: '401+' },
+]
 
 // Helper function to map Podiatry to Orthopedic Surgery + Foot and Ankle
 async function mapPodiatryToFootAnkle() {
   try {
-    // Find Orthopedic Surgery specialty - try multiple name variations
     let orthoSurgery = null;
-    const orthoVariations = [
-      SPECIALTY_SUBSPECIALTY.ORTHOPAEDIC_SURGERY,
-      SPECIALTY_SUBSPECIALTY.ORTHOPEDIC_SURGERY,
-      'orthopedic surgery',
-      'orthopaedic surgery',
-      'Orthopedic Surgery',
-      'Orthopaedic Surgery'
-    ];
-    
-    for (const orthoName of orthoVariations) {
-      const { data, error } = await supabase
+    for (const orthoName of [SPECIALTY_SUBSPECIALTY.ORTHOPAEDIC_SURGERY, SPECIALTY_SUBSPECIALTY.ORTHOPEDIC_SURGERY]) {
+      const { data } = await supabase
         .from('specialties')
-        .select('id, name')
+        .select('id')
         .ilike('name', `%${orthoName}%`)
         .limit(1)
         .maybeSingle();
-      
-      if (error) {
-        console.warn('Error querying specialties:', error);
-        continue;
-      }
-      
       if (data?.id) {
         orthoSurgery = data;
-        console.log('Found Orthopedic Surgery:', { id: data.id, name: data.name });
         break;
       }
     }
-    
-    // If still not found, try exact match
-    if (!orthoSurgery) {
-      const { data, error } = await supabase
-        .from('specialties')
-        .select('id, name')
-        .or('name.ilike.orthopedic surgery,name.ilike.orthopaedic surgery')
-        .limit(1)
-        .maybeSingle();
-      
-      if (!error && data?.id) {
-        orthoSurgery = data;
-        console.log('Found Orthopedic Surgery (exact match):', { id: data.id, name: data.name });
-      }
-    }
-    
-    if (!orthoSurgery) {
-      // Security: Don't expose internal details - log for debugging but show user-friendly error
-      console.error('Orthopedic Surgery specialty not found in database');
-      throw new Error('Unable to map Podiatry specialty. Please contact support.');
-    }
-    
-    // Find Foot and Ankle subspecialty - try multiple name variations
-    const footAnkleVariations = [
-      SPECIALTY_SUBSPECIALTY.FOOT_AND_ANKLE,
-      'foot and ankle',
-      'Foot and Ankle',
-      'foot & ankle',
-      'Foot & Ankle'
-    ];
-    
-    let footAnkle = null;
-    for (const faName of footAnkleVariations) {
-      const { data, error } = await supabase
-        .from('subspecialties')
-        .select('id, name')
-        .eq('specialty_id', orthoSurgery.id)
-        .ilike('name', `%${faName}%`)
-        .limit(1)
-        .maybeSingle();
-      
-      if (error) {
-        console.warn('Error querying subspecialties:', error);
-        continue;
-      }
-      
-      if (data?.id) {
-        footAnkle = data;
-        console.log('Found Foot and Ankle:', { id: data.id, name: data.name, specialty_id: orthoSurgery.id });
-        break;
-      }
-    }
-    
-    // If still not found, try broader search
-    if (!footAnkle) {
-      const { data, error } = await supabase
-        .from('subspecialties')
-        .select('id, name')
-        .eq('specialty_id', orthoSurgery.id)
-        .or('name.ilike.foot and ankle,name.ilike.foot & ankle')
-        .limit(1)
-        .maybeSingle();
-      
-      if (!error && data?.id) {
-        footAnkle = data;
-        console.log('Found Foot and Ankle (broader search):', { id: data.id, name: data.name });
-      }
-    }
-    
-    if (!footAnkle) {
-      // Security: Don't expose internal details
-      console.error('Foot and Ankle subspecialty not found for specialty:', orthoSurgery.id);
-      throw new Error('Unable to map Podiatry to Foot and Ankle. Please contact support.');
-    }
-    
-    console.log('Podiatry mapping successful:', {
-      orthoSurgeryId: orthoSurgery.id,
-      footAnkleId: footAnkle.id
-    });
-    
-    return {
-      specialtyId: orthoSurgery.id,
-      subspecialtyId: footAnkle.id
-    };
+    if (!orthoSurgery) throw new Error('Orthopedic Surgery specialty not found');
+    const { data: footAnkle } = await supabase
+      .from('subspecialties')
+      .select('id')
+      .eq('specialty_id', orthoSurgery.id)
+      .ilike('name', `%${SPECIALTY_SUBSPECIALTY.FOOT_AND_ANKLE}%`)
+      .limit(1)
+      .maybeSingle();
+    if (!footAnkle) throw new Error('Foot and Ankle subspecialty not found');
+    return { specialtyId: orthoSurgery.id, subspecialtyId: footAnkle.id };
   } catch (error) {
     console.error('Error mapping Podiatry to Foot and Ankle:', error);
-    // Re-throw with user-friendly message if it's our custom error
-    if (error.message && error.message.includes('Unable to map')) {
-      throw error;
-    }
-    // Otherwise wrap in user-friendly error
-    throw new Error('Unable to complete Podiatry mapping. Please try again or contact support.');
+    throw error;
   }
 }
 
 export default function Onboarding({ user, onComplete }) {
-  // Security: Validate props
-  if (!user || !user.id) {
-    console.error('Onboarding: Invalid user prop');
-    return <div>Error: Invalid user data</div>;
-  }
-  if (typeof onComplete !== 'function') {
-    console.error('Onboarding: Invalid onComplete prop');
-    return <div>Error: Invalid onComplete callback</div>;
-  }
-
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
   const [userType, setUserType] = useState('')
   const [specialties, setSpecialties] = useState([])
   const [subspecialties, setSubspecialties] = useState([])
+  const [loadingSubspecialties, setLoadingSubspecialties] = useState(false)
+  const [subspecialtiesError, setSubspecialtiesError] = useState(null)
   const [selectedSpecialty, setSelectedSpecialty] = useState('')
   const [selectedSubspecialty, setSelectedSubspecialty] = useState('')
   const [isPodiatry, setIsPodiatry] = useState(false)
+  const [practiceSetting, setPracticeSetting] = useState('')
+  const [primaryORSetting, setPrimaryORSetting] = useState('')
+  const [yearsPracticing, setYearsPracticing] = useState('')
+  const [annualCaseVolume, setAnnualCaseVolume] = useState('')
+  const [showTermsAcceptance, setShowTermsAcceptance] = useState(false)
 
-  // Fetch specialties on mount
   useEffect(() => {
-    fetchSpecialties().catch(err => {
-      console.error('Error fetching specialties:', err);
-    });
+    fetchSpecialties()
   }, [])
 
-  // Fetch subspecialties when specialty is selected
   useEffect(() => {
-    if (selectedSpecialty && specialties.length > 0) {
-      // Check if selected specialty is Podiatry
+    if (selectedSpecialty) {
       const specialty = specialties.find(s => s.id === selectedSpecialty);
-      const isPodiatrySpecialty = specialty && (
-        specialty.name.toLowerCase().includes(SPECIALTY_SUBSPECIALTY.PODIATRY) ||
-        specialty.name.toLowerCase() === 'podiatry'
-      );
-      
-      if (isPodiatrySpecialty) {
-        console.log('Podiatry detected - skipping subspecialty step');
+      if (specialty && specialty.name.toLowerCase().includes(SPECIALTY_SUBSPECIALTY.PODIATRY)) {
         setIsPodiatry(true);
-        setSubspecialties([]); // Clear any previous subspecialties
-        // Podiatry doesn't have subspecialties, will skip to completion
+        setSubspecialties([]);
+        setSubspecialtiesError(null);
+        setLoadingSubspecialties(false);
       } else {
         setIsPodiatry(false);
         fetchSubspecialties(selectedSpecialty);
       }
+    } else {
+      setSubspecialties([]);
+      setLoadingSubspecialties(false);
+      setSubspecialtiesError(null);
+      setIsPodiatry(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSpecialty, specialties])
 
   async function fetchSpecialties() {
-    try {
-      const { data, error } = await supabase
-        .from('specialties')
-        .select('*')
-        .order('order');
-      if (error) {
-        console.error('Error fetching specialties:', error);
-        return;
-      }
-      if (data) setSpecialties(data);
-    } catch (err) {
-      console.error('Error in fetchSpecialties:', err);
-    }
+    const { data } = await supabase.from('specialties').select('*').order('order');
+    if (data) setSpecialties(data)
   }
 
   async function fetchSubspecialties(specialtyId) {
     try {
-      // Security: Validate specialtyId
-      if (!specialtyId) {
-        console.error('fetchSubspecialties: Invalid specialtyId');
-        return;
-      }
+      setLoadingSubspecialties(true);
+      setSubspecialtiesError(null);
+      setSubspecialties([]);
       const { data, error } = await supabase
         .from('subspecialties')
         .select('*')
         .eq('specialty_id', specialtyId)
         .order('order');
       if (error) {
-        console.error('Error fetching subspecialties:', error);
-        return;
-      }
-      if (data) {
-        // Security: Log count and validation without PII (no IDs, no names)
-        console.log('Fetched subspecialties:', data.length, 'items');
-        if (data.length > 0) {
-          const sampleId = data[0].id;
-          const isValidId = sampleId && String(sampleId).length >= 10 && !String(sampleId).startsWith('00000000');
-          console.log('Sample subspecialty validation:', { 
-            idLength: sampleId ? String(sampleId).length : 0, 
-            idType: typeof sampleId,
-            isValid: isValidId
-          });
-        }
-        setSubspecialties(data);
+        setSubspecialtiesError(error.message);
+        setSubspecialties([]);
       } else {
-        console.warn('No subspecialties data returned for specialty:', specialtyId);
+        setSubspecialties(data || []);
+        if (!data?.length) setSubspecialtiesError('No subspecialties found for this specialty');
       }
     } catch (err) {
-      console.error('Error in fetchSubspecialties:', err);
+      setSubspecialtiesError(err.message);
+      setSubspecialties([]);
+    } finally {
+      setLoadingSubspecialties(false);
     }
   }
 
   async function handleComplete() {
-    setLoading(true)
-    
     try {
+      setLoading(true);
       let specialtyId = selectedSpecialty;
       let subspecialtyId = selectedSubspecialty;
-      
-      // Podiatry: store Podiatry specialty + NULL subspecialty so user is recognized as Podiatry
-      // (e.g. Suggest Resource, analytics). Category loading in App maps Podiatry → Foot & Ankle.
       if (isPodiatry) {
-        subspecialtyId = null;
+        const mapping = await mapPodiatryToFootAnkle();
+        specialtyId = mapping.specialtyId;
+        subspecialtyId = mapping.subspecialtyId;
       }
-      
-      // Security: Validate IDs before saving
-      if (!specialtyId) {
-        throw new Error('Specialty is required');
-      }
-      if (!isPodiatry && !subspecialtyId) {
-        throw new Error('Subspecialty is required');
-      }
-      
-      // Security: Validate user_type
-      if (!userType) {
-        throw new Error('User type is required');
-      }
-      
-      // Security note:
-      // - These IDs come from trusted database lookups (not raw user input)
-      // - We only enforce that they are present, not that they follow a specific UUID shape
-      //   because this project currently uses all-zero UUIDs in Seed data.
-      const specialtyIdStr = String(specialtyId).trim();
-      const subspecialtyIdStr = subspecialtyId != null ? String(subspecialtyId).trim() : null;
-      
-      // Security: Validate user_type against allowlist (prevent injection)
-      const allowedUserTypes = ['surgeon', 'industry', 'student', 'trainee'];
-      if (!allowedUserTypes.includes(userType)) {
-        throw new Error('Invalid user type selected.');
-      }
-      
-      // Prepare update data - ensure IDs are properly formatted
-      // Podiatry: store Podiatry specialty ID + null subspecialty so user is identified as Podiatry
       const updateData = {
-        user_type: userType, // Should be: 'surgeon', 'industry', 'student', etc.
-        primary_specialty_id: specialtyIdStr, // UUID as string (Podiatry id when isPodiatry)
-        primary_subspecialty_id: isPodiatry ? null : subspecialtyIdStr, // null for Podiatry
-        // Note: onboarding_complete column may not exist in all database schemas
-        // The presence of specialty/subspecialty IDs is sufficient to determine onboarding status
-        // onboarding_complete: true  // Commented out - column doesn't exist in current schema
+        user_type: userType,
+        onboarding_complete: true
       };
-      
-      // Security: Log validation info without PII (no user IDs, no specialty names)
-      console.log('Updating profile - validation:', { 
-        userType, 
-        specialtyIdLength: specialtyIdStr.length,
-        subspecialtyIdLength: subspecialtyIdStr?.length ?? 0,
-        specialtyIdType: typeof specialtyId,
-        subspecialtyIdType: typeof subspecialtyId,
-        isPodiatry
-      });
-      
-      // Security: Validate specialty/subspecialty exist without logging PII
-      if (!isPodiatry) {
-        const selectedSpecialtyObj = specialties.find(s => s.id === specialtyId);
-        const selectedSubspecialtyObj = subspecialties.find(s => s.id === subspecialtyId);
-        if (!selectedSpecialtyObj) {
-          throw new Error('Selected specialty not found. Please try again.');
+      if (userType === 'surgeon' || userType === 'app') {
+        if (!specialtyId) {
+          alert('Please select a specialty.');
+          setLoading(false);
+          return;
         }
-        if (!selectedSubspecialtyObj) {
-          throw new Error('Selected subspecialty not found. Please try again.');
+        if (!subspecialtyId && !isPodiatry) {
+          alert('Please select a subspecialty. This is required for this role.');
+          setLoading(false);
+          return;
         }
-      } else {
-        // Podiatry: verify selected specialty (Podiatry) is present
-        const podiatrySpecialtyObj = specialties.find(s => s.id === specialtyId);
-        if (!podiatrySpecialtyObj) {
-          throw new Error('Selected specialty not found. Please try again.');
-        }
-        console.log('Podiatry profile validated - saving Podiatry specialty, null subspecialty');
+        updateData.primary_specialty_id = specialtyId;
+        updateData.primary_subspecialty_id = subspecialtyId;
       }
-      
+      if (userType === 'surgeon') {
+        if (!practiceSetting || !primaryORSetting || !yearsPracticing || !annualCaseVolume) {
+          alert('Please answer all practice and volume questions.');
+          setLoading(false);
+          return;
+        }
+        updateData.practice_setting = practiceSetting;
+        updateData.primary_or_setting = primaryORSetting;
+        updateData.years_practicing = yearsPracticing;
+        updateData.annual_case_volume = annualCaseVolume;
+      }
       const { data, error } = await supabase
         .from('profiles')
         .update(updateData)
         .eq('id', user.id)
-        .select(); // Select to verify update
-
+        .select();
       if (error) {
-        console.error('Error updating profile:', error);
-        // Security: Sanitize error message - don't expose internal details or PII
-        let errorMessage = 'Error saving profile. Please try again.';
-        if (error.message) {
-          const msg = error.message.toLowerCase();
-          // Only show user-friendly error messages
-          if (msg.includes('foreign key') || msg.includes('constraint')) {
-            errorMessage = 'Invalid specialty or subspecialty selected. Please try again.';
-          } else if (msg.includes('permission') || msg.includes('policy')) {
-            errorMessage = 'Permission denied. Please contact support.';
-          } else if (msg.includes('network') || msg.includes('fetch')) {
-            errorMessage = 'Network error. Please check your connection and try again.';
-          }
-        }
-        alert(errorMessage);
-      } else {
-        // Security: Log success without PII
-        console.log('Profile updated successfully');
-        onComplete();
+        alert('Error saving profile. Please try again.');
+        setLoading(false);
+        return;
       }
-    } catch (error) {
-      console.error('Error completing onboarding:', error);
-      // Security: Sanitize error message - don't expose internal details
-      let errorMessage = 'Error saving profile. Please try again.';
-      if (error.message) {
-        // Only show user-friendly messages, not technical details
-        const msg = error.message.toLowerCase();
-        if (msg.includes('invalid') || msg.includes('required')) {
-          errorMessage = error.message; // User-friendly validation messages are okay
-        }
-      }
-      alert(errorMessage);
-    } finally {
-      setLoading(false)
+      setLoading(false);
+      setShowTermsAcceptance(true);
+    } catch (err) {
+      alert('An error occurred. Please try again.');
+      setLoading(false);
     }
   }
 
   const styles = {
-    container: {
-      maxWidth: '600px',
-      margin: '50px auto',
-      padding: '40px',
-      backgroundColor: '#ffffff',
-      borderRadius: '12px',
-      boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
-    },
-    header: {
-      textAlign: 'center',
-      marginBottom: '40px'
-    },
-    title: {
-      fontSize: '32px',
-      fontWeight: 'bold',
-      marginBottom: '10px',
-      color: '#1a1a1a'
-    },
-    subtitle: {
-      fontSize: '16px',
-      color: '#666'
-    },
-    stepIndicator: {
-      display: 'flex',
-      justifyContent: 'center',
-      alignItems: 'center',
-      marginBottom: '40px',
-      gap: '10px'
-    },
-    stepDot: (isActive) => ({
-      width: '12px',
-      height: '12px',
-      borderRadius: '50%',
-      backgroundColor: isActive ? '#0066cc' : '#ddd',
-      transition: 'background-color 0.3s'
-    }),
-    card: {
-      padding: '20px',
-      border: '2px solid #e0e0e0',
-      borderRadius: '8px',
-      cursor: 'pointer',
-      transition: 'all 0.2s',
-      marginBottom: '15px'
-    },
-    cardSelected: {
-      border: '2px solid #0066cc',
-      backgroundColor: '#f0f7ff'
-    },
-    cardTitle: {
-      fontSize: '20px',
-      fontWeight: 'bold',
-      marginBottom: '8px',
-      color: '#1a1a1a'
-    },
-    cardDescription: {
-      fontSize: '14px',
-      color: '#666'
-    },
-    button: {
-      width: '100%',
-      padding: '12px',
-      fontSize: '16px',
-      fontWeight: 'bold',
-      backgroundColor: '#0066cc',
-      color: 'white',
-      border: 'none',
-      borderRadius: '8px',
-      cursor: 'pointer',
-      marginTop: '20px'
-    },
-    buttonDisabled: {
-      backgroundColor: '#ccc',
-      cursor: 'not-allowed'
-    },
-    backButton: {
-      width: '100%',
-      padding: '12px',
-      fontSize: '16px',
-      backgroundColor: 'transparent',
-      color: '#0066cc',
-      border: '2px solid #0066cc',
-      borderRadius: '8px',
-      cursor: 'pointer',
-      marginTop: '10px'
-    }
+    container: { maxWidth: '600px', margin: '50px auto', padding: '40px', backgroundColor: '#ffffff', borderRadius: '12px', boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)' },
+    header: { textAlign: 'center', marginBottom: '40px' },
+    title: { fontSize: '32px', fontWeight: 'bold', marginBottom: '10px', color: '#1a1a1a' },
+    subtitle: { fontSize: '16px', color: '#666' },
+    stepIndicator: { display: 'flex', justifyContent: 'center', alignItems: 'center', marginBottom: '40px', gap: '10px' },
+    stepDot: (isActive) => ({ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: isActive ? '#0066cc' : '#ddd' }),
+    card: { padding: '20px', border: '2px solid #e0e0e0', borderRadius: '8px', cursor: 'pointer', transition: 'all 0.2s', marginBottom: '15px' },
+    cardSelected: { border: '2px solid #0066cc', backgroundColor: '#f0f7ff' },
+    cardTitle: { fontSize: '20px', fontWeight: 'bold', marginBottom: '8px', color: '#1a1a1a' },
+    cardDescription: { fontSize: '14px', color: '#666' },
+    button: { width: '100%', padding: '12px', fontSize: '16px', fontWeight: 'bold', backgroundColor: '#0066cc', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', marginTop: '20px' },
+    buttonDisabled: { backgroundColor: '#ccc', cursor: 'not-allowed' },
+    backButton: { width: '100%', padding: '12px', fontSize: '16px', backgroundColor: 'transparent', color: '#0066cc', border: '2px solid #0066cc', borderRadius: '8px', cursor: 'pointer', marginTop: '10px' },
   }
 
   return (
@@ -449,268 +215,172 @@ export default function Onboarding({ user, onComplete }) {
       <div style={styles.container}>
         <div style={styles.header}>
           <h1 style={styles.title}>Welcome to Surgical Techniques</h1>
-          <p style={styles.subtitle}>Let's set up your account</p>
+          <p style={styles.subtitle}>Let&apos;s set up your account</p>
         </div>
-
         <div style={styles.stepIndicator}>
           <div style={styles.stepDot(step === 1)} />
-          <div style={styles.stepDot(step === 2)} />
-          <div style={styles.stepDot(step === 3)} />
+          {(userType === 'surgeon' || userType === 'app') && (
+            <>
+              <div style={styles.stepDot(step === 2)} />
+              <div style={styles.stepDot(step === 3)} />
+              {userType === 'surgeon' && (
+                <>
+                  <div style={styles.stepDot(step === 4)} />
+                  <div style={styles.stepDot(step === 5)} />
+                  <div style={styles.stepDot(step === 6)} />
+                  <div style={styles.stepDot(step === 7)} />
+                </>
+              )}
+            </>
+          )}
         </div>
 
-        {/* Step 1: User Type - Security: allowlist enforced in handleComplete */}
         {step === 1 && (
           <div>
             <h2 style={{ marginBottom: '20px', fontSize: '24px' }}>What describes you best?</h2>
-            
-            <div
-              style={{
-                ...styles.card,
-                ...(userType === 'surgeon' ? styles.cardSelected : {})
-              }}
-              onClick={() => setUserType('surgeon')}
-            >
-              <div style={styles.cardTitle}>👨‍⚕️ Surgeon</div>
-              <div style={styles.cardDescription}>
-                Practicing surgeon looking for surgical techniques and resources
+            {[
+              { id: 'surgeon', title: '👨‍⚕️ Surgeon', desc: 'Primary decision-makers with NPI numbers and OR privileges. Your data contributes to "Upcoming Cases" volume reports.' },
+              { id: 'trainee', title: '🏥 Resident/Fellow', desc: 'Doctors in training who are still refining their brand preferences. Your favorites help create the "Adoption Pipeline" report.' },
+              { id: 'app', title: '🩺 Advanced Practice Provider', desc: 'PAs, NPs, and other advanced practice clinicians. Select your specialty and subspecialty to see relevant resources.' },
+              { id: 'industry', title: '🏢 Medical Industry', desc: 'Sales reps from Stryker, Arthrex, etc., or clinical trainers. Your viewing data helps identify what products are being pushed in the field.' },
+              { id: 'student', title: '📚 Student/Other', desc: 'Medical students or other healthcare professionals. This category helps keep core analytics pure by filtering out users without a "Case Dashboard."' },
+            ].map(({ id, title, desc }) => (
+              <div key={id} style={{ ...styles.card, ...(userType === id ? styles.cardSelected : {}) }} onClick={() => setUserType(id)}>
+                <div style={styles.cardTitle}>{title}</div>
+                <div style={styles.cardDescription}>{desc}</div>
               </div>
-            </div>
-
-            <div
-              style={{
-                ...styles.card,
-                ...(userType === 'trainee' ? styles.cardSelected : {})
-              }}
-              onClick={() => setUserType('trainee')}
-            >
-              <div style={styles.cardTitle}>🩺 Resident / Fellow</div>
-              <div style={styles.cardDescription}>
-                Resident or fellow in surgical training
-              </div>
-            </div>
-
-            <div
-              style={{
-                ...styles.card,
-                ...(userType === 'industry' ? styles.cardSelected : {})
-              }}
-              onClick={() => setUserType('industry')}
-            >
-              <div style={styles.cardTitle}>🏢 Medical Industry</div>
-              <div style={styles.cardDescription}>
-                Device company representative, product specialist, or industry professional
-              </div>
-            </div>
-
-            <div
-              style={{
-                ...styles.card,
-                ...(userType === 'student' ? styles.cardSelected : {})
-              }}
-              onClick={() => setUserType('student')}
-            >
-              <div style={styles.cardTitle}>📚 Student / Other</div>
-              <div style={styles.cardDescription}>
-                Medical student or other
-              </div>
-            </div>
-
-            <button
-              style={{
-                ...styles.button,
-                ...(userType ? {} : styles.buttonDisabled)
-              }}
-              disabled={!userType}
-              onClick={() => setStep(2)}
-            >
+            ))}
+            <button style={{ ...styles.button, ...(userType ? {} : styles.buttonDisabled) }} disabled={!userType}
+              onClick={() => { if (userType === 'surgeon' || userType === 'app') setStep(2); else handleComplete(); }}>
               Continue
             </button>
           </div>
         )}
 
-        {/* Step 2: Specialty */}
         {step === 2 && (
           <div>
             <h2 style={{ marginBottom: '20px', fontSize: '24px' }}>
-              {userType === 'surgeon' || userType === 'trainee' ? 'What is your specialty?' : 'Which specialty interests you?'}
+              {userType === 'surgeon' || userType === 'app' ? 'What is your specialty?' : 'Which specialty interests you?'}
             </h2>
-            {(userType === 'industry' || userType === 'student') && (
-              <p style={{ fontSize: '13px', color: '#666', marginBottom: '16px' }}>
-                You can change the specialty you&apos;re viewing later in Settings.
-              </p>
-            )}
-            {specialties.map(specialty => {
-              const isPodiatrySpecialty = specialty.name.toLowerCase().includes(SPECIALTY_SUBSPECIALTY.PODIATRY) ||
-                                          specialty.name.toLowerCase() === 'podiatry';
-              
-              return (
-                <div
-                  key={specialty.id}
-                  style={{
-                    ...styles.card,
-                    ...(selectedSpecialty === specialty.id ? styles.cardSelected : {})
-                  }}
-                  onClick={() => {
-                    setSelectedSpecialty(specialty.id);
-                    setSelectedSubspecialty('');
-                    // Immediately set Podiatry flag when clicked
-                    if (isPodiatrySpecialty) {
-                      console.log('Podiatry selected - setting flag immediately');
-                      setIsPodiatry(true);
-                      setSubspecialties([]); // Clear subspecialties
-                    } else {
-                      setIsPodiatry(false);
-                    }
-                  }}
-                >
-                  <div style={styles.cardTitle}>{specialty.name}</div>
-                  {specialty.description && (
-                    <div style={styles.cardDescription}>{specialty.description}</div>
-                  )}
-                  {isPodiatrySpecialty && (
-                    <div style={{ fontSize: '12px', color: '#666', marginTop: '8px', fontStyle: 'italic' }}>
-                      (No subspecialty selection needed)
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-
-            <button
-              style={{
-                ...styles.button,
-                ...(selectedSpecialty ? {} : styles.buttonDisabled)
-              }}
-              disabled={!selectedSpecialty}
-              onClick={async () => {
-                // Double-check if Podiatry before proceeding
-                const specialty = specialties.find(s => s.id === selectedSpecialty);
-                const isPodiatrySpecialty = specialty && (
-                  specialty.name.toLowerCase().includes(SPECIALTY_SUBSPECIALTY.PODIATRY) ||
-                  specialty.name.toLowerCase() === 'podiatry'
-                );
-                
-                if (isPodiatrySpecialty) {
-                  console.log('Podiatry detected on Continue - completing onboarding directly');
-                  setIsPodiatry(true);
-                  setSubspecialties([]);
-                  // Skip subspecialty step and go directly to completion
-                  await handleComplete();
-                } else {
-                  setIsPodiatry(false);
-                  setStep(3);
-                }
-              }}
-            >
+            {specialties.map(specialty => (
+              <div key={specialty.id} style={{ ...styles.card, ...(selectedSpecialty === specialty.id ? styles.cardSelected : {}) }}
+                onClick={() => { setSelectedSpecialty(specialty.id); setSelectedSubspecialty(''); }}>
+                <div style={styles.cardTitle}>{specialty.name}</div>
+              </div>
+            ))}
+            <button style={{ ...styles.button, ...(selectedSpecialty ? {} : styles.buttonDisabled) }} disabled={!selectedSpecialty}
+              onClick={() => { if (isPodiatry) { if (userType === 'surgeon') setStep(4); else handleComplete(); } else setStep(3); }}>
               Continue
             </button>
-
-            <button
-              style={styles.backButton}
-              onClick={() => setStep(1)}
-            >
-              Back
-            </button>
+            <button style={styles.backButton} onClick={() => setStep(1)}>Back</button>
           </div>
         )}
 
-        {/* Step 3: Subspecialty (skipped for Podiatry) */}
-        {/* Double-check Podiatry to prevent showing this step even if step === 3 */}
-        {step === 3 && (() => {
-          // Additional safety check - if selected specialty is Podiatry, don't show this step
-          const specialty = specialties.find(s => s.id === selectedSpecialty);
-          const isPodiatrySpecialty = specialty && (
-            specialty.name.toLowerCase().includes(SPECIALTY_SUBSPECIALTY.PODIATRY) ||
-            specialty.name.toLowerCase() === 'podiatry'
-          );
-          
-          if (isPodiatrySpecialty || isPodiatry) {
-            console.log('Preventing step 3 display - Podiatry detected, completing onboarding');
-            setIsPodiatry(true);
-            // Automatically complete onboarding if we somehow got to step 3 with Podiatry
-            handleComplete().catch(err => {
-              console.error('Error completing Podiatry onboarding:', err);
-            });
-            return null;
-          }
-          
-          return (
+        {step === 3 && !isPodiatry && (
           <div>
             <h2 style={{ marginBottom: '20px', fontSize: '24px' }}>
-              {userType === 'surgeon' || userType === 'trainee' ? 'What is your subspecialty?' : 'Which subspecialty interests you?'}
+              {userType === 'surgeon' || userType === 'app' ? 'What is your subspecialty?' : 'Which subspecialty interests you?'}
             </h2>
-            {(userType === 'industry' || userType === 'student') && (
-              <p style={{ fontSize: '13px', color: '#666', marginBottom: '16px' }}>
-                You can change the subspecialty you&apos;re viewing later in Settings.
-              </p>
-            )}
-            {subspecialties.length === 0 ? (
-              <div style={{ 
-                padding: '20px', 
-                backgroundColor: '#fee', 
-                border: '2px solid #fcc', 
-                borderRadius: '8px',
-                marginBottom: '20px'
-              }}>
-                <p style={{ color: '#c00', fontWeight: 'bold', marginBottom: '10px' }}>
-                  Error loading subspecialties
-                </p>
-                <p style={{ color: '#800', marginBottom: '15px' }}>
-                  No subspecialties found for this specialty
-                </p>
-                <button
-                  onClick={() => fetchSubspecialties(selectedSpecialty)}
-                  style={{
-                    padding: '8px 16px',
-                    backgroundColor: '#0066cc',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer'
-                  }}
-                >
-                  Retry
-                </button>
-              </div>
-            ) : (
-              subspecialties.map(subspecialty => (
-                <div
-                  key={subspecialty.id}
-                  style={{
-                    ...styles.card,
-                    ...(selectedSubspecialty === subspecialty.id ? styles.cardSelected : {})
-                  }}
-                  onClick={() => setSelectedSubspecialty(subspecialty.id)}
-                >
-                  <div style={styles.cardTitle}>{subspecialty.name}</div>
-                  {subspecialty.description && (
-                    <div style={styles.cardDescription}>{subspecialty.description}</div>
-                  )}
+            {loadingSubspecialties ? <p style={{ textAlign: 'center', padding: '20px' }}>Loading subspecialties...</p> :
+              subspecialtiesError ? (
+                <div style={{ padding: '20px', backgroundColor: '#fee', borderRadius: '8px', color: '#c33', marginBottom: '15px' }}>
+                  <p style={{ margin: 0, fontWeight: 'bold' }}>Error loading subspecialties</p>
+                  <p style={{ margin: '5px 0 0 0', fontSize: '14px' }}>{subspecialtiesError}</p>
+                  <button style={{ marginTop: '10px', padding: '8px 16px', backgroundColor: '#0066cc', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }} onClick={() => fetchSubspecialties(selectedSpecialty)}>Retry</button>
                 </div>
-              ))
-            )}
+              ) : subspecialties.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '20px' }}>
+                  <p style={{ color: '#666' }}>No subspecialties available for this specialty.</p>
+                  <p style={{ color: '#999', fontSize: '14px', marginTop: '10px' }}>{userType === 'surgeon' || userType === 'app' ? 'Continue to answer a few more questions.' : 'You can still complete setup without selecting a subspecialty.'}</p>
+                  <button style={{ ...styles.button, marginTop: '20px' }} disabled={loading} onClick={() => (userType === 'surgeon' ? setStep(4) : handleComplete())}>
+                    {loading ? 'Saving...' : userType === 'surgeon' ? 'Continue' : 'Complete Setup Without Subspecialty'}
+                  </button>
+                </div>
+              ) : (
+                subspecialties.map(subspecialty => (
+                  <div key={subspecialty.id} style={{ ...styles.card, ...(selectedSubspecialty === subspecialty.id ? styles.cardSelected : {}) }} onClick={() => setSelectedSubspecialty(subspecialty.id)}>
+                    <div style={styles.cardTitle}>{subspecialty.name}</div>
+                  </div>
+                ))
+              )}
+            <button style={{ ...styles.button, ...(selectedSubspecialty && !loading ? {} : styles.buttonDisabled) }} disabled={!selectedSubspecialty || loading}
+              onClick={() => { if (userType === 'surgeon') setStep(4); else handleComplete(); }}>
+              {loading ? 'Saving...' : userType === 'surgeon' ? 'Continue' : 'Complete Setup'}
+            </button>
+            <button style={styles.backButton} onClick={() => setStep(2)} disabled={loading}>Back</button>
+          </div>
+        )}
 
-            <button
-              style={{
-                ...styles.button,
-                ...(selectedSubspecialty && !loading ? {} : styles.buttonDisabled)
-              }}
-              disabled={!selectedSubspecialty || loading}
-              onClick={handleComplete}
-            >
+        {step === 4 && userType === 'surgeon' && (
+          <div>
+            <h2 style={{ marginBottom: '20px', fontSize: '24px' }}>What is your practice setting?</h2>
+            {PRACTICE_SETTING_OPTIONS.map((opt) => (
+              <div key={opt.value} style={{ ...styles.card, ...(practiceSetting === opt.value ? styles.cardSelected : {}) }} onClick={() => setPracticeSetting(opt.value)}>
+                <div style={styles.cardTitle}>{opt.label}</div>
+              </div>
+            ))}
+            <button style={{ ...styles.button, ...(practiceSetting ? {} : styles.buttonDisabled) }} disabled={!practiceSetting} onClick={() => setStep(5)}>Continue</button>
+            <button style={styles.backButton} onClick={() => setStep(isPodiatry ? 2 : 3)}>Back</button>
+          </div>
+        )}
+
+        {step === 5 && userType === 'surgeon' && (
+          <div>
+            <h2 style={{ marginBottom: '20px', fontSize: '24px' }}>What is your primary OR setting?</h2>
+            <p style={{ color: '#666', marginBottom: '16px', fontSize: '14px' }}>Sponsors use this to understand where procedures happen and what devices are feasible.</p>
+            {PRIMARY_OR_OPTIONS.map((opt) => (
+              <div key={opt.value} style={{ ...styles.card, ...(primaryORSetting === opt.value ? styles.cardSelected : {}) }} onClick={() => setPrimaryORSetting(opt.value)}>
+                <div style={styles.cardTitle}>{opt.label}</div>
+              </div>
+            ))}
+            <button style={{ ...styles.button, ...(primaryORSetting ? {} : styles.buttonDisabled) }} disabled={!primaryORSetting} onClick={() => setStep(6)}>Continue</button>
+            <button style={styles.backButton} onClick={() => setStep(4)}>Back</button>
+          </div>
+        )}
+
+        {step === 6 && userType === 'surgeon' && (
+          <div>
+            <h2 style={{ marginBottom: '20px', fontSize: '24px' }}>How many years have you been practicing?</h2>
+            {YEARS_PRACTICING_OPTIONS.map((opt) => (
+              <div key={opt.value} style={{ ...styles.card, ...(yearsPracticing === opt.value ? styles.cardSelected : {}) }} onClick={() => setYearsPracticing(opt.value)}>
+                <div style={styles.cardTitle}>{opt.label}</div>
+              </div>
+            ))}
+            <button style={{ ...styles.button, ...(yearsPracticing ? {} : styles.buttonDisabled) }} disabled={!yearsPracticing} onClick={() => setStep(7)}>Continue</button>
+            <button style={styles.backButton} onClick={() => setStep(5)}>Back</button>
+          </div>
+        )}
+
+        {step === 7 && userType === 'surgeon' && (
+          <div>
+            <h2 style={{ marginBottom: '20px', fontSize: '24px' }}>What is your approximate annual case volume?</h2>
+            {ANNUAL_CASE_VOLUME_OPTIONS.map((opt) => (
+              <div key={opt.value} style={{ ...styles.card, ...(annualCaseVolume === opt.value ? styles.cardSelected : {}) }} onClick={() => setAnnualCaseVolume(opt.value)}>
+                <div style={styles.cardTitle}>{opt.label}</div>
+              </div>
+            ))}
+            <button style={{ ...styles.button, ...(annualCaseVolume && !loading ? {} : styles.buttonDisabled) }} disabled={!annualCaseVolume || loading} onClick={handleComplete}>
               {loading ? 'Saving...' : 'Complete Setup'}
             </button>
-
-            <button
-              style={styles.backButton}
-              onClick={() => setStep(2)}
-              disabled={loading}
-            >
-              Back
-            </button>
+            <button style={styles.backButton} onClick={() => setStep(6)} disabled={loading}>Back</button>
           </div>
-          );
-        })()}
+        )}
+
+        {showTermsAcceptance && (
+          <TermsAcceptanceModal
+            isOpen={true}
+            loading={loading}
+            onAccept={async () => {
+              const { error } = await supabase.from('profiles').update({ terms_accepted_at: new Date().toISOString() }).eq('id', user.id);
+              if (error) {
+                alert('Failed to save. Please try again.');
+                return;
+              }
+              setShowTermsAcceptance(false);
+              onComplete();
+            }}
+          />
+        )}
       </div>
     </div>
   )

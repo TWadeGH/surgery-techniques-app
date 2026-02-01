@@ -41,12 +41,45 @@ export const USER_TYPES = {
   OTHER: 'other',
 };
 
-// Resource Types
+// Resource Types (content type)
 export const RESOURCE_TYPES = {
   VIDEO: 'video',
   ARTICLE: 'article',
   DOCUMENT: 'document',
   IMAGE: 'image',
+  GUIDE: 'guide',
+  PODCAST: 'podcast',
+};
+
+// Source type for linked resources (where the content is hosted)
+export const SOURCE_TYPES = {
+  YOUTUBE: 'youtube',
+  MANUFACTURER: 'manufacturer',
+  JOURNAL: 'journal',
+  INSTITUTION: 'institution',
+  VIMEO: 'vimeo',
+  OTHER: 'other',
+};
+
+// Display labels for "View on [Source]" button and source line
+export const SOURCE_DISPLAY = {
+  [SOURCE_TYPES.YOUTUBE]: 'YouTube',
+  [SOURCE_TYPES.MANUFACTURER]: 'Manufacturer Site',
+  [SOURCE_TYPES.JOURNAL]: 'Journal',
+  [SOURCE_TYPES.INSTITUTION]: 'Institutional Site',
+  [SOURCE_TYPES.VIMEO]: 'Vimeo',
+  [SOURCE_TYPES.OTHER]: 'External Site',
+};
+
+// Content type display labels
+export const CONTENT_TYPE_LABELS = {
+  video: 'Video',
+  article: 'Article',
+  document: 'Document',
+  pdf: 'PDF / Guide',
+  guide: 'Guide',
+  podcast: 'Podcast',
+  image: 'Image',
 };
 
 // View Modes
@@ -176,6 +209,10 @@ export const VALIDATION = {
     MAX_LENGTH: 5000,
     MESSAGE: 'Note must be less than 5000 characters.',
   },
+  REPORT: {
+    MAX_LENGTH: 2000,
+    MESSAGE: 'Report must be 2000 characters or fewer.',
+  },
 };
 
 // Note Limits
@@ -232,4 +269,12 @@ export const ROUTES = {
   ADMIN: '/admin',
   PROFILE: '/profile',
   SETTINGS: '/settings',
+};
+
+// Legal / DMCA disclosure for external links (third-party content)
+export const EXTERNAL_LINK_DISCLOSURE = {
+  MODAL_TITLE: 'You are leaving Surgery Techniques',
+  MODAL_BODY: 'You will be redirected to an external site.',
+  CARD_DISCLAIMER: 'This content is hosted on a third-party site. Surgery Techniques App is not responsible for the accuracy, completeness, or legality of third-party content.',
+  COPYRIGHT_REPORT: 'If you believe this link violates copyright, please use "Report Link" or contact us.',
 };

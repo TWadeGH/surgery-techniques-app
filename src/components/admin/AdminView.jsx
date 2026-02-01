@@ -6,7 +6,7 @@
  */
 
 import React, { useState, useMemo, memo, lazy, Suspense } from 'react';
-import { Sparkles, ArrowRight, BarChart3 } from 'lucide-react';
+import { Sparkles, Flag, ArrowRight, BarChart3 } from 'lucide-react';
 import { FullPageSpinner } from '../common/Spinner';
 
 // Lazy load admin components for better initial load performance
@@ -30,6 +30,10 @@ const AnalyticsDashboard = lazy(() => import('./AnalyticsDashboard'));
  * @param {Function} props.onShowSuggestedResources - Callback to show suggested resources modal
  * @param {Function} props.onApproveSuggestion - Callback to approve suggestion
  * @param {Function} props.onRejectSuggestion - Callback to reject suggestion
+ * @param {Array} props.reportedResources - Array of reported resource objects
+ * @param {Function} props.onShowReportedResources - Callback to show reported resources modal
+ * @param {Function} props.onDismissReport - Callback to dismiss a report
+ * @param {Function} props.onMarkReviewedReport - Callback to mark a report as reviewed
  */
 function AdminView({ 
   resources, 
@@ -44,7 +48,11 @@ function AdminView({
   suggestedResources, 
   onShowSuggestedResources, 
   onApproveSuggestion, 
-  onRejectSuggestion 
+  onRejectSuggestion,
+  reportedResources = [],
+  onShowReportedResources,
+  onDismissReport,
+  onMarkReviewedReport,
 }) {
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -62,16 +70,21 @@ function AdminView({
     });
   }, [resources, searchTerm]);
 
-  // Memoize pending count
+  // Memoize pending counts
   const pendingCount = useMemo(() => {
     if (!suggestedResources || !Array.isArray(suggestedResources)) return 0;
     return suggestedResources.filter(s => s && s.status === 'pending').length;
   }, [suggestedResources]);
 
+  const reportedPendingCount = useMemo(() => {
+    if (!reportedResources || !Array.isArray(reportedResources)) return 0;
+    return reportedResources.filter(r => r && r.status === 'pending').length;
+  }, [reportedResources]);
+
   return (
     <div className="animate-slide-up">
-      {/* Suggested Resources – always visible so admins can open modal even when 0 pending */}
-      <div className="mb-6">
+      {/* Suggested Resources & Reported Resources */}
+      <div className="mb-6 space-y-4">
         <button
           onClick={onShowSuggestedResources}
           className="w-full glass rounded-2xl p-4 sm:p-6 shadow-lg hover:shadow-xl transition-all text-left group"
@@ -101,6 +114,39 @@ function AdminView({
             </div>
           </div>
         </button>
+
+        {/* Reported Resources */}
+        {onShowReportedResources && (
+          <button
+            onClick={onShowReportedResources}
+            className="w-full glass rounded-2xl p-4 sm:p-6 shadow-lg hover:shadow-xl transition-all text-left group"
+            aria-label={`View reported resources (${reportedPendingCount} pending)`}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3 sm:gap-4">
+                <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-br from-amber-500 to-orange-500 rounded-xl flex items-center justify-center">
+                  <Flag size={24} className="text-white" />
+                </div>
+                <div>
+                  <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white mb-1">
+                    Reported Resources
+                  </h3>
+                  <p className="text-sm text-gray-600 dark:text-gray-300">
+                    {reportedPendingCount} {reportedPendingCount === 1 ? 'report' : 'reports'} pending review
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                {reportedPendingCount > 0 && (
+                  <span className="bg-amber-500 text-white text-sm font-bold px-3 py-1 rounded-full">
+                    {reportedPendingCount}
+                  </span>
+                )}
+                <ArrowRight size={20} className="text-gray-400 group-hover:text-amber-600 transition-colors" />
+              </div>
+            </div>
+          </button>
+        )}
       </div>
 
       <div className="mb-6 sm:mb-8">
