@@ -6,3 +6,4 @@ export { default as SettingsModal } from './SettingsModal';
 export { default as ReportResourceModal } from './ReportResourceModal';
 export { default as ReportedResourcesModal } from './ReportedResourcesModal';
 export { default as ExternalLinkModal } from './ExternalLinkModal';
+export { default as SponsorshipInquiryModal } from './SponsorshipInquiryModal';

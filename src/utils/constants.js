@@ -95,6 +95,29 @@ export const ADMIN_TABS = {
   CATEGORIES: 'categories',
   PROCEDURES: 'procedures',
   SUGGESTIONS: 'suggestions',
+  ACTIVITY: 'activity',
+  ROLES: 'roles',
+  SPONSORSHIP: 'sponsorship',
+};
+
+// Sponsorship Inquiry Statuses
+export const INQUIRY_STATUSES = {
+  NEW: 'new',
+  CONTACTED: 'contacted',
+  CLOSED: 'closed',
+};
+
+// Admin Action Types (audit log)
+export const ADMIN_ACTION_TYPES = {
+  RESOURCE_CREATED: 'resource_created',
+  RESOURCE_EDITED: 'resource_edited',
+  RESOURCE_DELETED: 'resource_deleted',
+  SUGGESTION_APPROVED: 'suggestion_approved',
+  SUGGESTION_REJECTED: 'suggestion_rejected',
+  REPORT_DISMISSED: 'report_dismissed',
+  REPORT_REVIEWED: 'report_reviewed',
+  ROLE_ASSIGNED: 'role_assigned',
+  ROLE_REVOKED: 'role_revoked',
 };
 
 // Loading States

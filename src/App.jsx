@@ -23,7 +23,8 @@ import {
 
 // Import utilities
 import { isAdmin, canRateOrFavorite, isSurgeon, includeInAnalytics } from './utils/helpers';
-import { VIEW_MODES, USER_TYPES, ADMIN_TABS, RESOURCE_TYPES, SPECIALTY_SUBSPECIALTY } from './utils/constants';
+import { VIEW_MODES, USER_TYPES, ADMIN_TABS, RESOURCE_TYPES, SPECIALTY_SUBSPECIALTY, ADMIN_ACTION_TYPES } from './utils/constants';
+import { logAdminAction } from './utils/adminAudit';
 import { validateCategoryId, validateUuid } from './utils/validators';
 
 // Import components
@@ -46,7 +47,8 @@ import {
   SuggestedResourcesModal,
   SettingsModal,
   ReportResourceModal,
-  ReportedResourcesModal
+  ReportedResourcesModal,
+  SponsorshipInquiryModal
 } from './components/modals';
 import { LegalModal, TermsAcceptanceModal } from './components/legal';
 
@@ -111,6 +113,8 @@ function SurgicalTechniquesApp() {
   const [showSuggestedResources, setShowSuggestedResources] = useState(false);
   const [reportedResources, setReportedResources] = useState([]);
   const [showReportedResources, setShowReportedResources] = useState(false);
+  const [showSponsorshipInquiry, setShowSponsorshipInquiry] = useState(false);
+  const [sponsorshipPendingCount, setSponsorshipPendingCount] = useState(0);
   const [resourceToReport, setResourceToReport] = useState(null);
   const [showUpcomingCases, setShowUpcomingCases] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -503,7 +507,7 @@ function SurgicalTechniquesApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.id, currentUser?.specialtyId, currentUser?.subspecialtyId]);
 
-  // Load suggested and reported resources when switching to Admin view
+  // Load suggested, reported resources, and sponsorship count when switching to Admin view
   useEffect(() => {
     if (currentView === VIEW_MODES.ADMIN && isAdmin(currentUser)) {
       loadSuggestedResources().catch(error => {
@@ -512,6 +516,15 @@ function SurgicalTechniquesApp() {
       loadReportedResources().catch(error => {
         console.error('Error loading reported resources when switching to Admin view:', error);
       });
+      // Load sponsorship pending count for super_admin and specialty_admin
+      if (currentUser.role === 'super_admin' || currentUser.role === 'specialty_admin') {
+        supabase
+          .from('sponsorship_inquiries')
+          .select('id', { count: 'exact', head: true })
+          .eq('status', 'new')
+          .then(({ count }) => setSponsorshipPendingCount(count || 0))
+          .catch(() => {});
+      }
     }
   }, [currentView, currentUser, loadSuggestedResources, loadReportedResources]);
 
@@ -569,6 +582,7 @@ function SurgicalTechniquesApp() {
       setShowAddForm(false);
       loadAllData();
       toast.success('Resource added successfully!');
+      logAdminAction(currentUser.id, ADMIN_ACTION_TYPES.RESOURCE_CREATED, 'resource', null, { title: resourceData.title });
     } catch (error) {
       console.error('Error adding resource:', error);
       toast.error('Error adding resource: ' + error.message);
@@ -715,6 +729,7 @@ function SurgicalTechniquesApp() {
       await loadSuggestedResources();
       await loadAllData();
       toast.success('Resource approved and added to library!');
+      logAdminAction(currentUser.id, ADMIN_ACTION_TYPES.SUGGESTION_APPROVED, 'resource_suggestion', suggestionId, {});
     } catch (error) {
       console.error('Error approving suggestion:', error);
       toast.error('Error approving suggestion: ' + error.message);
@@ -760,6 +775,7 @@ function SurgicalTechniquesApp() {
 
       await loadSuggestedResources();
       toast.success('Resource suggestion rejected.');
+      logAdminAction(currentUser.id, ADMIN_ACTION_TYPES.SUGGESTION_REJECTED, 'resource_suggestion', suggestionId, {});
     } catch (error) {
       console.error('Error rejecting suggestion:', error);
       toast.error('Error rejecting suggestion: ' + error.message);
@@ -996,6 +1012,7 @@ function SurgicalTechniquesApp() {
       // Reload all data to ensure UI reflects the changes
       await loadAllData();
       toast.success('Resource updated successfully!');
+      logAdminAction(currentUser.id, ADMIN_ACTION_TYPES.RESOURCE_EDITED, 'resource', resourceId, { title: resourceData.title });
     } catch (error) {
       console.error('Error updating resource:', error);
       toast.error('Error updating resource: ' + error.message);
@@ -1072,6 +1089,7 @@ function SurgicalTechniquesApp() {
       console.log('✅ Resource deleted successfully:', deleteData);
       loadAllData();
       toast.success('Resource deleted successfully!');
+      logAdminAction(currentUser.id, ADMIN_ACTION_TYPES.RESOURCE_DELETED, 'resource', resourceId, {});
     } catch (error) {
       console.error('Error deleting resource:', error);
       toast.error('Error deleting resource: ' + error.message);
@@ -1259,6 +1277,7 @@ function SurgicalTechniquesApp() {
         .eq('id', reportId);
       if (error) throw error;
       toast.success('Report dismissed.');
+      logAdminAction(currentUser.id, ADMIN_ACTION_TYPES.REPORT_DISMISSED, 'resource_report', reportId, {});
       await loadReportedResources();
     } catch (error) {
       console.error('Error dismissing report:', error);
@@ -1273,6 +1292,7 @@ function SurgicalTechniquesApp() {
         .eq('id', reportId);
       if (error) throw error;
       toast.success('Report marked as reviewed.');
+      logAdminAction(currentUser.id, ADMIN_ACTION_TYPES.REPORT_REVIEWED, 'resource_report', reportId, {});
       await loadReportedResources();
     } catch (error) {
       console.error('Error marking report reviewed:', error);
@@ -1524,6 +1544,7 @@ function SurgicalTechniquesApp() {
             onRejectSuggestion={handleRejectSuggestion}
             onDismissReport={handleDismissReport}
             onMarkReviewedReport={handleMarkReviewedReport}
+            sponsorshipPendingCount={sponsorshipPendingCount}
           />
         ) : (
           <div className="text-center py-12">
@@ -1555,6 +1576,12 @@ function SurgicalTechniquesApp() {
               <button type="button" onClick={() => setLegalPage('about')} className="text-gray-600 dark:text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 transition-colors">About</button>
               <span className="text-gray-400 dark:text-gray-500" aria-hidden="true">•</span>
               <button type="button" onClick={() => setLegalPage('contact')} className="text-gray-600 dark:text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 transition-colors">Contact</button>
+              {currentUser && (
+                <>
+                  <span className="text-gray-400 dark:text-gray-500" aria-hidden="true">&bull;</span>
+                  <button type="button" onClick={() => setShowSponsorshipInquiry(true)} className="text-gray-600 dark:text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 transition-colors">Partnership Inquiries</button>
+                </>
+              )}
             </nav>
           </div>
         </footer>
@@ -1632,6 +1659,12 @@ function SurgicalTechniquesApp() {
           onClose={handleCloseCategoryManagement}
         />
       )}
+
+      <SponsorshipInquiryModal
+        isOpen={showSponsorshipInquiry}
+        onClose={() => setShowSponsorshipInquiry(false)}
+        currentUser={currentUser}
+      />
 
       {showSettings && (
         <SettingsModal

@@ -20,10 +20,7 @@ export { useResources } from './useResources';
 export { useFavorites } from './useFavorites';
 export { useNotes } from './useNotes';
 export { useUpcomingCases } from './useUpcomingCases';
-
-// Future hooks to add:
-// export { default as useCategories } from './useCategories';
-// export { default as useProcedures } from './useProcedures';
-// export { default as useSearch } from './useSearch';
-// export { default as useDarkMode } from './useDarkMode';
-// export { default as useAnalytics } from './useAnalytics';
+export { useAnalytics } from './useAnalytics';
+export { useAdminActivity } from './useAdminActivity';
+export { useRoleManagement } from './useRoleManagement';
+export { useSponsorshipInquiries } from './useSponsorshipInquiries';
