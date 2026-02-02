@@ -464,9 +464,7 @@ function ResourceCard({
                 <ArrowRight size={14} />
                 {getViewOnLabel(resource)}
               </button>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-                {EXTERNAL_LINK_DISCLOSURE.CARD_DISCLAIMER} {EXTERNAL_LINK_DISCLOSURE.COPYRIGHT_REPORT}
-              </p>
+              {/* Disclaimer moved to bottom bar next to icons */}
             </>
           ) : resource?.url ? (
             <span className="text-gray-500 dark:text-gray-400 text-xs break-all flex items-center gap-1 mb-2">
@@ -560,9 +558,14 @@ function ResourceCard({
             </div>
           )}
 
-          {/* Action Buttons — overflow-visible so tooltips show */}
-          <div className="flex items-center justify-end pt-4 border-t border-gray-100 dark:border-gray-700 overflow-visible">
-            <div className="flex gap-2 flex-wrap overflow-visible">
+          {/* Bottom bar: disclaimer + action buttons */}
+          <div className="flex items-end justify-between gap-3 pt-4 border-t border-gray-100 dark:border-gray-700 overflow-visible">
+            {safeResourceHref ? (
+              <p className="text-[10px] leading-tight text-gray-400 dark:text-gray-500 max-w-[260px] flex-shrink">
+                {EXTERNAL_LINK_DISCLOSURE.CARD_DISCLAIMER}
+              </p>
+            ) : <div />}
+            <div className="flex gap-2 flex-shrink-0 overflow-visible">
               {/* Note Button */}
               <div className="group relative">
                 <button
@@ -619,8 +622,8 @@ function ResourceCard({
                 >
                   <Plus size={18} className={isUpcomingCase ? 'rotate-45' : ''} strokeWidth={2} />
                 </button>
-                <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1.5 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded shadow-lg whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 pointer-events-none z-50">
-                  {canFavorite ? (isUpcomingCase ? 'Remove this resource from your Upcoming Cases list' : 'Add this resource to your Upcoming Cases for a future procedure') : 'Upcoming Cases available for Surgeons and Trainees'}
+                <span className="absolute bottom-full right-0 mb-2 px-2 py-1.5 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded shadow-lg max-w-48 text-center opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 pointer-events-none z-50">
+                  {canFavorite ? (isUpcomingCase ? 'Remove from Upcoming Cases' : 'Add to Upcoming Cases') : 'Upcoming Cases available for Surgeons and Trainees'}
                 </span>
                 </div>
               )}
@@ -635,8 +638,8 @@ function ResourceCard({
                 >
                   <Flag size={18} />
                 </button>
-                <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1.5 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded shadow-lg whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 pointer-events-none z-50">
-                  Report this link — report a problem or copyright concern
+                <span className="absolute bottom-full right-0 mb-2 px-2 py-1.5 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded shadow-lg max-w-48 text-center opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 pointer-events-none z-50">
+                  Report a problem or copyright concern
                 </span>
               </div>
             </div>
