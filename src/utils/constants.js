@@ -26,7 +26,7 @@ export const SPECIALTY_SUBSPECIALTY = {
   PODIATRY: 'podiatry', // specialty with no subspecialty; view = Orthopaedic Surgery + Foot and Ankle
   ORTHOPAEDIC_SURGERY: 'orthopaedic surgery', // UK spelling
   ORTHOPEDIC_SURGERY: 'orthopedic surgery', // US spelling
-  FOOT_AND_ANKLE: 'foot and ankle',
+  FOOT_AND_ANKLE: 'foot%ankle',
 };
 
 // User Types
@@ -98,6 +98,7 @@ export const ADMIN_TABS = {
   ACTIVITY: 'activity',
   ROLES: 'roles',
   SPONSORSHIP: 'sponsorship',
+  MESSAGES: 'messages',
 };
 
 // Sponsorship Inquiry Statuses

@@ -115,6 +115,7 @@ function SurgicalTechniquesApp() {
   const [showReportedResources, setShowReportedResources] = useState(false);
   const [showSponsorshipInquiry, setShowSponsorshipInquiry] = useState(false);
   const [sponsorshipPendingCount, setSponsorshipPendingCount] = useState(0);
+  const [unreadMessageCount, setUnreadMessageCount] = useState(0);
   const [resourceToReport, setResourceToReport] = useState(null);
   const [showUpcomingCases, setShowUpcomingCases] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -527,6 +528,53 @@ function SurgicalTechniquesApp() {
       }
     }
   }, [currentView, currentUser, loadSuggestedResources, loadReportedResources]);
+
+  // Admin messaging: load unread count and subscribe to realtime messages
+  const messagingChannelRef = useRef(null);
+  useEffect(() => {
+    if (!currentUser?.id || !isAdmin(currentUser)) {
+      setUnreadMessageCount(0);
+      return;
+    }
+
+    // Load initial unread count
+    supabase
+      .from('admin_messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('recipient_id', currentUser.id)
+      .is('read_at', null)
+      .then(({ count }) => setUnreadMessageCount(count || 0))
+      .catch(() => {});
+
+    // Realtime subscription for new messages
+    const channel = supabase
+      .channel('app-admin-messages-' + currentUser.id)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'admin_messages',
+          filter: `recipient_id=eq.${currentUser.id}`,
+        },
+        (payload) => {
+          setUnreadMessageCount(prev => prev + 1);
+          // Show toast for new message
+          const senderName = payload.new.sender_id?.substring(0, 8) || 'Someone';
+          toast.info(`New message received`);
+        }
+      )
+      .subscribe();
+
+    messagingChannelRef.current = channel;
+
+    return () => {
+      if (messagingChannelRef.current) {
+        supabase.removeChannel(messagingChannelRef.current);
+        messagingChannelRef.current = null;
+      }
+    };
+  }, [currentUser?.id, currentUser?.role, toast]);
 
   // NOTE: All the auth functions (checkUser, loadUserProfile, etc.) are now in useAuth hook!
   // NOTE: toggleFavorite, toggleUpcomingCase, updateNote are now from hooks!
@@ -1545,6 +1593,7 @@ function SurgicalTechniquesApp() {
             onDismissReport={handleDismissReport}
             onMarkReviewedReport={handleMarkReviewedReport}
             sponsorshipPendingCount={sponsorshipPendingCount}
+            unreadMessageCount={unreadMessageCount}
           />
         ) : (
           <div className="text-center py-12">

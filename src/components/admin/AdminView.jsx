@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useMemo, memo, lazy, Suspense } from 'react';
-import { Sparkles, Flag, ArrowRight, BarChart3, Activity, Shield, Handshake } from 'lucide-react';
+import { Sparkles, Flag, ArrowRight, BarChart3, Activity, Shield, Handshake, MessageSquare } from 'lucide-react';
 import { FullPageSpinner } from '../common/Spinner';
 import { USER_ROLES } from '../../utils/constants';
 
@@ -14,6 +14,7 @@ const AnalyticsDashboard = lazy(() => import('./analytics/AnalyticsDashboard'));
 const AdminActivityPanel = lazy(() => import('./activity/AdminActivityPanel'));
 const RoleManagementPanel = lazy(() => import('./roles/RoleManagementPanel'));
 const SponsorshipInquiriesPanel = lazy(() => import('./sponsorship/SponsorshipInquiriesPanel'));
+const MessagingPanel = lazy(() => import('./messaging/MessagingPanel'));
 
 function AdminView({
   resources,
@@ -34,6 +35,7 @@ function AdminView({
   onDismissReport,
   onMarkReviewedReport,
   sponsorshipPendingCount = 0,
+  unreadMessageCount = 0,
 }) {
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -79,8 +81,10 @@ function AdminView({
     if (isSuperAdmin || isSpecialtyAdmin) {
       t.push({ key: 'sponsorship', label: 'Sponsorship', icon: Handshake, badge: sponsorshipPendingCount });
     }
+    // Messages tab visible to all admin roles
+    t.push({ key: 'messages', label: 'Messages', shortLabel: 'Msgs', icon: MessageSquare, badge: unreadMessageCount });
     return t;
-  }, [isSuperAdmin, isSpecialtyAdmin, sponsorshipPendingCount]);
+  }, [isSuperAdmin, isSpecialtyAdmin, sponsorshipPendingCount, unreadMessageCount]);
 
   const tabButtonClass = (key) =>
     `flex items-center justify-center gap-1.5 flex-1 sm:flex-none px-3 sm:px-5 py-2.5 sm:py-3 rounded-xl text-sm font-medium transition-all ${
@@ -220,6 +224,12 @@ function AdminView({
       {adminTab === 'sponsorship' && (isSuperAdmin || isSpecialtyAdmin) && (
         <Suspense fallback={<FullPageSpinner />}>
           <SponsorshipInquiriesPanel currentUser={currentUser} />
+        </Suspense>
+      )}
+
+      {adminTab === 'messages' && (
+        <Suspense fallback={<FullPageSpinner />}>
+          <MessagingPanel currentUser={currentUser} />
         </Suspense>
       )}
     </div>

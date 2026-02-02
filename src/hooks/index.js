@@ -24,3 +24,4 @@ export { useAnalytics } from './useAnalytics';
 export { useAdminActivity } from './useAdminActivity';
 export { useRoleManagement } from './useRoleManagement';
 export { useSponsorshipInquiries } from './useSponsorshipInquiries';
+export { useAdminMessaging } from './useAdminMessaging';
