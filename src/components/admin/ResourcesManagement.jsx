@@ -5,7 +5,7 @@
  * Extracted from App.jsx as part of refactoring effort
  */
 
-import React, { useState, useCallback, memo, useRef } from 'react';
+import React, { useState, useCallback, useMemo, memo, useRef } from 'react';
 import { Edit, Plus, Search, FileText, GripVertical } from 'lucide-react';
 import AdminResourceCard from './AdminResourceCard';
 
@@ -21,16 +21,22 @@ import AdminResourceCard from './AdminResourceCard';
  * @param {Function} props.onDeleteResource - Callback to delete resource
  * @param {Function} props.onEditCategories - Callback to edit categories
  * @param {Function} props.onReorderResources - Callback to reorder resources
+ * @param {Array} props.categories - Array of category objects
+ * @param {string} props.selectedCategoryId - Currently selected category ID
+ * @param {Function} props.onCategorySelect - Callback when category is selected
  */
-function ResourcesManagement({ 
-  resources, 
-  searchTerm, 
-  setSearchTerm, 
-  onAddResource, 
-  onEditResource, 
-  onDeleteResource, 
-  onEditCategories, 
-  onReorderResources 
+function ResourcesManagement({
+  resources,
+  searchTerm,
+  setSearchTerm,
+  onAddResource,
+  onEditResource,
+  onDeleteResource,
+  onEditCategories,
+  onReorderResources,
+  categories = [],
+  selectedCategoryId = null,
+  onCategorySelect,
 }) {
   const [draggedResourceId, setDraggedResourceId] = useState(null);
   const [dragOverResourceId, setDragOverResourceId] = useState(null);
@@ -39,6 +45,32 @@ function ResourcesManagement({
   // Use refs to persist values across closures (prevents stale closure issues)
   const draggedResourceIdRef = useRef(null);
   const dragOverPositionRef = useRef(null);
+
+  // Organize categories hierarchically
+  const organizedCategories = useMemo(() => {
+    if (!categories || categories.length === 0) return [];
+    const topLevel = categories.filter(c => !c.parent_category_id).sort((a, b) => (a.order || 0) - (b.order || 0));
+    return topLevel.map(cat => ({
+      ...cat,
+      subcategories: categories
+        .filter(sc => sc.parent_category_id === cat.id)
+        .sort((a, b) => (a.order || 0) - (b.order || 0))
+    }));
+  }, [categories]);
+
+  const [expandedCategories, setExpandedCategories] = useState({});
+
+  // Filter resources by selected category
+  const filteredByCategory = useMemo(() => {
+    if (!selectedCategoryId) return resources;
+    // Include subcategories
+    const categoryIds = [selectedCategoryId];
+    const subcategoryIds = categories
+      .filter(c => c.parent_category_id === selectedCategoryId)
+      .map(c => c.id);
+    const allCategoryIds = [...categoryIds, ...subcategoryIds];
+    return resources.filter(r => r.category_id && allCategoryIds.includes(r.category_id));
+  }, [resources, selectedCategoryId, categories]);
 
   // Security: Validate resourceId input to prevent IDOR and type confusion
   const handleDragStart = useCallback((e, resourceId) => {
@@ -223,63 +255,142 @@ function ResourcesManagement({
         </div>
       </div>
 
-      {/* Search */}
-      <div className="glass rounded-2xl p-4 sm:p-6 mb-4 sm:mb-6 shadow-lg">
-        <div className="relative">
-          <Search className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search resources..."
-            className="w-full pl-10 sm:pl-12 pr-4 py-2.5 sm:py-3 border-2 border-gray-200 rounded-xl text-sm sm:text-base focus:border-purple-500 focus:outline-none transition-colors"
-            aria-label="Search resources"
-          />
-        </div>
-      </div>
-
-      {/* Resources List */}
-      <div className="space-y-3 sm:space-y-4">
-        {resources.length === 0 ? (
-          <div className="glass rounded-2xl p-8 sm:p-16 text-center shadow-lg">
-            <div className="max-w-md mx-auto">
-              <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-4 sm:mb-6 bg-gradient-to-br from-purple-100 to-pink-100 rounded-full flex items-center justify-center">
-                <FileText size={24} className="text-purple-600 sm:w-8 sm:h-8" />
+      {/* Two-column layout: Categories on left, Search & Resources on right */}
+      <div className="flex flex-col lg:flex-row gap-6">
+        {/* Left Sidebar - Categories */}
+        <div className="w-full lg:w-64 flex-shrink-0">
+          <div className="glass rounded-2xl p-4 shadow-lg lg:sticky lg:top-4">
+            <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-4">Categories</h3>
+            {organizedCategories.length === 0 ? (
+              <p className="text-sm text-gray-500 dark:text-gray-300">No categories available</p>
+            ) : (
+              <div className="space-y-1">
+                <button
+                  onClick={() => onCategorySelect && onCategorySelect(null)}
+                  className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    selectedCategoryId === null
+                      ? 'bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-200 border-2 border-purple-300 dark:border-purple-600'
+                      : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/10'
+                  }`}
+                >
+                  All Categories
+                </button>
+                {organizedCategories.map(category => (
+                  <div key={category.id} className="space-y-1">
+                    <div className="flex items-center">
+                      <button
+                        onClick={() => onCategorySelect && onCategorySelect(category.id)}
+                        className={`flex-1 text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                          selectedCategoryId === category.id
+                            ? 'bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-200 border-2 border-purple-300 dark:border-purple-600'
+                            : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-white/10'
+                        }`}
+                      >
+                        {category.name}
+                      </button>
+                      {category.subcategories && category.subcategories.length > 0 && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setExpandedCategories({
+                              ...expandedCategories,
+                              [category.id]: !expandedCategories[category.id]
+                            });
+                          }}
+                          className="ml-1 px-2 py-2 text-xs text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-white/10 rounded transition-colors"
+                          aria-label={expandedCategories[category.id] ? 'Collapse' : 'Expand'}
+                        >
+                          {expandedCategories[category.id] ? '▼' : '▶'}
+                        </button>
+                      )}
+                    </div>
+                    {expandedCategories[category.id] && category.subcategories && category.subcategories.length > 0 && (
+                      <div className="ml-4 space-y-1">
+                        {category.subcategories.map(subcategory => (
+                          <button
+                            key={subcategory.id}
+                            onClick={() => onCategorySelect && onCategorySelect(subcategory.id)}
+                            className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-colors ${
+                              selectedCategoryId === subcategory.id
+                                ? 'bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-200 border-2 border-purple-300 dark:border-purple-600'
+                                : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/10'
+                            }`}
+                          >
+                            └─ {subcategory.name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
-              <h3 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white mb-2">No resources found</h3>
-              <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300">Click "Add Resource" to get started!</p>
+            )}
+          </div>
+        </div>
+
+        {/* Right Side - Search & Resources */}
+        <div className="flex-1 min-w-0">
+          {/* Search */}
+          <div className="glass rounded-2xl p-4 sm:p-6 mb-4 sm:mb-6 shadow-lg">
+            <div className="relative">
+              <Search className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search resources..."
+                className="w-full pl-10 sm:pl-12 pr-4 py-2.5 sm:py-3 border-2 border-gray-200 rounded-xl text-sm sm:text-base focus:border-purple-500 focus:outline-none transition-colors"
+                aria-label="Search resources"
+              />
             </div>
           </div>
-        ) : (
-          resources.map((resource, index) => {
-            // Security: Use resource.id for drag-drop identification (prevent IDOR)
-            const dragResourceId = resource.id;
-            const showDropIndicatorAbove = dragOverResourceId === dragResourceId && dragOverPosition === 'above' && draggedResourceId !== dragResourceId;
-            const showDropIndicatorBelow = dragOverResourceId === dragResourceId && dragOverPosition === 'below' && draggedResourceId !== dragResourceId;
+
+          {/* Resources List */}
+          <div className="space-y-3 sm:space-y-4">
+            {filteredByCategory.length === 0 ? (
+              <div className="glass rounded-2xl p-8 sm:p-16 text-center shadow-lg">
+                <div className="max-w-md mx-auto">
+                  <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-4 sm:mb-6 bg-gradient-to-br from-purple-100 to-pink-100 rounded-full flex items-center justify-center">
+                    <FileText size={24} className="text-purple-600 sm:w-8 sm:h-8" />
+                  </div>
+                  <h3 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white mb-2">No resources found</h3>
+                  <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300">
+                    {selectedCategoryId ? 'No resources in this category.' : 'Click "Add Resource" to get started!'}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              filteredByCategory.map((resource, index) => {
+                // Security: Use resource.id for drag-drop identification (prevent IDOR)
+                const dragResourceId = resource.id;
+                const showDropIndicatorAbove = dragOverResourceId === dragResourceId && dragOverPosition === 'above' && draggedResourceId !== dragResourceId;
+                const showDropIndicatorBelow = dragOverResourceId === dragResourceId && dragOverPosition === 'below' && draggedResourceId !== dragResourceId;
             
-            return (
-              <React.Fragment key={resource.id}>
-                {showDropIndicatorAbove && (
-                  <div className="h-1 bg-purple-500 rounded-full animate-pulse mb-2" />
-                )}
-                <AdminResourceCard
-                  resource={resource}
-                  onEdit={onEditResource}
-                  onDelete={onDeleteResource}
-                  index={index}
-                  onDragStart={handleDragStart}
-                  onDragOver={handleDragOver}
-                  onDragEnd={handleDragEnd}
-                  onDrop={handleDrop}
-                  isDragging={draggedResourceId === resource.id}
-                />
-                {showDropIndicatorBelow && (
-                  <div className="h-1 bg-purple-500 rounded-full animate-pulse mt-2" />
-                )}
-              </React.Fragment>
-            );
-          })
-        )}
+                return (
+                  <React.Fragment key={resource.id}>
+                    {showDropIndicatorAbove && (
+                      <div className="h-1 bg-purple-500 rounded-full animate-pulse mb-2" />
+                    )}
+                    <AdminResourceCard
+                      resource={resource}
+                      onEdit={onEditResource}
+                      onDelete={onDeleteResource}
+                      index={index}
+                      onDragStart={handleDragStart}
+                      onDragOver={handleDragOver}
+                      onDragEnd={handleDragEnd}
+                      onDrop={handleDrop}
+                      isDragging={draggedResourceId === resource.id}
+                    />
+                    {showDropIndicatorBelow && (
+                      <div className="h-1 bg-purple-500 rounded-full animate-pulse mt-2" />
+                    )}
+                  </React.Fragment>
+                );
+              })
+            )}
+          </div>
+        </div>
       </div>
     </>
   );

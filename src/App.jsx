@@ -1594,6 +1594,9 @@ function SurgicalTechniquesApp() {
             onMarkReviewedReport={handleMarkReviewedReport}
             sponsorshipPendingCount={sponsorshipPendingCount}
             unreadMessageCount={unreadMessageCount}
+            categories={categories}
+            selectedCategoryId={selectedCategoryId}
+            onCategorySelect={handleCategorySelect}
           />
         ) : (
           <div className="text-center py-12">

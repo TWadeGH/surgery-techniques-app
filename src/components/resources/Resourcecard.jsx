@@ -368,9 +368,6 @@ function ResourceCard({
         <div className="flex-1">
           {/* Badges */}
           <div className="flex gap-1.5 mb-1.5 flex-wrap">
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-gray-600 dark:text-gray-300 text-xs font-medium">
-              Third-party content
-            </div>
             {resource.is_sponsored && (
               <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-800 rounded-lg text-yellow-700 dark:text-yellow-300 text-xs font-medium">
                 <Sparkles size={12} />

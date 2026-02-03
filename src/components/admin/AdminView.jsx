@@ -36,6 +36,9 @@ function AdminView({
   onMarkReviewedReport,
   sponsorshipPendingCount = 0,
   unreadMessageCount = 0,
+  categories = [],
+  selectedCategoryId = null,
+  onCategorySelect,
 }) {
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -199,6 +202,9 @@ function AdminView({
             onDeleteResource={onDeleteResource}
             onEditCategories={onEditCategories}
             onReorderResources={onReorderResources}
+            categories={categories}
+            selectedCategoryId={selectedCategoryId}
+            onCategorySelect={onCategorySelect}
           />
         </Suspense>
       )}
