@@ -5,7 +5,7 @@
  * Visibility rules:
  * - super_admin: can message any admin
  * - specialty_admin: can message super_admin + subspecialty admins in their specialty
- * - subspecialty_admin: can message super_admin + specialty admin for their specialty
+ * - subspecialty_admin: can message super_admin + specialty admin + peer subspecialty admins in their specialty
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -63,7 +63,8 @@ export function useAdminMessaging(currentUser) {
       } else if (currentUser.role === USER_ROLES.SUBSPECIALTY_ADMIN) {
         reachable = (profiles || []).filter(p =>
           p.role === USER_ROLES.SUPER_ADMIN ||
-          (p.role === USER_ROLES.SPECIALTY_ADMIN && p.primary_specialty_id === currentUser.specialtyId)
+          (p.role === USER_ROLES.SPECIALTY_ADMIN && p.primary_specialty_id === currentUser.specialtyId) ||
+          (p.role === USER_ROLES.SUBSPECIALTY_ADMIN && p.primary_specialty_id === currentUser.specialtyId)
         );
       }
 

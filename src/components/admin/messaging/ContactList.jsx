@@ -5,7 +5,7 @@
  *
  * Super admin sees: "Message All" + admins and subadmins grouped by specialty
  * Specialty admin sees: "Message All Subadmins" + super admins + subspecialty admins
- * Subspecialty admin sees: super admins + specialty admin
+ * Subspecialty admin sees: super admins + specialty admin + peer subspecialty admins in same specialty
  */
 
 import React, { useState, useMemo, memo } from 'react';
@@ -343,12 +343,13 @@ function buildSpecialtyAdminSections(contacts) {
 }
 
 /**
- * Subspecialty admin: super admins first, then the specialty admin for their specialty.
+ * Subspecialty admin: super admins first, then the specialty admin, then peer subspecialty admins.
  */
 function buildSubspecialtyAdminSections(contacts) {
   const sections = [];
   const superAdmins = contacts.filter(c => c.role === USER_ROLES.SUPER_ADMIN);
   const specAdmins = contacts.filter(c => c.role === USER_ROLES.SPECIALTY_ADMIN);
+  const subAdmins = contacts.filter(c => c.role === USER_ROLES.SUBSPECIALTY_ADMIN);
 
   if (superAdmins.length > 0) {
     sections.push({ title: 'Super Admins', contacts: superAdmins });
@@ -357,6 +358,21 @@ function buildSubspecialtyAdminSections(contacts) {
   if (specAdmins.length > 0) {
     const specName = specAdmins[0]?.specialtyName || 'Specialty Admin';
     sections.push({ title: specName, contacts: specAdmins });
+  }
+
+  if (subAdmins.length > 0) {
+    // Group peer subspecialty admins by their subspecialty name
+    const bySubspec = {};
+    subAdmins.forEach(c => {
+      const key = c.subspecialtyName || 'Other';
+      if (!bySubspec[key]) bySubspec[key] = [];
+      bySubspec[key].push(c);
+    });
+
+    const sortedKeys = Object.keys(bySubspec).sort();
+    for (const subName of sortedKeys) {
+      sections.push({ title: subName, contacts: bySubspec[subName] });
+    }
   }
 
   return sections;

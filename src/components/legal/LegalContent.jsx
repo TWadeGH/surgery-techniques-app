@@ -254,7 +254,7 @@ export function PrivacyContent() {
 
       <section className={sectionClass}>
         <h2 className={h2Class}>8. Children</h2>
-        <p className={pClass}>The Services are not intended for children under 13. We do not knowingly collect information from children.</p>
+        <p className={pClass}>The Services are not intended for individuals under 18. We do not knowingly collect information from minors.</p>
       </section>
 
       <section className={sectionClass}>
