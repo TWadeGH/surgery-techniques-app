@@ -612,15 +612,19 @@ function SurgicalTechniquesApp() {
         curated_by: currentUser.id,
         is_sponsored: false
       };
-      
+
       if (resourceData.category_id) {
         insertData.category_id = resourceData.category_id;
       }
-      
+
       if (resourceData.type === 'video' && resourceData.duration_seconds) {
         insertData.duration_seconds = resourceData.duration_seconds;
       }
-      
+
+      if (resourceData.implant_info_url) {
+        insertData.implant_info_url = resourceData.implant_info_url;
+      }
+
       const { error } = await supabase
         .from('resources')
         .insert([insertData]);
@@ -683,16 +687,20 @@ function SurgicalTechniquesApp() {
       if (resourceData.category_id) {
         insertData.category_id = resourceData.category_id;
       }
-      
+
       // Include suggested category name if user suggested a new category
       if (resourceData.suggested_category_name) {
         insertData.suggested_category_name = resourceData.suggested_category_name.trim();
       }
-      
+
       if (resourceData.type === RESOURCE_TYPES.VIDEO && resourceData.duration_seconds) {
         insertData.duration_seconds = resourceData.duration_seconds;
       }
-      
+
+      if (resourceData.implant_info_url) {
+        insertData.implant_info_url = resourceData.implant_info_url;
+      }
+
       const { error } = await supabase
         .from('resource_suggestions')
         .insert([insertData]);
@@ -729,6 +737,7 @@ function SurgicalTechniquesApp() {
         keywords: suggestion.keywords || null,
         category_id: suggestion.category_id || null,
         duration_seconds: suggestion.duration_seconds || null,
+        implant_info_url: suggestion.implant_info_url || null,
         curated_by: currentUser.id // Security: Set the admin who approved this resource
       };
 
@@ -942,8 +951,9 @@ function SurgicalTechniquesApp() {
         resource_type: resourceData.type,
         image_url: imageUrl,
         keywords: resourceData.keywords || null,
+        implant_info_url: resourceData.implant_info_url || null,
       };
-      
+
       // Always include category_id if it's provided (even if null, to clear it)
       // Convert to string if it's not null to ensure proper UUID format
       if (resourceData.category_id !== undefined) {
@@ -953,7 +963,7 @@ function SurgicalTechniquesApp() {
         console.log('⚠️ category_id not provided in resourceData - keeping existing category');
         // Don't include category_id in update if not provided, to avoid clearing it
       }
-      
+
       if (resourceData.type === 'video' && resourceData.duration_seconds) {
         updateData.duration_seconds = resourceData.duration_seconds;
       }

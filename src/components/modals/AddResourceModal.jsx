@@ -27,7 +27,8 @@ export default function AddResourceModal({ currentUser, onSubmit, onClose }) {
     type: 'video',
     description: '',
     duration_seconds: null,
-    keywords: ''
+    keywords: '',
+    implant_info_url: ''
   });
   const [durationHours, setDurationHours] = useState('');
   const [durationMinutes, setDurationMinutes] = useState('');
@@ -539,6 +540,21 @@ export default function AddResourceModal({ currentUser, onSubmit, onClose }) {
                 className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors"
                 placeholder="https://..."
               />
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Implant Info Link
+                <span className="text-xs font-normal text-gray-500 ml-2">(Optional)</span>
+              </label>
+              <input
+                type="url"
+                value={formData.implant_info_url || ''}
+                onChange={(e) => setFormData({ ...formData, implant_info_url: e.target.value })}
+                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors"
+                placeholder="https://... (link to implant specifications)"
+              />
+              <p className="text-xs text-gray-500 mt-1">Link to manufacturer implant or device specifications</p>
             </div>
 
             <div>

@@ -8,19 +8,20 @@
  */
 
 import React, { useState, useEffect, memo } from 'react';
-import { 
-  Video, 
-  FileText, 
-  Link, 
-  Edit, 
-  StickyNote, 
-  Heart, 
-  Plus, 
-  Star, 
-  Sparkles, 
+import {
+  Video,
+  FileText,
+  Link,
+  Edit,
+  StickyNote,
+  Heart,
+  Plus,
+  Star,
+  Sparkles,
   ArrowRight,
   X,
-  Flag
+  Flag,
+  Package
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { trackResourceCoview, trackRatingEvent, trackResourceLinkClick } from '../../lib/analytics';
@@ -453,14 +454,28 @@ function ResourceCard({
           {/* View on [Source] button — opens confirmation modal then external link */}
           {safeResourceHref ? (
             <>
-              <button
-                type="button"
-                onClick={handleViewExternalClick}
-                className="inline-flex items-center gap-2 px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-colors mb-2"
-              >
-                <ArrowRight size={14} />
-                {getViewOnLabel(resource)}
-              </button>
+              <div className="flex flex-wrap gap-2 mb-2">
+                <button
+                  type="button"
+                  onClick={handleViewExternalClick}
+                  className="inline-flex items-center gap-2 px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-colors"
+                >
+                  <ArrowRight size={14} />
+                  {getViewOnLabel(resource)}
+                </button>
+                {/* View Implant Info button - only shows if implant_info_url exists */}
+                {resource.implant_info_url && (
+                  <a
+                    href={resource.implant_info_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
+                  >
+                    <Package size={14} />
+                    View Implant Info
+                  </a>
+                )}
+              </div>
               {/* Disclaimer moved to bottom bar next to icons */}
             </>
           ) : resource?.url ? (
