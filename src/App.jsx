@@ -1613,28 +1613,31 @@ function SurgicalTechniquesApp() {
         {/* Legal Footer */}
         <footer className="border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 mt-auto">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
-            <p className="text-center text-sm text-gray-600 dark:text-gray-400 mb-2">
-              © 2026 TWH Systems, LLC.
-            </p>
-            <nav className="flex flex-wrap justify-center gap-x-1 gap-y-1 text-sm">
-              <button type="button" onClick={() => setLegalPage('terms')} className="text-gray-600 dark:text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 transition-colors">Terms</button>
+            <nav className="flex flex-wrap justify-center gap-x-1 gap-y-1 text-sm mb-2">
+              <button type="button" onClick={() => setLegalPage('terms')} className="text-purple-600 dark:text-purple-400 hover:text-purple-800 dark:hover:text-purple-300 transition-colors">Terms</button>
               <span className="text-gray-400 dark:text-gray-500" aria-hidden="true">•</span>
-              <button type="button" onClick={() => setLegalPage('privacy')} className="text-gray-600 dark:text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 transition-colors">Privacy</button>
+              <button type="button" onClick={() => setLegalPage('privacy')} className="text-purple-600 dark:text-purple-400 hover:text-purple-800 dark:hover:text-purple-300 transition-colors">Privacy</button>
               <span className="text-gray-400 dark:text-gray-500" aria-hidden="true">•</span>
-              <button type="button" onClick={() => setLegalPage('copyright')} className="text-gray-600 dark:text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 transition-colors">Copyright</button>
+              <button type="button" onClick={() => setLegalPage('copyright')} className="text-purple-600 dark:text-purple-400 hover:text-purple-800 dark:hover:text-purple-300 transition-colors">Copyright</button>
               <span className="text-gray-400 dark:text-gray-500" aria-hidden="true">•</span>
-              <button type="button" onClick={() => setLegalPage('sponsorship')} className="text-gray-600 dark:text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 transition-colors">Sponsorship</button>
+              <button type="button" onClick={() => setLegalPage('sponsorship')} className="text-purple-600 dark:text-purple-400 hover:text-purple-800 dark:hover:text-purple-300 transition-colors">Sponsorship</button>
               <span className="text-gray-400 dark:text-gray-500" aria-hidden="true">•</span>
-              <button type="button" onClick={() => setLegalPage('about')} className="text-gray-600 dark:text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 transition-colors">About</button>
+              <button type="button" onClick={() => setLegalPage('about')} className="text-purple-600 dark:text-purple-400 hover:text-purple-800 dark:hover:text-purple-300 transition-colors">About</button>
               <span className="text-gray-400 dark:text-gray-500" aria-hidden="true">•</span>
-              <button type="button" onClick={() => setLegalPage('contact')} className="text-gray-600 dark:text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 transition-colors">Contact</button>
+              <button type="button" onClick={() => setLegalPage('contact')} className="text-purple-600 dark:text-purple-400 hover:text-purple-800 dark:hover:text-purple-300 transition-colors">Contact</button>
               {currentUser && (
                 <>
                   <span className="text-gray-400 dark:text-gray-500" aria-hidden="true">&bull;</span>
-                  <button type="button" onClick={() => setShowSponsorshipInquiry(true)} className="text-gray-600 dark:text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 transition-colors">Partnership Inquiries</button>
+                  <button type="button" onClick={() => setShowSponsorshipInquiry(true)} className="text-purple-600 dark:text-purple-400 hover:text-purple-800 dark:hover:text-purple-300 transition-colors">Partnership Inquiries</button>
                 </>
               )}
             </nav>
+            <p className="text-center text-sm text-gray-600 dark:text-gray-400 mb-2">
+              © 2026 TWH Systems, LLC.
+            </p>
+            <p className="text-center text-xs text-gray-500 dark:text-gray-500 max-w-2xl mx-auto">
+              These resources are for educational purposes only and do not constitute medical advice or recommendations. Clinical decisions remain the provider's responsibility.
+            </p>
           </div>
         </footer>
       </main>

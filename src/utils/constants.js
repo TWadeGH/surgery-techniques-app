@@ -297,8 +297,8 @@ export const ROUTES = {
 
 // Legal / DMCA disclosure for external links (third-party content)
 export const EXTERNAL_LINK_DISCLOSURE = {
-  MODAL_TITLE: 'You are leaving Surgery Techniques',
+  MODAL_TITLE: 'You are leaving Surgical Techniques',
   MODAL_BODY: 'You will be redirected to an external site.',
-  CARD_DISCLAIMER: 'This content is hosted on a third-party site. Surgery Techniques App is not responsible for the accuracy, completeness, or legality of third-party content.',
+  CARD_DISCLAIMER: 'This content is hosted on a third-party site. Surgical Techniques App is not responsible for the accuracy, completeness, or legality of third-party content.',
   COPYRIGHT_REPORT: 'If you believe this link violates copyright, please use "Report Link" or contact us.',
 };
