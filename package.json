@@ -13,6 +13,10 @@
     "test:coverage": "vitest --coverage"
   },
   "dependencies": {
+    "@capacitor/android": "^8.0.2",
+    "@capacitor/cli": "^8.0.2",
+    "@capacitor/core": "^8.0.2",
+    "@capacitor/ios": "^8.0.2",
     "@supabase/supabase-js": "^2.90.1",
     "lucide-react": "^0.562.0",
     "react": "^19.2.0",

@@ -1,0 +1,14 @@
+{
+  "appId": "com.twhsystems.surgicaltechniques",
+  "appName": "Surgical Techniques",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  },
+  "ios": {
+    "contentInset": "automatic"
+  },
+  "android": {
+    "allowMixedContent": false
+  }
+}
