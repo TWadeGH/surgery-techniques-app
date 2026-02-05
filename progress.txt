@@ -1,0 +1,42 @@
+SURGICAL TECHNIQUES APP - Progress Tracker
+==========================================
+Last Updated: 2026-02-04
+
+## Current State
+- Web app: DEPLOYED to Cloudflare Pages (surgicaltechniques.app)
+- Mobile app: Capacitor configured, awaiting Xcode/Android Studio setup
+- Backend: Supabase (free tier)
+
+## What's Built
+- Full authentication flow (email + Google OAuth)
+- Resource management with specialty/subspecialty filtering
+- Admin dashboard with analytics
+- Role-based access control (super_admin > specialty_admin > subspecialty_admin > user)
+- 1:1 messaging between admins
+- Favorites, notes, upcoming cases for users
+- Legal pages (privacy, terms, disclaimers) with contact emails configured
+- Onboarding flow
+
+## In Progress
+- Mobile app builds (iOS + Android via Capacitor)
+  - Capacitor 8.x installed and configured
+  - Native projects created (ios/, android/)
+  - Awaiting Xcode and Android Studio installation
+
+## Blocked
+- iOS build: Need Xcode installed + CocoaPods
+- Android build: Need Android Studio installed
+
+## What's Next
+1. Complete mobile build setup
+2. Test on iOS simulator
+3. Test on Android emulator
+4. Create custom app icons and splash screens
+5. App store submissions (Apple + Google Play)
+
+## Recent Changes (2026-02-04)
+- Updated privacy policy age from 13 to 18
+- Added subspecialty admin peer messaging
+- Added contact emails (privacy@, support@, legal@surgicaltechniques.app)
+- Set jurisdiction to Harris County, Texas
+- Updated CLAUDE.md with coding session guidelines
