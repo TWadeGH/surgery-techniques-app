@@ -4,7 +4,8 @@ Last Updated: 2026-02-04
 
 ## Current State
 - Web app: DEPLOYED to Cloudflare Pages (surgicaltechniques.app)
-- Mobile app: Capacitor configured, awaiting Xcode/Android Studio setup
+- iOS app: BUILD SUCCESSFUL, tested in simulator
+- Android app: Pending (Android Studio not yet installed)
 - Backend: Supabase (free tier)
 
 ## What's Built
@@ -12,31 +13,40 @@ Last Updated: 2026-02-04
 - Resource management with specialty/subspecialty filtering
 - Admin dashboard with analytics
 - Role-based access control (super_admin > specialty_admin > subspecialty_admin > user)
-- 1:1 messaging between admins
+- 1:1 messaging between admins (including peer subspecialty admins)
 - Favorites, notes, upcoming cases for users
-- Legal pages (privacy, terms, disclaimers) with contact emails configured
+- Legal pages with contact emails configured
 - Onboarding flow
+- Mobile app via Capacitor (iOS tested, Android ready)
+
+## Completed This Session (2026-02-04)
+- [x] Updated privacy policy age from 13 to 18
+- [x] Added subspecialty admin peer messaging within same specialty
+- [x] Added contact emails (privacy@, support@, legal@surgicaltechniques.app)
+- [x] Set jurisdiction to Harris County, Texas
+- [x] Updated CLAUDE.md with comprehensive coding session guidelines
+- [x] Created full documentation suite (10 files)
+- [x] Built and synced iOS app via Capacitor
+- [x] Successfully ran iOS app in Xcode simulator
+- [x] Moved search bar above categories on browse page (UX improvement)
 
 ## In Progress
-- Mobile app builds (iOS + Android via Capacitor)
-  - Capacitor 8.x installed and configured
-  - Native projects created (ios/, android/)
-  - Awaiting Xcode and Android Studio installation
+- Android build setup (need Android Studio installation)
 
 ## Blocked
-- iOS build: Need Xcode installed + CocoaPods
 - Android build: Need Android Studio installed
 
 ## What's Next
-1. Complete mobile build setup
-2. Test on iOS simulator
-3. Test on Android emulator
-4. Create custom app icons and splash screens
-5. App store submissions (Apple + Google Play)
+1. Install Android Studio and test Android build
+2. Create custom app icons (1024x1024 PNG)
+3. Create custom splash screens
+4. Set up Apple Developer account ($99/yr)
+5. Set up Google Play Console ($25 one-time)
+6. Prepare app store metadata and screenshots
+7. Submit to App Store and Google Play
 
-## Recent Changes (2026-02-04)
-- Updated privacy policy age from 13 to 18
-- Added subspecialty admin peer messaging
-- Added contact emails (privacy@, support@, legal@surgicaltechniques.app)
-- Set jurisdiction to Harris County, Texas
-- Updated CLAUDE.md with coding session guidelines
+## Architecture Note
+Single codebase serves three platforms:
+- Web: dist/ deployed to Cloudflare Pages
+- iOS: ios/ built via Xcode
+- Android: android/ built via Android Studio

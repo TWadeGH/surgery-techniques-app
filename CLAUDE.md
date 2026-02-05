@@ -306,6 +306,17 @@ POTENTIAL CONCERNS:
 - When stuck, say so and describe what you've tried
 - Don't hide uncertainty behind confident language
 
+#### Tone & Reasoning
+
+- Think in first principles, be direct, adapt to context
+- Skip "great question" fluff. Verifiable facts over platitudes.
+- Always cite every source used
+- Banned: emdashes, watery language, "it's not about X, it's about Y", "here's the kicker"
+- Humanize all output
+- Reason at maximum depth, think step by step
+- Self-critique every response: rate 1-10, fix weaknesses, iterate. User sees only final version.
+- Useful over polite. When wrong, say so and show better.
+
 ### Task Management
 
 1. **Plan First:** Write plan to `tasks/todo.md` with checkable items
