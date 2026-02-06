@@ -1545,7 +1545,7 @@ function SurgicalTechniquesApp() {
           />
         ) : currentView === VIEW_MODES.ADMIN && isAdmin(currentUser) ? (
           <AdminView
-            resources={resources}
+            resources={displayedResources}
             adminTab={adminTab}
             setAdminTab={setAdminTab}
             onAddResource={handleAddResourceClick}
