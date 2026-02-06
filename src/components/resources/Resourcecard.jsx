@@ -467,7 +467,7 @@ function ResourceCard({
           </p>
 
           {/* View on [Source] button — opens confirmation modal then external link */}
-          {safeResourceHref ? (
+          {safeResourceHref && (
             <>
               <button
                 type="button"
@@ -481,11 +481,7 @@ function ResourceCard({
                 {EXTERNAL_LINK_DISCLOSURE.CARD_DISCLAIMER} {EXTERNAL_LINK_DISCLOSURE.COPYRIGHT_REPORT}
               </p>
             </>
-          ) : resource?.url ? (
-            <span className="text-gray-500 dark:text-gray-400 text-xs break-all flex items-center gap-1 mb-2">
-              {resource.url}
-            </span>
-          ) : null}
+          )}
 
           {/* Personal Rating - Show if user can rate OR if they have an existing rating */}
           {(canRate || rating) && (
@@ -628,7 +624,7 @@ function ResourceCard({
                 >
                   <Plus size={18} className={isUpcomingCase ? 'rotate-45' : ''} strokeWidth={2} />
                 </button>
-                <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1.5 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded shadow-lg whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 pointer-events-none z-50">
+                <span className="absolute bottom-full right-0 mb-2 px-2 py-1.5 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded shadow-lg whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 pointer-events-none z-50">
                   {isUpcomingCase ? 'Remove this resource from your Upcoming Cases list' : 'Add this resource to your Upcoming Cases for a future procedure'}
                 </span>
                 </div>
@@ -645,7 +641,7 @@ function ResourceCard({
                   >
                     <MessageSquare size={18} />
                   </button>
-                  <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1.5 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded shadow-lg whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 pointer-events-none z-50">
+                  <span className="absolute bottom-full right-0 mb-2 px-2 py-1.5 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded shadow-lg whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 pointer-events-none z-50">
                     Contact {resource.company_name} rep about {resource.product_name}
                   </span>
                 </div>
@@ -661,7 +657,7 @@ function ResourceCard({
                 >
                   <Flag size={18} />
                 </button>
-                <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1.5 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded shadow-lg whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 pointer-events-none z-50">
+                <span className="absolute bottom-full right-0 mb-2 px-2 py-1.5 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded shadow-lg whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 pointer-events-none z-50">
                   Report this link — report a problem or copyright concern
                 </span>
               </div>
