@@ -505,7 +505,20 @@ function UserView({
         </div>
       </div>
 
-      {/* Two-column layout: Categories on left, Search & Resources on right */}
+      {/* Search Bar - Always at top */}
+      <div className="mb-6">
+        <ResourceFilters
+          searchTerm={searchTerm}
+          onSearchChange={onSearchChange}
+          placeholder="Search resources..."
+          availableSubspecialties={availableSubspecialties}
+          browsingSubspecialtyId={browsingSubspecialtyId}
+          userSubspecialtyId={currentUser?.subspecialtyId || null}
+          onBrowsingSubspecialtyChange={onBrowsingSubspecialtyChange}
+        />
+      </div>
+
+      {/* Two-column layout: Categories on left, Resources on right */}
       <div className="flex flex-col lg:flex-row gap-6">
         {/* Left Sidebar - Categories */}
         <div className="w-full lg:w-64 flex-shrink-0">
@@ -578,19 +591,8 @@ function UserView({
           </div>
         </div>
 
-        {/* Right Side - Search & Resources */}
+        {/* Right Side - Resources */}
         <div className="flex-1 min-w-0">
-          {/* Search */}
-          <ResourceFilters
-            searchTerm={searchTerm}
-            onSearchChange={onSearchChange}
-            placeholder="Search resources..."
-            availableSubspecialties={availableSubspecialties}
-            browsingSubspecialtyId={browsingSubspecialtyId}
-            userSubspecialtyId={currentUser?.subspecialtyId || null}
-            onBrowsingSubspecialtyChange={onBrowsingSubspecialtyChange}
-          />
-
           {/* Resources List */}
           <ResourceList
             resources={resources}

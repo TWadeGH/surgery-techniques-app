@@ -1,6 +1,6 @@
 /**
  * AdminView Component
- * Main admin dashboard view with resources, analytics, activity, roles, sponsorship, and companies tabs
+ * Main admin dashboard view with resources, analytics, activity, roles, sponsorship, companies, and messages tabs
  */
 
 import React, { useState, useMemo, memo, lazy, Suspense } from 'react';
@@ -36,6 +36,10 @@ function AdminView({
   onDismissReport,
   onMarkReviewedReport,
   sponsorshipPendingCount = 0,
+  unreadMessageCount = 0,
+  categories = [],
+  selectedCategoryId = null,
+  onCategorySelect,
   availableSubspecialties = [],
 }) {
   const [searchTerm, setSearchTerm] = useState('');
@@ -85,18 +89,17 @@ function AdminView({
     if (isSuperAdmin || isSpecialtyAdmin || isSubspecialtyAdmin) {
       t.push({ key: ADMIN_TABS.COMPANIES, label: 'Companies', icon: Building2 });
     }
-    if (isSuperAdmin || isSpecialtyAdmin || isSubspecialtyAdmin) {
-      t.push({ key: 'messaging', label: 'Msgs', icon: MessageSquare });
-    }
+    // Messages tab visible to all admin roles
+    t.push({ key: 'messages', label: 'Messages', shortLabel: 'Msgs', icon: MessageSquare, badge: unreadMessageCount });
     return t;
-  }, [isSuperAdmin, isSpecialtyAdmin, isSubspecialtyAdmin, sponsorshipPendingCount]);
+  }, [isSuperAdmin, isSpecialtyAdmin, isSubspecialtyAdmin, sponsorshipPendingCount, unreadMessageCount]);
 
   const tabButtonClass = (key) =>
-    `flex items-center justify-center gap-1.5 flex-1 sm:flex-none px-3 sm:px-5 py-2.5 sm:py-3 rounded-xl text-sm font-medium transition-all ${
+    \`flex items-center justify-center gap-1.5 flex-1 sm:flex-none px-3 sm:px-5 py-2.5 sm:py-3 rounded-xl text-sm font-medium transition-all \${
       adminTab === key
         ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg'
         : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-    }`;
+    }\`;
 
   return (
     <div className="animate-slide-up">
@@ -105,7 +108,7 @@ function AdminView({
         <button
           onClick={onShowSuggestedResources}
           className="w-full glass rounded-2xl p-4 sm:p-6 shadow-lg hover:shadow-xl transition-all text-left group"
-          aria-label={`View suggested resources (${pendingCount} pending)`}
+          aria-label={\`View suggested resources (\${pendingCount} pending)\`}
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3 sm:gap-4">
@@ -137,7 +140,7 @@ function AdminView({
           <button
             onClick={onShowReportedResources}
             className="w-full glass rounded-2xl p-4 sm:p-6 shadow-lg hover:shadow-xl transition-all text-left group"
-            aria-label={`View reported resources (${reportedPendingCount} pending)`}
+            aria-label={\`View reported resources (\${reportedPendingCount} pending)\`}
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3 sm:gap-4">
@@ -178,7 +181,7 @@ function AdminView({
             key={tab.key}
             onClick={() => setAdminTab(tab.key)}
             className={tabButtonClass(tab.key)}
-            aria-label={`${tab.label} tab`}
+            aria-label={\`\${tab.label} tab\`}
           >
             {tab.icon && <tab.icon size={16} />}
             <span className={tab.shortLabel ? 'hidden xs:inline' : ''}>{tab.label}</span>
@@ -204,6 +207,9 @@ function AdminView({
             onDeleteResource={onDeleteResource}
             onEditCategories={onEditCategories}
             onReorderResources={onReorderResources}
+            categories={categories}
+            selectedCategoryId={selectedCategoryId}
+            onCategorySelect={onCategorySelect}
           />
         </Suspense>
       )}
@@ -241,7 +247,7 @@ function AdminView({
         </Suspense>
       )}
 
-      {adminTab === 'messaging' && (isSuperAdmin || isSpecialtyAdmin || isSubspecialtyAdmin) && (
+      {adminTab === 'messages' && (
         <Suspense fallback={<FullPageSpinner />}>
           <MessagingPanel currentUser={currentUser} />
         </Suspense>

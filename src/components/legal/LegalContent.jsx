@@ -98,7 +98,7 @@ export function TermsContent() {
           <li>You grant TWH Systems a non-exclusive, royalty-free, worldwide license to display such curated links within the Services</li>
         </ul>
         <h3 className="font-medium text-gray-900 dark:text-white mt-2 mb-1">4.3 Copyright Complaints</h3>
-        <p className={pClass}>TWH Systems respects intellectual property rights. Copyright holders may submit takedown requests to [Legal Email]. Upon receipt of a valid notice, TWH Systems will review and, where appropriate, remove the referenced link.</p>
+        <p className={pClass}>TWH Systems respects intellectual property rights. Copyright holders may submit takedown requests to legal@surgicaltechniques.app. Upon receipt of a valid notice, TWH Systems will review and, where appropriate, remove the referenced link.</p>
       </section>
 
       <section className={sectionClass}>
@@ -146,7 +146,7 @@ export function TermsContent() {
       <section className={sectionClass}>
         <h2 className={h2Class}>9. GOVERNING LAW; VENUE</h2>
         <p className={pClass}>These Terms are governed by the laws of the State of Texas, without regard to conflict-of-laws principles.</p>
-        <p className={pClass}>Any dispute arising out of or relating to these Terms or the Services shall be brought exclusively in the state or federal courts located in [County], Texas, and you consent to personal jurisdiction and venue therein.</p>
+        <p className={pClass}>Any dispute arising out of or relating to these Terms or the Services shall be brought exclusively in the state or federal courts located in Harris County, Texas, and you consent to personal jurisdiction and venue therein.</p>
       </section>
 
       <section className={sectionClass}>
@@ -249,17 +249,17 @@ export function PrivacyContent() {
           <li>Request information about data processing</li>
           <li>Opt-out of certain data uses</li>
         </ul>
-        <p className={pClass}>To exercise your rights, contact us at [Privacy Email].</p>
+        <p className={pClass}>To exercise your rights, contact us at privacy@surgicaltechniques.app.</p>
       </section>
 
       <section className={sectionClass}>
         <h2 className={h2Class}>8. Children</h2>
-        <p className={pClass}>The Services are not intended for children under 13. We do not knowingly collect information from children.</p>
+        <p className={pClass}>The Services are not intended for individuals under 18. We do not knowingly collect information from minors.</p>
       </section>
 
       <section className={sectionClass}>
         <h2 className={h2Class}>9. Contact Us</h2>
-        <p className={pClass}>For privacy questions, please contact [Privacy Email].</p>
+        <p className={pClass}>For privacy questions, please contact privacy@surgicaltechniques.app.</p>
       </section>
     </div>
   );
@@ -319,9 +319,9 @@ export function ContactContent() {
         We welcome feedback, questions, and inquiries. Please use the appropriate contact method below:
       </p>
       <ul className="list-none pl-0 space-y-2 mb-4">
-        <li><strong>General Support:</strong> [Support Email]</li>
-        <li><strong>Privacy Questions:</strong> [Privacy Email]</li>
-        <li><strong>Copyright / Takedown Requests:</strong> [Legal Email]</li>
+        <li><strong>General Support:</strong> support@surgicaltechniques.app</li>
+        <li><strong>Privacy Questions:</strong> privacy@surgicaltechniques.app</li>
+        <li><strong>Copyright / Takedown Requests:</strong> legal@surgicaltechniques.app</li>
       </ul>
       <p className={pClass}>You may also submit inquiries using the contact form below (optional).</p>
     </div>
@@ -370,7 +370,7 @@ export function CopyrightContent() {
         <p className={pClass}>
           If you believe a link on our platform infringes your copyright, please contact us at:
         </p>
-        <p className={pClass}>[Legal Email]</p>
+        <p className={pClass}>legal@surgicaltechniques.app</p>
         <p className={pClass}>Please include:</p>
         <ul className={ulClass}>
           <li>Your name and contact information</li>

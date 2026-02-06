@@ -176,13 +176,16 @@ export default function Onboarding({ user, onComplete }) {
         updateData.years_practicing = yearsPracticing;
         updateData.annual_case_volume = annualCaseVolume;
       }
+      console.log('Onboarding update:', { userId: user.id, updateData });
       const { data, error } = await supabase
         .from('profiles')
         .update(updateData)
         .eq('id', user.id)
         .select();
+      console.log('Onboarding update result:', { data, error });
       if (error) {
-        alert('Error saving profile. Please try again.');
+        console.error('Onboarding update error:', error);
+        alert('Error saving profile: ' + (error.message || 'Unknown error'));
         setLoading(false);
         return;
       }
@@ -245,15 +248,15 @@ export default function Onboarding({ user, onComplete }) {
               { id: 'industry', title: '🏢 Medical Industry', desc: 'Sales reps from Stryker, Arthrex, etc., or clinical trainers. Your viewing data helps identify what products are being pushed in the field.' },
               { id: 'student', title: '📚 Student/Other', desc: 'Medical students or other healthcare professionals. This category helps keep core analytics pure by filtering out users without a "Case Dashboard."' },
             ].map(({ id, title, desc }) => (
-              <div key={id} style={{ ...styles.card, ...(userType === id ? styles.cardSelected : {}) }} onClick={() => setUserType(id)}>
+              <div key={id} style={{ ...styles.card, ...(userType === id ? styles.cardSelected : {}) }} onClick={() => {
+                setUserType(id);
+                if (id === 'surgeon' || id === 'app') { setTimeout(() => setStep(2), 200); }
+                else { setTimeout(() => handleComplete(), 200); }
+              }}>
                 <div style={styles.cardTitle}>{title}</div>
                 <div style={styles.cardDescription}>{desc}</div>
               </div>
             ))}
-            <button style={{ ...styles.button, ...(userType ? {} : styles.buttonDisabled) }} disabled={!userType}
-              onClick={() => { if (userType === 'surgeon' || userType === 'app') setStep(2); else handleComplete(); }}>
-              Continue
-            </button>
           </div>
         )}
 
@@ -262,16 +265,25 @@ export default function Onboarding({ user, onComplete }) {
             <h2 style={{ marginBottom: '20px', fontSize: '24px' }}>
               {userType === 'surgeon' || userType === 'app' ? 'What is your specialty?' : 'Which specialty interests you?'}
             </h2>
-            {specialties.map(specialty => (
-              <div key={specialty.id} style={{ ...styles.card, ...(selectedSpecialty === specialty.id ? styles.cardSelected : {}) }}
-                onClick={() => { setSelectedSpecialty(specialty.id); setSelectedSubspecialty(''); }}>
-                <div style={styles.cardTitle}>{specialty.name}</div>
-              </div>
-            ))}
-            <button style={{ ...styles.button, ...(selectedSpecialty ? {} : styles.buttonDisabled) }} disabled={!selectedSpecialty}
-              onClick={() => { if (isPodiatry) { if (userType === 'surgeon') setStep(4); else handleComplete(); } else setStep(3); }}>
-              Continue
-            </button>
+            {specialties.map(specialty => {
+              const isPod = specialty.name.toLowerCase().includes(SPECIALTY_SUBSPECIALTY.PODIATRY);
+              return (
+                <div key={specialty.id} style={{ ...styles.card, ...(selectedSpecialty === specialty.id ? styles.cardSelected : {}) }}
+                  onClick={() => {
+                    setSelectedSpecialty(specialty.id);
+                    setSelectedSubspecialty('');
+                    if (isPod) {
+                      setIsPodiatry(true);
+                      setTimeout(() => { if (userType === 'surgeon') setStep(4); else handleComplete(); }, 200);
+                    } else {
+                      setIsPodiatry(false);
+                      setTimeout(() => setStep(3), 200);
+                    }
+                  }}>
+                  <div style={styles.cardTitle}>{specialty.name}</div>
+                </div>
+              );
+            })}
             <button style={styles.backButton} onClick={() => setStep(1)}>Back</button>
           </div>
         )}
@@ -298,15 +310,15 @@ export default function Onboarding({ user, onComplete }) {
                 </div>
               ) : (
                 subspecialties.map(subspecialty => (
-                  <div key={subspecialty.id} style={{ ...styles.card, ...(selectedSubspecialty === subspecialty.id ? styles.cardSelected : {}) }} onClick={() => setSelectedSubspecialty(subspecialty.id)}>
+                  <div key={subspecialty.id} style={{ ...styles.card, ...(selectedSubspecialty === subspecialty.id ? styles.cardSelected : {}) }} onClick={() => {
+                    setSelectedSubspecialty(subspecialty.id);
+                    if (userType === 'surgeon') { setTimeout(() => setStep(4), 200); }
+                    else { setTimeout(() => handleComplete(), 200); }
+                  }}>
                     <div style={styles.cardTitle}>{subspecialty.name}</div>
                   </div>
                 ))
               )}
-            <button style={{ ...styles.button, ...(selectedSubspecialty && !loading ? {} : styles.buttonDisabled) }} disabled={!selectedSubspecialty || loading}
-              onClick={() => { if (userType === 'surgeon') setStep(4); else handleComplete(); }}>
-              {loading ? 'Saving...' : userType === 'surgeon' ? 'Continue' : 'Complete Setup'}
-            </button>
             <button style={styles.backButton} onClick={() => setStep(2)} disabled={loading}>Back</button>
           </div>
         )}
@@ -315,11 +327,13 @@ export default function Onboarding({ user, onComplete }) {
           <div>
             <h2 style={{ marginBottom: '20px', fontSize: '24px' }}>What is your practice setting?</h2>
             {PRACTICE_SETTING_OPTIONS.map((opt) => (
-              <div key={opt.value} style={{ ...styles.card, ...(practiceSetting === opt.value ? styles.cardSelected : {}) }} onClick={() => setPracticeSetting(opt.value)}>
+              <div key={opt.value} style={{ ...styles.card, ...(practiceSetting === opt.value ? styles.cardSelected : {}) }} onClick={() => {
+                setPracticeSetting(opt.value);
+                setTimeout(() => setStep(5), 200);
+              }}>
                 <div style={styles.cardTitle}>{opt.label}</div>
               </div>
             ))}
-            <button style={{ ...styles.button, ...(practiceSetting ? {} : styles.buttonDisabled) }} disabled={!practiceSetting} onClick={() => setStep(5)}>Continue</button>
             <button style={styles.backButton} onClick={() => setStep(isPodiatry ? 2 : 3)}>Back</button>
           </div>
         )}
@@ -329,11 +343,13 @@ export default function Onboarding({ user, onComplete }) {
             <h2 style={{ marginBottom: '20px', fontSize: '24px' }}>What is your primary OR setting?</h2>
             <p style={{ color: '#666', marginBottom: '16px', fontSize: '14px' }}>Sponsors use this to understand where procedures happen and what devices are feasible.</p>
             {PRIMARY_OR_OPTIONS.map((opt) => (
-              <div key={opt.value} style={{ ...styles.card, ...(primaryORSetting === opt.value ? styles.cardSelected : {}) }} onClick={() => setPrimaryORSetting(opt.value)}>
+              <div key={opt.value} style={{ ...styles.card, ...(primaryORSetting === opt.value ? styles.cardSelected : {}) }} onClick={() => {
+                setPrimaryORSetting(opt.value);
+                setTimeout(() => setStep(6), 200);
+              }}>
                 <div style={styles.cardTitle}>{opt.label}</div>
               </div>
             ))}
-            <button style={{ ...styles.button, ...(primaryORSetting ? {} : styles.buttonDisabled) }} disabled={!primaryORSetting} onClick={() => setStep(6)}>Continue</button>
             <button style={styles.backButton} onClick={() => setStep(4)}>Back</button>
           </div>
         )}
@@ -342,11 +358,13 @@ export default function Onboarding({ user, onComplete }) {
           <div>
             <h2 style={{ marginBottom: '20px', fontSize: '24px' }}>How many years have you been practicing?</h2>
             {YEARS_PRACTICING_OPTIONS.map((opt) => (
-              <div key={opt.value} style={{ ...styles.card, ...(yearsPracticing === opt.value ? styles.cardSelected : {}) }} onClick={() => setYearsPracticing(opt.value)}>
+              <div key={opt.value} style={{ ...styles.card, ...(yearsPracticing === opt.value ? styles.cardSelected : {}) }} onClick={() => {
+                setYearsPracticing(opt.value);
+                setTimeout(() => setStep(7), 200);
+              }}>
                 <div style={styles.cardTitle}>{opt.label}</div>
               </div>
             ))}
-            <button style={{ ...styles.button, ...(yearsPracticing ? {} : styles.buttonDisabled) }} disabled={!yearsPracticing} onClick={() => setStep(7)}>Continue</button>
             <button style={styles.backButton} onClick={() => setStep(5)}>Back</button>
           </div>
         )}
@@ -355,13 +373,13 @@ export default function Onboarding({ user, onComplete }) {
           <div>
             <h2 style={{ marginBottom: '20px', fontSize: '24px' }}>What is your approximate annual case volume?</h2>
             {ANNUAL_CASE_VOLUME_OPTIONS.map((opt) => (
-              <div key={opt.value} style={{ ...styles.card, ...(annualCaseVolume === opt.value ? styles.cardSelected : {}) }} onClick={() => setAnnualCaseVolume(opt.value)}>
+              <div key={opt.value} style={{ ...styles.card, ...(annualCaseVolume === opt.value ? styles.cardSelected : {}) }} onClick={() => {
+                setAnnualCaseVolume(opt.value);
+                setTimeout(() => handleComplete(), 200);
+              }}>
                 <div style={styles.cardTitle}>{opt.label}</div>
               </div>
             ))}
-            <button style={{ ...styles.button, ...(annualCaseVolume && !loading ? {} : styles.buttonDisabled) }} disabled={!annualCaseVolume || loading} onClick={handleComplete}>
-              {loading ? 'Saving...' : 'Complete Setup'}
-            </button>
             <button style={styles.backButton} onClick={() => setStep(6)} disabled={loading}>Back</button>
           </div>
         )}
