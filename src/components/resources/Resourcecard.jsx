@@ -402,9 +402,6 @@ function ResourceCard({
         <div className="flex-1">
           {/* Badges */}
           <div className="flex gap-2 mb-2 flex-wrap">
-            <div className="inline-flex items-center gap-2 px-3 py-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-full text-sm font-normal">
-              Third-party content
-            </div>
             {resource.is_sponsored && (
               <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-800 text-yellow-700 dark:text-yellow-300 rounded-full text-sm font-normal">
                 <Sparkles size={14} />
@@ -420,6 +417,11 @@ function ResourceCard({
                 </span>
               )}
             </div>
+            {resource.year_of_publication && (
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-full text-sm font-normal">
+                📅 {resource.year_of_publication}
+              </div>
+            )}
           </div>
 
           {/* Title and Description */}
@@ -489,24 +491,24 @@ function ResourceCard({
 
           {/* View on [Source] button — opens confirmation modal then external link */}
           {safeResourceHref ? (
-            <>
-              <button
-                type="button"
-                onClick={handleViewExternalClick}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-all active:scale-95 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 mb-2"
-              >
-                <ArrowRight size={16} />
-                {getViewOnLabel(resource)}
-              </button>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-                {EXTERNAL_LINK_DISCLOSURE.CARD_DISCLAIMER} {EXTERNAL_LINK_DISCLOSURE.COPYRIGHT_REPORT}
-              </p>
-            </>
+            <button
+              type="button"
+              onClick={handleViewExternalClick}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-all active:scale-95 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 mb-2"
+            >
+              <ArrowRight size={16} />
+              {getViewOnLabel(resource)}
+            </button>
           ) : (
             <p className="text-xs text-gray-500 dark:text-gray-400 mb-2 italic">
               External link not available for this resource
             </p>
           )}
+
+          {/* Disclaimer - Always shown for all resources */}
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+            {EXTERNAL_LINK_DISCLOSURE.CARD_DISCLAIMER} {EXTERNAL_LINK_DISCLOSURE.COPYRIGHT_REPORT}
+          </p>
 
           {/* Personal Rating - Show if user can rate OR if they have an existing rating */}
           {(canRate || rating) && (

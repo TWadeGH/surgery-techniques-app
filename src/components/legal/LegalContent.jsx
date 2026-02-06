@@ -323,7 +323,7 @@ export function ContactContent() {
         <li><strong>Privacy Questions:</strong> privacy@surgicaltechniques.app</li>
         <li><strong>Copyright / Takedown Requests:</strong> legal@surgicaltechniques.app</li>
       </ul>
-      <p className={pClass}>You may also submit inquiries using the contact form below (optional).</p>
+      <p className={pClass}>For sponsorship inquiries or business partnerships, please use the "Sponsorship" button next to "Contact Us" in the app header.</p>
     </div>
   );
 }

@@ -31,7 +31,7 @@ export default function AddResourceModal({ currentUser, onSubmit, onClose }) {
     implant_info_url: '',
     company_name: '',
     product_name: '',
-    year_of_publication: ''
+    year_of_publication: null
   });
   const [durationHours, setDurationHours] = useState('');
   const [durationMinutes, setDurationMinutes] = useState('');
@@ -679,7 +679,10 @@ export default function AddResourceModal({ currentUser, onSubmit, onClose }) {
                 min="1900"
                 max="2100"
                 value={formData.year_of_publication || ''}
-                onChange={(e) => setFormData({ ...formData, year_of_publication: e.target.value ? parseInt(e.target.value) : '' })}
+                onChange={(e) => {
+                  const val = e.target.value.trim();
+                  setFormData({ ...formData, year_of_publication: val ? parseInt(val, 10) : null });
+                }}
                 className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors"
                 placeholder="e.g., 2024"
               />
