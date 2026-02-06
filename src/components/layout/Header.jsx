@@ -141,15 +141,9 @@ export default function Header({
   }
 
   return (
-    <header className="gradient-bg relative overflow-hidden">
-      {/* Animated Background */}
-      <div className="absolute inset-0 opacity-10" aria-hidden="true">
-        <div className="absolute top-0 left-1/4 w-96 h-96 bg-pink-500 rounded-full blur-3xl"></div>
-        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-purple-500 rounded-full blur-3xl"></div>
-      </div>
-      
+    <header className="bg-purple-600">
       {/* Header Content */}
-      <div className="relative max-w-7xl mx-auto px-6 py-6">
+      <div className="max-w-7xl mx-auto px-6 py-6">
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
           {/* Logo & Title */}
           <div>

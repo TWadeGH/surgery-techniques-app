@@ -355,7 +355,7 @@ function ResourceCard({
 
   return (
     <div 
-      className={`glass rounded-lg p-3 shadow-md card-hover animate-slide-up ${
+      className={`bg-white dark:bg-gray-800 rounded-xl p-4 shadow-md hover:shadow-lg transition-shadow border border-gray-200 dark:border-gray-700 animate-slide-up ${
         resource.is_sponsored ? 'border-l-4 border-yellow-400' : ''
       }`}
       style={{ animationDelay: `${index * 0.1}s` }}
@@ -380,32 +380,32 @@ function ResourceCard({
         {/* Content */}
         <div className="flex-1">
           {/* Badges */}
-          <div className="flex gap-1.5 mb-1.5 flex-wrap">
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-gray-600 dark:text-gray-300 text-xs font-medium">
+          <div className="flex gap-2 mb-2 flex-wrap">
+            <div className="inline-flex items-center gap-2 px-3 py-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-full text-sm font-normal">
               Third-party content
             </div>
             {resource.is_sponsored && (
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-800 rounded-lg text-yellow-700 dark:text-yellow-300 text-xs font-medium">
-                <Sparkles size={12} />
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-800 text-yellow-700 dark:text-yellow-300 rounded-full text-sm font-normal">
+                <Sparkles size={14} />
                 <span>Sponsored</span>
               </div>
             )}
-            <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-gradient-to-r ${getTypeColor(resource.resource_type)} text-white text-sm font-medium`}>
+            <div className="inline-flex items-center gap-2 px-3 py-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-full text-sm font-normal">
               {getTypeIcon(resource.resource_type)}
               <span className="capitalize">{getTypeLabel(resource.resource_type)}</span>
               {resource.resource_type === 'video' && resource.duration_seconds && (
-                <span className="ml-2 text-xs bg-white/20 px-2 py-0.5 rounded">
-                  {formatDuration(resource.duration_seconds)}
+                <span className="text-xs text-gray-500 dark:text-gray-400">
+                  · {formatDuration(resource.duration_seconds)}
                 </span>
               )}
             </div>
           </div>
 
           {/* Title and Description */}
-          <h4 className="font-bold text-base text-gray-900 dark:text-white mb-1">
+          <h4 className="font-semibold text-xl text-gray-900 dark:text-white mb-2 leading-snug">
             {resource.title}
           </h4>
-          <div className="text-gray-600 dark:text-gray-300 text-xs mb-1.5">
+          <div className="text-gray-600 dark:text-gray-300 text-sm leading-relaxed mb-2">
             {(() => {
               const description = typeof resource.description === 'string' ? resource.description : (resource.description ? String(resource.description) : '');
               if (!description) return null;
@@ -472,9 +472,9 @@ function ResourceCard({
               <button
                 type="button"
                 onClick={handleViewExternalClick}
-                className="inline-flex items-center gap-2 px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-colors mb-2"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 mb-2"
               >
-                <ArrowRight size={14} />
+                <ArrowRight size={16} />
                 {getViewOnLabel(resource)}
               </button>
               <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
@@ -559,13 +559,13 @@ function ResourceCard({
               <div className="flex gap-2 mt-2">
                 <button
                   onClick={handleSaveNote}
-                  className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg text-sm font-medium hover:shadow-lg transition-all"
+                  className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2"
                 >
                   Save
                 </button>
                 <button
                   onClick={handleCancelNote}
-                  className="px-4 py-2 border-2 border-gray-200 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-900 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                  className="px-4 py-2 border-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2"
                 >
                   Cancel
                 </button>
@@ -580,7 +580,7 @@ function ResourceCard({
               <div className="group relative">
                 <button
                   onClick={() => setShowNoteInput(!showNoteInput)}
-                  className={`p-2.5 rounded-lg transition-all ${
+                  className={`p-3 rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 ${
                     note 
                       ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400 hover:bg-yellow-200 dark:hover:bg-yellow-900/50' 
                       : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
@@ -599,7 +599,7 @@ function ResourceCard({
                 <div className="group relative">
                   <button
                     onClick={() => onToggleFavorite(resource.id)}
-                    className={`p-2.5 rounded-lg transition-all ${
+                    className={`p-3 rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 ${
                       isFavorited 
                         ? 'bg-red-100 dark:bg-red-900/30 text-red-500 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50' 
                         : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
@@ -619,7 +619,7 @@ function ResourceCard({
                 <div className="group relative">
                 <button
                   onClick={() => onToggleUpcomingCase(resource.id)}
-                  className={`p-2.5 rounded-lg transition-all ${
+                  className={`p-3 rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 ${
                     isUpcomingCase 
                       ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900/50' 
                       : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
@@ -656,7 +656,7 @@ function ResourceCard({
                 <button
                   type="button"
                   onClick={() => onReportResource?.(resource)}
-                  className="p-2.5 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 hover:bg-amber-50 hover:text-amber-600 dark:hover:bg-amber-900/20 dark:hover:text-amber-400 transition-all"
+                  className="p-3 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 hover:bg-amber-50 hover:text-amber-600 dark:hover:bg-amber-900/20 dark:hover:text-amber-400 transition-all focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2"
                   aria-label="Report link"
                 >
                   <Flag size={18} />
