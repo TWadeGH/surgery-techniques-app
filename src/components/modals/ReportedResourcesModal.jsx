@@ -4,13 +4,11 @@
  * Visible to Super Admin, specialty admin, and subspecialty admin per RLS.
  */
 
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { X, Flag, FileText, ArrowRight, Edit, Trash2 } from 'lucide-react';
 import { formatDate } from '../../utils/helpers';
 
 const STATUS_LABELS = { pending: 'Pending', reviewed: 'Reviewed', dismissed: 'Dismissed' };
-/** Max number of recently addressed (reviewed/dismissed) reports to show; older addressed reports are hidden. */
-const MAX_RECENT_ADDRESSED = 10;
 
 export default function ReportedResourcesModal({
   reports = [],
@@ -23,18 +21,7 @@ export default function ReportedResourcesModal({
 }) {
   const [actioningId, setActioningId] = useState(null);
   const pendingReports = reports.filter((r) => r.status === 'pending');
-  const addressedReports = reports.filter((r) => r.status !== 'pending');
-  /** Show only the 10 most recently addressed (by reviewed_at, then created_at). Older addressed reports disappear from the list. */
-  const recentAddressed = useMemo(() => {
-    return [...addressedReports]
-      .sort((a, b) => {
-        const aAt = a.reviewed_at || a.created_at || '';
-        const bAt = b.reviewed_at || b.created_at || '';
-        return bAt.localeCompare(aAt);
-      })
-      .slice(0, MAX_RECENT_ADDRESSED);
-  }, [addressedReports]);
-  const displayedReports = useMemo(() => [...pendingReports, ...recentAddressed], [pendingReports, recentAddressed]);
+  const otherReports = reports.filter((r) => r.status !== 'pending');
 
   async function handleDismiss(reportId) {
     setActioningId(reportId);
@@ -64,7 +51,7 @@ export default function ReportedResourcesModal({
               Reported Resources
             </h2>
             <p className="text-sm text-gray-600 dark:text-gray-300">
-              {pendingReports.length} pending · {recentAddressed.length} most recent addressed (up to {MAX_RECENT_ADDRESSED})
+              {pendingReports.length} pending · {otherReports.length} reviewed/dismissed
             </p>
           </div>
           <button
@@ -77,14 +64,14 @@ export default function ReportedResourcesModal({
           </button>
         </div>
 
-        {displayedReports.length === 0 ? (
+        {reports.length === 0 ? (
           <div className="text-center py-12">
             <Flag size={48} className="text-gray-400 mx-auto mb-4" />
             <p className="text-gray-600 dark:text-gray-300">No reported resources</p>
           </div>
         ) : (
           <div className="space-y-4">
-            {displayedReports.map((report) => {
+            {[...pendingReports, ...otherReports].map((report) => {
               const resource = report.resources;
               const isPending = report.status === 'pending';
               const busy = actioningId === report.id;

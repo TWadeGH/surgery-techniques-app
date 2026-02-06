@@ -1,6 +1,6 @@
 /**
  * AdminView Component
- * Main admin dashboard view with resources, analytics, activity, roles, sponsorship, companies, and messages tabs
+ * Main admin dashboard view with resources, analytics, activity, roles, and sponsorship tabs
  */
 
 import React, { useState, useMemo, memo, lazy, Suspense } from 'react';
@@ -108,7 +108,7 @@ function AdminView({
         <button
           onClick={onShowSuggestedResources}
           className="w-full glass rounded-2xl p-4 sm:p-6 shadow-lg hover:shadow-xl transition-all text-left group"
-          aria-label={`View suggested resources (\${pendingCount} pending)`}
+          aria-label={`View suggested resources (${pendingCount} pending)`}
         >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3 sm:gap-4">
@@ -140,7 +140,7 @@ function AdminView({
           <button
             onClick={onShowReportedResources}
             className="w-full glass rounded-2xl p-4 sm:p-6 shadow-lg hover:shadow-xl transition-all text-left group"
-            aria-label={`View reported resources (\${reportedPendingCount} pending)`}
+            aria-label={`View reported resources (${reportedPendingCount} pending)`}
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3 sm:gap-4">
@@ -181,7 +181,7 @@ function AdminView({
             key={tab.key}
             onClick={() => setAdminTab(tab.key)}
             className={tabButtonClass(tab.key)}
-            aria-label={`\${tab.label} tab`}
+            aria-label={`${tab.label} tab`}
           >
             {tab.icon && <tab.icon size={16} />}
             <span className={tab.shortLabel ? 'hidden xs:inline' : ''}>{tab.label}</span>

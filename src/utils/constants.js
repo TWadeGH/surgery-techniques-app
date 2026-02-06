@@ -26,7 +26,7 @@ export const SPECIALTY_SUBSPECIALTY = {
   PODIATRY: 'podiatry', // specialty with no subspecialty; view = Orthopaedic Surgery + Foot and Ankle
   ORTHOPAEDIC_SURGERY: 'orthopaedic surgery', // UK spelling
   ORTHOPEDIC_SURGERY: 'orthopedic surgery', // US spelling
-  FOOT_AND_ANKLE: 'foot and ankle',
+  FOOT_AND_ANKLE: 'foot%ankle',
 };
 
 // User Types
@@ -96,15 +96,30 @@ export const ADMIN_TABS = {
   CATEGORIES: 'categories',
   PROCEDURES: 'procedures',
   SUGGESTIONS: 'suggestions',
-  COMPANIES: 'companies',
+  ACTIVITY: 'activity',
+  ROLES: 'roles',
+  SPONSORSHIP: 'sponsorship',
+  MESSAGES: 'messages',
 };
 
-// Inquiry Statuses
+// Sponsorship Inquiry Statuses
 export const INQUIRY_STATUSES = {
   NEW: 'new',
-  IN_PROGRESS: 'in_progress',
-  COMPLETED: 'completed',
-  DISMISSED: 'dismissed',
+  CONTACTED: 'contacted',
+  CLOSED: 'closed',
+};
+
+// Admin Action Types (audit log)
+export const ADMIN_ACTION_TYPES = {
+  RESOURCE_CREATED: 'resource_created',
+  RESOURCE_EDITED: 'resource_edited',
+  RESOURCE_DELETED: 'resource_deleted',
+  SUGGESTION_APPROVED: 'suggestion_approved',
+  SUGGESTION_REJECTED: 'suggestion_rejected',
+  REPORT_DISMISSED: 'report_dismissed',
+  REPORT_REVIEWED: 'report_reviewed',
+  ROLE_ASSIGNED: 'role_assigned',
+  ROLE_REVOKED: 'role_revoked',
 };
 
 // Loading States
@@ -283,8 +298,8 @@ export const ROUTES = {
 
 // Legal / DMCA disclosure for external links (third-party content)
 export const EXTERNAL_LINK_DISCLOSURE = {
-  MODAL_TITLE: 'You are leaving Surgery Techniques',
+  MODAL_TITLE: 'You are leaving Surgical Techniques',
   MODAL_BODY: 'You will be redirected to an external site.',
-  CARD_DISCLAIMER: 'This content is hosted on a third-party site. Surgery Techniques App is not responsible for the accuracy, completeness, or legality of third-party content.',
+  CARD_DISCLAIMER: 'This content is hosted on a third-party site. Surgical Techniques App is not responsible for the accuracy, completeness, or legality of third-party content.',
   COPYRIGHT_REPORT: 'If you believe this link violates copyright, please use "Report Link" or contact us.',
 };
