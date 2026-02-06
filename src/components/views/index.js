@@ -8,3 +8,4 @@
 
 export { default as LoginView } from './LoginView';
 export { default as UserView } from './UserView';
+export { default as RepView } from './RepView';

@@ -86,6 +86,7 @@ export const CONTENT_TYPE_LABELS = {
 export const VIEW_MODES = {
   USER: 'user',
   ADMIN: 'admin',
+  REP: 'rep',
 };
 
 // Admin Tabs
@@ -95,6 +96,15 @@ export const ADMIN_TABS = {
   CATEGORIES: 'categories',
   PROCEDURES: 'procedures',
   SUGGESTIONS: 'suggestions',
+  COMPANIES: 'companies',
+};
+
+// Inquiry Statuses
+export const INQUIRY_STATUSES = {
+  NEW: 'new',
+  IN_PROGRESS: 'in_progress',
+  COMPLETED: 'completed',
+  DISMISSED: 'dismissed',
 };
 
 // Loading States

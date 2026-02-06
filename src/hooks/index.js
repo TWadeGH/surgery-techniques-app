@@ -20,6 +20,8 @@ export { useResources } from './useResources';
 export { useFavorites } from './useFavorites';
 export { useNotes } from './useNotes';
 export { useUpcomingCases } from './useUpcomingCases';
+export { useSubspecialtyCompanies } from './useSubspecialtyCompanies';
+export { useRepPlatform } from './useRepPlatform';
 
 // Future hooks to add:
 // export { default as useCategories } from './useCategories';

@@ -8,19 +8,20 @@
  */
 
 import React, { useState, useEffect, memo } from 'react';
-import { 
-  Video, 
-  FileText, 
-  Link, 
-  Edit, 
-  StickyNote, 
-  Heart, 
-  Plus, 
-  Star, 
-  Sparkles, 
+import {
+  Video,
+  FileText,
+  Link,
+  Edit,
+  StickyNote,
+  Heart,
+  Plus,
+  Star,
+  Sparkles,
   ArrowRight,
   X,
-  Flag
+  Flag,
+  MessageSquare
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { trackResourceCoview, trackRatingEvent, trackResourceLinkClick } from '../../lib/analytics';
@@ -101,10 +102,19 @@ function canUserRate(user) {
   
   const userType = user.userType.toLowerCase().trim();
   
-  // Security: Allowlist of valid user types (all 4 onboarding options can rate)
-  const ALLOWED_USER_TYPES = ['surgeon', 'attending', 'trainee', 'resident', 'fellow', 'industry', 'student', 'other'];
+  // Security: Allowlist of valid user types (all onboarding options can rate)
+  const ALLOWED_USER_TYPES = ['surgeon', 'attending', 'trainee', 'resident', 'fellow', 'app', 'industry', 'student', 'other'];
   
   return ALLOWED_USER_TYPES.includes(userType);
+}
+
+/**
+ * Check if user can favorite resources
+ * @param {Object} user - User object
+ * @returns {boolean}
+ */
+function canUserFavorite(user) {
+  return !!user?.id;
 }
 
 /** Character limit for description preview; longer descriptions show "... read more" */
@@ -156,18 +166,22 @@ function getSourceLine(resource) {
  * @param {number} props.index - Index for animation delay
  * @param {Object} props.currentUser - Current user object
  * @param {Function} props.onReportResource - Callback to open report modal for this resource
+ * @param {Function} props.onContactRep - Callback to contact company rep
+ * @param {boolean} props.companyIsActive - Whether the resource's company has active contacts
  */
 function ResourceCard({
-  resource, 
-  isFavorited, 
-  note, 
-  onToggleFavorite, 
-  onUpdateNote, 
-  onToggleUpcomingCase, 
-  isUpcomingCase, 
-  index, 
+  resource,
+  isFavorited,
+  note,
+  onToggleFavorite,
+  onUpdateNote,
+  onToggleUpcomingCase,
+  isUpcomingCase,
+  index,
   currentUser,
-  onReportResource
+  onReportResource,
+  onContactRep,
+  companyIsActive = false
 }) {
   const toast = useToast();
   const [showNoteInput, setShowNoteInput] = useState(false);
@@ -326,8 +340,7 @@ function ResourceCard({
   }
 
   const canRate = canUserRate(currentUser);
-  // Allow favorites for surgeons (surgeon/attending) and trainees (trainee/resident/fellow)
-  const canFavorite = canUserRate(currentUser); // Same logic as canRate
+  const canFavorite = canUserFavorite(currentUser); // All logged-in users can favorite
   const safeResourceHref = getSafeResourceHref(resource?.url);
 
   const handleViewExternalClick = () => setShowExternalLinkModal(true);
@@ -581,47 +594,60 @@ function ResourceCard({
                 </span>
               </div>
 
-              {/* Favorite Button - Show for all users, but only allow interaction for surgeons/trainees */}
-              {/* Security: Client-side disabled state + server-side RLS enforces permissions */}
+              {/* Favorite Button - Available to all logged-in users */}
               {onToggleFavorite && (
                 <div className="group relative">
                   <button
-                    onClick={() => canFavorite && onToggleFavorite && onToggleFavorite(resource.id)}
-                    disabled={!canFavorite}
+                    onClick={() => onToggleFavorite(resource.id)}
                     className={`p-2.5 rounded-lg transition-all ${
                       isFavorited 
                         ? 'bg-red-100 dark:bg-red-900/30 text-red-500 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50' 
                         : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                    } ${!canFavorite ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    aria-label={canFavorite ? (isFavorited ? 'Remove from Favorites' : 'Add to Favorites') : 'Favorites not available'}
+                    }`}
+                    aria-label={isFavorited ? 'Remove from Favorites' : 'Add to Favorites'}
                   >
                     <Heart size={18} fill={isFavorited ? 'currentColor' : 'none'} strokeWidth={isFavorited ? 0 : 2} />
                   </button>
                   <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1.5 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded shadow-lg whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 pointer-events-none z-50">
-                    {canFavorite ? (isFavorited ? 'Remove this resource from your Favorites list' : 'Save this resource to your Favorites list') : 'Favorites available for Surgeons and Trainees'}
+                    {isFavorited ? 'Remove this resource from your Favorites list' : 'Save this resource to your Favorites list'}
                   </span>
                 </div>
               )}
 
-              {/* Upcoming Case Button - Show for all users, but only allow interaction for surgeons/trainees */}
-              {/* Security: Client-side disabled state + server-side RLS enforces permissions */}
+              {/* Upcoming Case Button - Available to all logged-in users */}
               {onToggleUpcomingCase && (
                 <div className="group relative">
                 <button
-                  onClick={() => canFavorite && onToggleUpcomingCase(resource.id)}
-                  disabled={!canFavorite}
+                  onClick={() => onToggleUpcomingCase(resource.id)}
                   className={`p-2.5 rounded-lg transition-all ${
                     isUpcomingCase 
                       ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900/50' 
                       : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                  } ${!canFavorite ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  aria-label={canFavorite ? (isUpcomingCase ? 'Remove from Upcoming Cases' : 'Add to Upcoming Cases') : 'Upcoming Cases not available'}
+                  }`}
+                  aria-label={isUpcomingCase ? 'Remove from Upcoming Cases' : 'Add to Upcoming Cases'}
                 >
                   <Plus size={18} className={isUpcomingCase ? 'rotate-45' : ''} strokeWidth={2} />
                 </button>
                 <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1.5 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded shadow-lg whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 pointer-events-none z-50">
-                  {canFavorite ? (isUpcomingCase ? 'Remove this resource from your Upcoming Cases list' : 'Add this resource to your Upcoming Cases for a future procedure') : 'Upcoming Cases available for Surgeons and Trainees'}
+                  {isUpcomingCase ? 'Remove this resource from your Upcoming Cases list' : 'Add this resource to your Upcoming Cases for a future procedure'}
                 </span>
+                </div>
+              )}
+
+              {/* Contact Rep Button - Shows when resource has product_name AND company is active */}
+              {resource.product_name && resource.company_name && companyIsActive && onContactRep && (
+                <div className="group relative">
+                  <button
+                    type="button"
+                    onClick={() => onContactRep(resource)}
+                    className="p-2.5 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-all"
+                    aria-label="Contact company representative"
+                  >
+                    <MessageSquare size={18} />
+                  </button>
+                  <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1.5 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded shadow-lg whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 pointer-events-none z-50">
+                    Contact {resource.company_name} rep about {resource.product_name}
+                  </span>
                 </div>
               )}
 
@@ -663,5 +689,7 @@ export default memo(ResourceCard, (prevProps, nextProps) => (
   prevProps.isUpcomingCase === nextProps.isUpcomingCase &&
   prevProps.index === nextProps.index &&
   prevProps.currentUser?.id === nextProps.currentUser?.id &&
-  prevProps.onReportResource === nextProps.onReportResource
+  prevProps.onReportResource === nextProps.onReportResource &&
+  prevProps.onContactRep === nextProps.onContactRep &&
+  prevProps.companyIsActive === nextProps.companyIsActive
 ));

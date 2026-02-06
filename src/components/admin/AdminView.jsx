@@ -1,67 +1,53 @@
 /**
  * AdminView Component
- * Main admin dashboard view with resources and analytics tabs
- * 
- * Extracted from App.jsx as part of refactoring effort
+ * Main admin dashboard view with resources, analytics, activity, roles, sponsorship, and companies tabs
  */
 
 import React, { useState, useMemo, memo, lazy, Suspense } from 'react';
-import { Sparkles, Flag, ArrowRight, BarChart3 } from 'lucide-react';
+import { Sparkles, Flag, ArrowRight, BarChart3, Activity, Shield, Handshake, Building2, MessageSquare } from 'lucide-react';
 import { FullPageSpinner } from '../common/Spinner';
+import { USER_ROLES, ADMIN_TABS } from '../../utils/constants';
 
 // Lazy load admin components for better initial load performance
 const ResourcesManagement = lazy(() => import('./ResourcesManagement'));
-const AnalyticsDashboard = lazy(() => import('./AnalyticsDashboard'));
+const AnalyticsDashboard = lazy(() => import('./analytics/AnalyticsDashboard'));
+const AdminActivityPanel = lazy(() => import('./activity/AdminActivityPanel'));
+const RoleManagementPanel = lazy(() => import('./roles/RoleManagementPanel'));
+const SponsorshipInquiriesPanel = lazy(() => import('./sponsorship/SponsorshipInquiriesPanel'));
+const CompaniesManagementPanel = lazy(() => import('./companies/CompaniesManagementPanel'));
+const MessagingPanel = lazy(() => import('./messaging/MessagingPanel'));
 
-/**
- * AdminView Component
- * 
- * @param {Object} props
- * @param {Array} props.resources - Array of resource objects
- * @param {string} props.adminTab - Current admin tab ('resources' or 'analytics')
- * @param {Function} props.setAdminTab - Callback to change admin tab
- * @param {Function} props.onAddResource - Callback to add resource
- * @param {Function} props.onEditResource - Callback to edit resource
- * @param {Function} props.onDeleteResource - Callback to delete resource
- * @param {Function} props.onEditCategories - Callback to edit categories
- * @param {Function} props.onReorderResources - Callback to reorder resources
- * @param {Object} props.currentUser - Current user object
- * @param {Array} props.suggestedResources - Array of suggested resource objects
- * @param {Function} props.onShowSuggestedResources - Callback to show suggested resources modal
- * @param {Function} props.onApproveSuggestion - Callback to approve suggestion
- * @param {Function} props.onRejectSuggestion - Callback to reject suggestion
- * @param {Array} props.reportedResources - Array of reported resource objects
- * @param {Function} props.onShowReportedResources - Callback to show reported resources modal
- * @param {Function} props.onDismissReport - Callback to dismiss a report
- * @param {Function} props.onMarkReviewedReport - Callback to mark a report as reviewed
- */
-function AdminView({ 
-  resources, 
-  adminTab, 
-  setAdminTab, 
-  onAddResource, 
-  onEditResource, 
-  onDeleteResource, 
-  onEditCategories, 
-  onReorderResources, 
-  currentUser, 
-  suggestedResources, 
-  onShowSuggestedResources, 
-  onApproveSuggestion, 
+function AdminView({
+  resources,
+  adminTab,
+  setAdminTab,
+  onAddResource,
+  onEditResource,
+  onDeleteResource,
+  onEditCategories,
+  onReorderResources,
+  currentUser,
+  suggestedResources,
+  onShowSuggestedResources,
+  onApproveSuggestion,
   onRejectSuggestion,
   reportedResources = [],
   onShowReportedResources,
   onDismissReport,
   onMarkReviewedReport,
+  sponsorshipPendingCount = 0,
+  availableSubspecialties = [],
 }) {
   const [searchTerm, setSearchTerm] = useState('');
+
+  const isSuperAdmin = currentUser?.role === USER_ROLES.SUPER_ADMIN;
+  const isSpecialtyAdmin = currentUser?.role === USER_ROLES.SPECIALTY_ADMIN;
+  const isSubspecialtyAdmin = currentUser?.role === USER_ROLES.SUBSPECIALTY_ADMIN;
 
   // Memoize filtered resources for performance
   const filteredResources = useMemo(() => {
     if (!resources || !Array.isArray(resources)) return [];
-    
     if (searchTerm === '') return resources;
-    
     const searchLower = searchTerm.toLowerCase();
     return resources.filter(r => {
       if (!r) return false;
@@ -80,6 +66,37 @@ function AdminView({
     if (!reportedResources || !Array.isArray(reportedResources)) return 0;
     return reportedResources.filter(r => r && r.status === 'pending').length;
   }, [reportedResources]);
+
+  // Tab definitions with role gating
+  const tabs = useMemo(() => {
+    const t = [
+      { key: 'resources', label: 'Resources', icon: null },
+      { key: 'analytics', label: 'Analytics', shortLabel: 'Stats', icon: BarChart3 },
+    ];
+    if (isSuperAdmin || isSpecialtyAdmin) {
+      t.push({ key: 'activity', label: 'Activity', icon: Activity });
+    }
+    if (isSuperAdmin) {
+      t.push({ key: 'roles', label: 'Roles', icon: Shield });
+    }
+    if (isSuperAdmin || isSpecialtyAdmin) {
+      t.push({ key: 'sponsorship', label: 'Sponsorship', icon: Handshake, badge: sponsorshipPendingCount });
+    }
+    if (isSuperAdmin || isSpecialtyAdmin || isSubspecialtyAdmin) {
+      t.push({ key: ADMIN_TABS.COMPANIES, label: 'Companies', icon: Building2 });
+    }
+    if (isSuperAdmin || isSpecialtyAdmin || isSubspecialtyAdmin) {
+      t.push({ key: 'messaging', label: 'Msgs', icon: MessageSquare });
+    }
+    return t;
+  }, [isSuperAdmin, isSpecialtyAdmin, isSubspecialtyAdmin, sponsorshipPendingCount]);
+
+  const tabButtonClass = (key) =>
+    `flex items-center justify-center gap-1.5 flex-1 sm:flex-none px-3 sm:px-5 py-2.5 sm:py-3 rounded-xl text-sm font-medium transition-all ${
+      adminTab === key
+        ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg'
+        : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+    }`;
 
   return (
     <div className="animate-slide-up">
@@ -155,31 +172,24 @@ function AdminView({
       </div>
 
       {/* Tabs */}
-      <div className="glass rounded-2xl p-1.5 sm:p-2 mb-6 sm:mb-8 shadow-lg inline-flex gap-1 sm:gap-2 w-full sm:w-auto">
-        <button
-          onClick={() => setAdminTab('resources')}
-          className={`flex-1 sm:flex-none px-4 sm:px-6 py-2.5 sm:py-3 rounded-xl text-sm sm:text-base font-medium transition-all ${
-            adminTab === 'resources' 
-              ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg' 
-              : 'text-gray-700 hover:bg-gray-100'
-          }`}
-          aria-label="Resources tab"
-        >
-          Resources
-        </button>
-        <button
-          onClick={() => setAdminTab('analytics')}
-          className={`flex items-center justify-center gap-2 flex-1 sm:flex-none px-4 sm:px-6 py-2.5 sm:py-3 rounded-xl text-sm sm:text-base font-medium transition-all ${
-            adminTab === 'analytics' 
-              ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg' 
-              : 'text-gray-700 hover:bg-gray-100'
-          }`}
-          aria-label="Analytics tab"
-        >
-          <BarChart3 size={16} className="sm:w-[18px] sm:h-[18px]" />
-          <span className="hidden xs:inline">Analytics</span>
-          <span className="xs:hidden">Stats</span>
-        </button>
+      <div className="glass rounded-2xl p-1.5 sm:p-2 mb-6 sm:mb-8 shadow-lg flex flex-wrap gap-1 sm:gap-2 w-full sm:w-auto">
+        {tabs.map(tab => (
+          <button
+            key={tab.key}
+            onClick={() => setAdminTab(tab.key)}
+            className={tabButtonClass(tab.key)}
+            aria-label={`${tab.label} tab`}
+          >
+            {tab.icon && <tab.icon size={16} />}
+            <span className={tab.shortLabel ? 'hidden xs:inline' : ''}>{tab.label}</span>
+            {tab.shortLabel && <span className="xs:hidden">{tab.shortLabel}</span>}
+            {tab.badge > 0 && (
+              <span className="bg-red-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full ml-1">
+                {tab.badge}
+              </span>
+            )}
+          </button>
+        ))}
       </div>
 
       {/* Tab Content - Lazy loaded with Suspense */}
@@ -200,7 +210,40 @@ function AdminView({
 
       {adminTab === 'analytics' && (
         <Suspense fallback={<FullPageSpinner />}>
-          <AnalyticsDashboard resources={resources} />
+          <AnalyticsDashboard currentUser={currentUser} />
+        </Suspense>
+      )}
+
+      {adminTab === 'activity' && (isSuperAdmin || isSpecialtyAdmin) && (
+        <Suspense fallback={<FullPageSpinner />}>
+          <AdminActivityPanel currentUser={currentUser} />
+        </Suspense>
+      )}
+
+      {adminTab === 'roles' && isSuperAdmin && (
+        <Suspense fallback={<FullPageSpinner />}>
+          <RoleManagementPanel currentUser={currentUser} />
+        </Suspense>
+      )}
+
+      {adminTab === 'sponsorship' && (isSuperAdmin || isSpecialtyAdmin) && (
+        <Suspense fallback={<FullPageSpinner />}>
+          <SponsorshipInquiriesPanel currentUser={currentUser} />
+        </Suspense>
+      )}
+
+      {adminTab === ADMIN_TABS.COMPANIES && (isSuperAdmin || isSpecialtyAdmin || isSubspecialtyAdmin) && (
+        <Suspense fallback={<FullPageSpinner />}>
+          <CompaniesManagementPanel
+            currentUser={currentUser}
+            availableSubspecialties={availableSubspecialties}
+          />
+        </Suspense>
+      )}
+
+      {adminTab === 'messaging' && (isSuperAdmin || isSpecialtyAdmin || isSubspecialtyAdmin) && (
+        <Suspense fallback={<FullPageSpinner />}>
+          <MessagingPanel currentUser={currentUser} />
         </Suspense>
       )}
     </div>

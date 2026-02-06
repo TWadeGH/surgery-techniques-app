@@ -32,7 +32,7 @@ import ResourceFilters from './components/resources/ResourceFilters';
 import ResourceList from './components/resources/ResourceList';
 import ResourceCard from './components/resources/Resourcecard';
 import { SuggestResourceModal } from './components/resources';
-import { LoginView, UserView } from './components/views';
+import { LoginView, UserView, RepView } from './components/views';
 import { ErrorBoundary, useToast, ConfirmDialog } from './components/common';
 
 // Admin Components
@@ -60,13 +60,15 @@ function SurgicalTechniquesApp() {
   // ========================================
   
   // Authentication (replaces ~500 lines)
-  const { 
-    currentUser, 
+  const {
+    currentUser,
     loading: authLoading,
     updateProfile,
     signOut,
     refreshSession,
-    refreshProfile
+    refreshProfile,
+    isRep,
+    repCompanies
   } = useAuth();
   
   // Use authLoading as the main loading state
@@ -1468,12 +1470,13 @@ function SurgicalTechniquesApp() {
           onToggleUpcomingCases={handleToggleUpcomingCases}
           onSettingsClick={handleSettingsClick}
           onSignOut={handleSignOut}
+          isRep={isRep}
         />
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-12">
         {currentView === VIEW_MODES.USER ? (
-          <UserView 
+          <UserView
             resources={paginatedResources}
             paginationTotal={displayedResources.length}
             paginationPage={resourcesPage}
@@ -1505,7 +1508,12 @@ function SurgicalTechniquesApp() {
             isInUpcomingCases={isInUpcomingCases}
             onReportResource={handleReportResource}
           />
-        ) : isAdmin(currentUser) ? (
+        ) : currentView === VIEW_MODES.REP && isRep ? (
+          <RepView
+            currentUser={currentUser}
+            repCompanies={repCompanies}
+          />
+        ) : currentView === VIEW_MODES.ADMIN && isAdmin(currentUser) ? (
           <AdminView
             resources={resources}
             adminTab={adminTab}
@@ -1524,10 +1532,11 @@ function SurgicalTechniquesApp() {
             onRejectSuggestion={handleRejectSuggestion}
             onDismissReport={handleDismissReport}
             onMarkReviewedReport={handleMarkReviewedReport}
+            availableSubspecialties={availableSubspecialties}
           />
         ) : (
           <div className="text-center py-12">
-            <p className="text-gray-600 dark:text-gray-300">You don't have permission to access admin mode.</p>
+            <p className="text-gray-600 dark:text-gray-300">You don't have permission to access this view.</p>
             <button
               onClick={handleReturnToBrowse}
               className="mt-4 px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"

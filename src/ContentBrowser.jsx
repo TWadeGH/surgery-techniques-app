@@ -308,9 +308,6 @@ export default function ContentBrowser({ profile }) {
                   onMouseLeave={(e) => e.currentTarget.style.borderColor = '#e0e0e0'}
                 >
                   <div style={styles.cardTitle}>{subspecialty.name}</div>
-                  {subspecialty.description && (
-                    <div style={styles.cardDescription}>{subspecialty.description}</div>
-                  )}
                 </div>
               ))}
             </div>

@@ -12,9 +12,9 @@ import { VIEW_MODES, USER_TYPES } from '../../utils/constants';
 
 /**
  * View Switcher Component
- * Toggle between user and admin views
+ * Toggle between user, admin, and rep views
  */
-function ViewSwitcher({ currentView, onViewChange }) {
+function ViewSwitcher({ currentView, onViewChange, showAdmin, showRep }) {
   return (
     <div className="flex gap-2 glass-dark rounded-full p-1">
       <button
@@ -28,17 +28,32 @@ function ViewSwitcher({ currentView, onViewChange }) {
       >
         Browse
       </button>
-      <button
-        onClick={() => onViewChange(VIEW_MODES.ADMIN)}
-        className={`px-4 sm:px-6 py-1.5 sm:py-2 rounded-full font-medium transition-all text-sm sm:text-base ${
-          currentView === VIEW_MODES.ADMIN
-            ? 'bg-white text-purple-900 shadow-lg'
-            : 'text-white hover:bg-white/10'
-        }`}
-        aria-label="Switch to admin view"
-      >
-        Admin
-      </button>
+      {showAdmin && (
+        <button
+          onClick={() => onViewChange(VIEW_MODES.ADMIN)}
+          className={`px-4 sm:px-6 py-1.5 sm:py-2 rounded-full font-medium transition-all text-sm sm:text-base ${
+            currentView === VIEW_MODES.ADMIN
+              ? 'bg-white text-purple-900 shadow-lg'
+              : 'text-white hover:bg-white/10'
+          }`}
+          aria-label="Switch to admin view"
+        >
+          Admin
+        </button>
+      )}
+      {showRep && (
+        <button
+          onClick={() => onViewChange(VIEW_MODES.REP)}
+          className={`px-4 sm:px-6 py-1.5 sm:py-2 rounded-full font-medium transition-all text-sm sm:text-base ${
+            currentView === VIEW_MODES.REP
+              ? 'bg-white text-purple-900 shadow-lg'
+              : 'text-white hover:bg-white/10'
+          }`}
+          aria-label="Switch to rep view"
+        >
+          Rep
+        </button>
+      )}
     </div>
   );
 }
@@ -74,16 +89,17 @@ function UpcomingCasesButton({ showUpcomingCases, upcomingCasesCount, onClick, d
 
 /**
  * Header Component
- * 
+ *
  * @param {Object} props
  * @param {Object} props.currentUser - Current logged-in user
- * @param {string} props.currentView - Current view mode ('user' or 'admin')
+ * @param {string} props.currentView - Current view mode ('user', 'admin', or 'rep')
  * @param {Function} props.onViewChange - Callback when view changes
  * @param {boolean} props.showUpcomingCases - Whether upcoming cases view is active
  * @param {number} props.upcomingCasesCount - Number of upcoming cases
  * @param {Function} props.onToggleUpcomingCases - Callback to toggle upcoming cases
  * @param {Function} props.onSettingsClick - Callback when settings clicked
  * @param {Function} props.onSignOut - Callback when sign out clicked
+ * @param {boolean} props.isRep - Whether user is a company rep
  */
 export default function Header({
   currentUser,
@@ -94,8 +110,10 @@ export default function Header({
   onToggleUpcomingCases,
   onSettingsClick,
   onSignOut,
+  isRep = false,
 }) {
   const userIsAdmin = isAdmin(currentUser);
+  const hasMultipleViews = userIsAdmin || isRep;
   // Show upcoming cases button for all users, but only allow interaction for surgeons/trainees
   // Security: Uses allowlist validation to prevent injection
   const canInteractWithUpcomingCases = (() => {
@@ -150,11 +168,13 @@ export default function Header({
               {currentUser?.email || currentUser?.id || 'User'}
             </span>
             
-            {/* View Switcher (Admin Only) */}
-            {userIsAdmin && (
-              <ViewSwitcher 
-                currentView={currentView} 
-                onViewChange={onViewChange} 
+            {/* View Switcher (Admin and/or Rep) */}
+            {hasMultipleViews && (
+              <ViewSwitcher
+                currentView={currentView}
+                onViewChange={onViewChange}
+                showAdmin={userIsAdmin}
+                showRep={isRep}
               />
             )}
 
