@@ -128,7 +128,28 @@ const DESCRIPTION_PREVIEW_LENGTH = 200;
 function getSafeResourceHref(url) {
   if (!url || typeof url !== 'string') return null;
   const u = url.trim();
-  return /^https?:\/\//i.test(u) ? u : null;
+  
+  // Block dangerous protocols
+  if (/^(javascript|data|vbscript|file|about):/i.test(u)) {
+    return null;
+  }
+  
+  // Block chrome-extension:// and other browser-specific protocols
+  if (/^(chrome-extension|moz-extension|ms-browser-extension|edge):/i.test(u)) {
+    return null;
+  }
+  
+  // If it already has http:// or https://, return as-is
+  if (/^https?:\/\//i.test(u)) {
+    return u;
+  }
+  
+  // If it looks like a URL without protocol (starts with www. or contains a domain), add https://
+  if (/^(www\.|[a-z0-9-]+\.[a-z]{2,})/i.test(u)) {
+    return `https://${u}`;
+  }
+  
+  return null;
 }
 
 /** "View on [Source]" button label from source_type or source_name */
@@ -467,7 +488,7 @@ function ResourceCard({
           </p>
 
           {/* View on [Source] button — opens confirmation modal then external link */}
-          {safeResourceHref && (
+          {safeResourceHref ? (
             <>
               <button
                 type="button"
@@ -481,6 +502,10 @@ function ResourceCard({
                 {EXTERNAL_LINK_DISCLOSURE.CARD_DISCLAIMER} {EXTERNAL_LINK_DISCLOSURE.COPYRIGHT_REPORT}
               </p>
             </>
+          ) : (
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-2 italic">
+              External link not available for this resource
+            </p>
           )}
 
           {/* Personal Rating - Show if user can rate OR if they have an existing rating */}
