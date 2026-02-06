@@ -15,8 +15,8 @@ export default function ExternalLinkModal({ isOpen, onClose, onContinue, resourc
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="external-link-title">
-      <div className="glass rounded-2xl p-6 max-w-md w-full shadow-2xl">
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in" role="dialog" aria-modal="true" aria-labelledby="external-link-title">
+      <div className="bg-white dark:bg-gray-800 rounded-xl p-6 max-w-md w-full shadow-xl border border-gray-200 dark:border-gray-700 animate-scale-in-modal">
         <div className="flex items-center justify-between mb-4">
           <h2 id="external-link-title" className="text-lg font-bold text-gray-900 dark:text-white">
             {EXTERNAL_LINK_DISCLOSURE.MODAL_TITLE}
@@ -24,10 +24,10 @@ export default function ExternalLinkModal({ isOpen, onClose, onContinue, resourc
           <button
             type="button"
             onClick={onClose}
-            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-all active:scale-95 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2"
             aria-label="Cancel"
           >
-            <X size={20} className="text-gray-500" />
+            <X size={20} className="text-gray-500 dark:text-gray-400" />
           </button>
         </div>
         <p className="text-gray-600 dark:text-gray-300 mb-4">
@@ -46,14 +46,14 @@ export default function ExternalLinkModal({ isOpen, onClose, onContinue, resourc
           <button
             type="button"
             onClick={onClose}
-            className="flex-1 px-4 py-2 border-2 border-gray-200 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
+            className="flex-1 px-4 py-2 border-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition-all active:scale-95 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2"
           >
             Cancel
           </button>
           <button
             type="button"
             onClick={handleContinue}
-            className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700"
+            className="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-all active:scale-95 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2"
           >
             Continue
           </button>

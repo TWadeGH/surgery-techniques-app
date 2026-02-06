@@ -376,7 +376,7 @@ function ResourceCard({
 
   return (
     <div 
-      className={`bg-white dark:bg-gray-800 rounded-xl p-4 shadow-md hover:shadow-lg transition-shadow border border-gray-200 dark:border-gray-700 animate-slide-up ${
+      className={`bg-white dark:bg-gray-800 rounded-xl p-4 shadow-md hover:shadow-lg hover:-translate-y-1 transition-all duration-200 border border-gray-200 dark:border-gray-700 animate-slide-up ${
         resource.is_sponsored ? 'border-l-4 border-yellow-400' : ''
       }`}
       style={{ animationDelay: `${index * 0.1}s` }}
@@ -452,12 +452,12 @@ function ResourceCard({
           {showFullDescriptionPopover && (
             <>
               <div
-                className="fixed inset-0 z-40 bg-black/50"
+                className="fixed inset-0 z-40 bg-black/50 animate-fade-in"
                 aria-hidden="true"
                 onClick={() => setShowFullDescriptionPopover(false)}
               />
               <div
-                className="fixed left-1/2 top-1/2 z-50 w-[90vw] max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-xl bg-white dark:bg-gray-800 shadow-xl p-5 max-h-[70vh] flex flex-col"
+                className="fixed left-1/2 top-1/2 z-50 w-[90vw] max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-xl bg-white dark:bg-gray-800 shadow-xl p-5 max-h-[70vh] flex flex-col animate-scale-in"
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="full-desc-title"
@@ -493,7 +493,7 @@ function ResourceCard({
               <button
                 type="button"
                 onClick={handleViewExternalClick}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 mb-2"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-all active:scale-95 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 mb-2"
               >
                 <ArrowRight size={16} />
                 {getViewOnLabel(resource)}
@@ -527,14 +527,14 @@ function ResourceCard({
                         onMouseEnter={() => canRate && setHoveredStar(star)}
                         onMouseLeave={() => canRate && setHoveredStar(0)}
                         disabled={loadingRating || !canRate}
-                        className="focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-1 rounded disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
                         aria-label={canRate ? `Rate ${star} stars` : `${star} stars`}
                       >
                         <Star 
                           size={18} 
                           fill={isFilled ? '#FBBF24' : 'none'} 
                           stroke={isFilled ? '#FBBF24' : '#9CA3AF'} 
-                          className={`transition-colors ${!loadingRating && canRate ? 'hover:scale-110' : ''} ${!canRate ? 'opacity-75' : ''}`}
+                          className={`transition-all duration-200 ${!loadingRating && canRate ? 'hover:scale-110' : ''} ${!canRate ? 'opacity-75' : ''}`}
                         />
                       </button>
                     );
@@ -580,13 +580,13 @@ function ResourceCard({
               <div className="flex gap-2 mt-2">
                 <button
                   onClick={handleSaveNote}
-                  className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2"
+                  className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-all active:scale-95 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2"
                 >
                   Save
                 </button>
                 <button
                   onClick={handleCancelNote}
-                  className="px-4 py-2 border-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2"
+                  className="px-4 py-2 border-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-700 transition-all active:scale-95 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2"
                 >
                   Cancel
                 </button>
@@ -601,7 +601,7 @@ function ResourceCard({
               <div className="group relative">
                 <button
                   onClick={() => setShowNoteInput(!showNoteInput)}
-                  className={`p-3 rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 ${
+                  className={`p-3 rounded-lg transition-all active:scale-95 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 ${
                     note 
                       ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400 hover:bg-yellow-200 dark:hover:bg-yellow-900/50' 
                       : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
@@ -620,14 +620,19 @@ function ResourceCard({
                 <div className="group relative">
                   <button
                     onClick={() => onToggleFavorite(resource.id)}
-                    className={`p-3 rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 ${
+                    className={`p-3 rounded-lg transition-all active:scale-95 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 ${
                       isFavorited 
                         ? 'bg-red-100 dark:bg-red-900/30 text-red-500 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50' 
                         : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
                     }`}
                     aria-label={isFavorited ? 'Remove from Favorites' : 'Add to Favorites'}
                   >
-                    <Heart size={20} fill={isFavorited ? 'currentColor' : 'none'} strokeWidth={isFavorited ? 0 : 2} />
+                    <Heart 
+                      size={20} 
+                      fill={isFavorited ? 'currentColor' : 'none'} 
+                      strokeWidth={isFavorited ? 0 : 2}
+                      className="transition-transform duration-200 hover:scale-110"
+                    />
                   </button>
                   <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1.5 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded shadow-lg whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 pointer-events-none z-50">
                     {isFavorited ? 'Remove this resource from your Favorites list' : 'Save this resource to your Favorites list'}
@@ -640,14 +645,14 @@ function ResourceCard({
                 <div className="group relative">
                 <button
                   onClick={() => onToggleUpcomingCase(resource.id)}
-                  className={`p-3 rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 ${
+                  className={`p-3 rounded-lg transition-all active:scale-95 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 ${
                     isUpcomingCase 
                       ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900/50' 
                       : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
                   }`}
                   aria-label={isUpcomingCase ? 'Remove from Upcoming Cases' : 'Add to Upcoming Cases'}
                 >
-                  <Plus size={20} className={isUpcomingCase ? 'rotate-45' : ''} strokeWidth={2} />
+                  <Plus size={20} className={`transition-transform ${isUpcomingCase ? 'rotate-45' : ''}`} strokeWidth={2} />
                 </button>
                 <span className="absolute bottom-full right-0 mb-2 px-2 py-1.5 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded shadow-lg whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 pointer-events-none z-50">
                   {isUpcomingCase ? 'Remove this resource from your Upcoming Cases list' : 'Add this resource to your Upcoming Cases for a future procedure'}
@@ -661,7 +666,7 @@ function ResourceCard({
                   <button
                     type="button"
                     onClick={() => onContactRep(resource)}
-                    className="p-3 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-all focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2"
+                    className="p-3 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-all active:scale-95 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2"
                     aria-label="Contact company representative"
                   >
                     <MessageSquare size={20} />
@@ -677,7 +682,7 @@ function ResourceCard({
                 <button
                   type="button"
                   onClick={() => onReportResource?.(resource)}
-                  className="p-3 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 hover:bg-amber-50 hover:text-amber-600 dark:hover:bg-amber-900/20 dark:hover:text-amber-400 transition-all focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2"
+                  className="p-3 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 hover:bg-amber-50 hover:text-amber-600 dark:hover:bg-amber-900/20 dark:hover:text-amber-400 transition-all active:scale-95 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2"
                   aria-label="Report link"
                 >
                   <Flag size={20} />

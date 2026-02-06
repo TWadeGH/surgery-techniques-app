@@ -103,27 +103,27 @@ function ToastItem({ toast, onRemove }) {
   const config = {
     success: {
       icon: CheckCircle,
-      bgColor: 'bg-green-50 border-green-200',
-      textColor: 'text-green-800',
-      iconColor: 'text-green-600',
+      bgColor: 'bg-green-50 dark:bg-green-900/30 border-green-200 dark:border-green-800',
+      textColor: 'text-green-800 dark:text-green-300',
+      iconColor: 'text-green-600 dark:text-green-400',
     },
     error: {
       icon: AlertCircle,
-      bgColor: 'bg-red-50 border-red-200',
-      textColor: 'text-red-800',
-      iconColor: 'text-red-600',
+      bgColor: 'bg-red-50 dark:bg-red-900/30 border-red-200 dark:border-red-800',
+      textColor: 'text-red-800 dark:text-red-300',
+      iconColor: 'text-red-600 dark:text-red-400',
     },
     warning: {
       icon: AlertTriangle,
-      bgColor: 'bg-yellow-50 border-yellow-200',
-      textColor: 'text-yellow-800',
-      iconColor: 'text-yellow-600',
+      bgColor: 'bg-yellow-50 dark:bg-yellow-900/30 border-yellow-200 dark:border-yellow-800',
+      textColor: 'text-yellow-800 dark:text-yellow-300',
+      iconColor: 'text-yellow-600 dark:text-yellow-400',
     },
     info: {
       icon: Info,
-      bgColor: 'bg-blue-50 border-blue-200',
-      textColor: 'text-blue-800',
-      iconColor: 'text-blue-600',
+      bgColor: 'bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-800',
+      textColor: 'text-blue-800 dark:text-blue-300',
+      iconColor: 'text-blue-600 dark:text-blue-400',
     },
   };
 
@@ -139,7 +139,7 @@ function ToastItem({ toast, onRemove }) {
       <p className="flex-1 text-sm font-medium">{message}</p>
       <button
         onClick={() => onRemove(toast.id)}
-        className="flex-shrink-0 text-gray-400 hover:text-gray-600 transition-colors"
+        className="flex-shrink-0 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 transition-colors active:scale-95 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-1 rounded"
         aria-label="Close notification"
       >
         <X size={16} />
