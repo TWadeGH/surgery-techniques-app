@@ -435,43 +435,21 @@ export default function CategoryManagementModal({ currentUser, onClose }) {
                 )}
                 
                 {/* Category */}
-                <div className="relative">
-                  {/* Up/Down Arrow Buttons */}
-                  <div className="absolute -left-10 top-1/2 -translate-y-1/2 flex flex-col gap-1 z-10">
-                    <button
-                      onClick={() => handleMoveCategory(index, 'up')}
-                      disabled={index === 0}
-                      className="p-1.5 bg-white border-2 border-gray-300 rounded-lg hover:border-purple-500 hover:bg-purple-50 transition-all disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:border-gray-300 disabled:hover:bg-white shadow-md"
-                      title="Move up"
-                      aria-label="Move category up"
-                    >
-                      <ChevronUp size={16} className="text-gray-600" />
-                    </button>
-                    <button
-                      onClick={() => handleMoveCategory(index, 'down')}
-                      disabled={index === categories.length - 1}
-                      className="p-1.5 bg-white border-2 border-gray-300 rounded-lg hover:border-purple-500 hover:bg-purple-50 transition-all disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:border-gray-300 disabled:hover:bg-white shadow-md"
-                      title="Move down"
-                      aria-label="Move category down"
-                    >
-                      <ChevronDown size={16} className="text-gray-600" />
-                    </button>
-                  </div>
-                  <div
-                    draggable
-                    onDragStart={(e) => handleDragStart(e, index)}
-                    onDragOver={(e) => handleDragOver(e, index)}
-                    onDragLeave={handleDragLeave}
-                    onDrop={(e) => handleDrop(e, index)}
-                    className={`flex items-center gap-3 p-4 bg-white dark:bg-gray-800 rounded-xl border-2 transition-all ${
-                      draggedItem === index 
-                        ? 'opacity-50 border-purple-400 scale-95' 
-                        : (dropIndex === index && dropPosition === 'above') || (dropIndex === index + 1 && dropPosition === 'below')
-                        ? 'border-purple-400 shadow-md'
-                        : 'border-gray-200 dark:border-gray-700 hover:border-purple-300 dark:hover:border-purple-600'
-                    }`}
-                  >
-                    <GripVertical size={20} className="text-gray-400 dark:text-gray-500 cursor-move" />
+                <div
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, index)}
+                  onDragOver={(e) => handleDragOver(e, index)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDrop(e, index)}
+                  className={`flex items-center gap-3 p-4 bg-white dark:bg-gray-800 rounded-xl border-2 transition-all ${
+                    draggedItem === index 
+                      ? 'opacity-50 border-purple-400 scale-95' 
+                      : (dropIndex === index && dropPosition === 'above') || (dropIndex === index + 1 && dropPosition === 'below')
+                      ? 'border-purple-400 shadow-md'
+                      : 'border-gray-200 dark:border-gray-700 hover:border-purple-300 dark:hover:border-purple-600'
+                  }`}
+                >
+                  <GripVertical size={20} className="text-gray-400 dark:text-gray-500 cursor-move" />
                   
                   {editingId === category.id ? (
                     <input
@@ -494,7 +472,34 @@ export default function CategoryManagementModal({ currentUser, onClose }) {
                     <span className="flex-1 text-gray-900 dark:text-white font-medium">{category.name}</span>
                   )}
 
-                  <div className="flex gap-2">
+                  <div className="flex items-center gap-2">
+                    {/* Up/Down Arrow Buttons */}
+                    <div className="flex gap-1">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleMoveCategory(index, 'up');
+                        }}
+                        disabled={index === 0}
+                        className="p-1 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded hover:bg-purple-50 hover:border-purple-500 dark:hover:bg-purple-900/30 transition-all disabled:opacity-20 disabled:cursor-not-allowed disabled:hover:bg-gray-100 disabled:hover:border-gray-300 dark:disabled:hover:bg-gray-700"
+                        title="Move up"
+                        aria-label="Move category up"
+                      >
+                        <ChevronUp size={14} className="text-gray-600 dark:text-gray-400" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleMoveCategory(index, 'down');
+                        }}
+                        disabled={index === categories.length - 1}
+                        className="p-1 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded hover:bg-purple-50 hover:border-purple-500 dark:hover:bg-purple-900/30 transition-all disabled:opacity-20 disabled:cursor-not-allowed disabled:hover:bg-gray-100 disabled:hover:border-gray-300 dark:disabled:hover:bg-gray-700"
+                        title="Move down"
+                        aria-label="Move category down"
+                      >
+                        <ChevronDown size={14} className="text-gray-600 dark:text-gray-400" />
+                      </button>
+                    </div>
                     <button
                       onClick={() => {
                         setExpandedCategories({
@@ -531,7 +536,6 @@ export default function CategoryManagementModal({ currentUser, onClose }) {
                     >
                       <Trash2 size={18} />
                     </button>
-                  </div>
                   </div>
                 </div>
 

@@ -6,7 +6,7 @@
  */
 
 import React, { memo, useMemo, useCallback } from 'react';
-import { Video, FileText, Link, Edit, Trash2, Sparkles, ArrowRight, GripVertical } from 'lucide-react';
+import { Video, FileText, Link, Edit, Trash2, Sparkles, ArrowRight, GripVertical, ChevronUp, ChevronDown } from 'lucide-react';
 import { RESOURCE_TYPES } from '../../utils/constants';
 
 /**
@@ -22,6 +22,8 @@ import { RESOURCE_TYPES } from '../../utils/constants';
  * @param {Function} props.onDragEnd - Callback for drag end
  * @param {Function} props.onDrop - Callback for drop
  * @param {boolean} props.isDragging - Whether this resource is being dragged
+ * @param {Function} props.onMoveUp - Callback to move resource up (null if disabled)
+ * @param {Function} props.onMoveDown - Callback to move resource down (null if disabled)
  */
 function AdminResourceCard({ 
   resource, 
@@ -32,7 +34,9 @@ function AdminResourceCard({
   onDragOver, 
   onDragEnd,
   onDrop, 
-  isDragging 
+  isDragging,
+  onMoveUp,
+  onMoveDown
 }) {
   // Memoize type-related functions
   const typeIcon = useMemo(() => {
@@ -109,12 +113,43 @@ function AdminResourceCard({
       } ${isDragging ? 'opacity-50' : ''}`}
       style={{ animationDelay: `${index * 0.05}s` }}
     >
-      {onDragStart && (
-        <div className="flex items-center gap-2 mb-2 text-gray-400 text-xs select-none pointer-events-none">
-          <GripVertical size={16} className="cursor-grab" />
-          <span>Drag to reorder</span>
-        </div>
-      )}
+      <div className="flex items-center justify-between mb-2">
+        {onDragStart && (
+          <div className="flex items-center gap-2 text-gray-400 text-xs select-none pointer-events-none">
+            <GripVertical size={16} className="cursor-grab" />
+            <span>Drag to reorder</span>
+          </div>
+        )}
+        {/* Up/Down Arrow Buttons - Top Right Corner */}
+        {(onMoveUp || onMoveDown) && (
+          <div className="flex gap-1">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onMoveUp?.();
+              }}
+              disabled={!onMoveUp}
+              className="p-1 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded hover:bg-purple-50 hover:border-purple-500 dark:hover:bg-purple-900/30 transition-all disabled:opacity-20 disabled:cursor-not-allowed disabled:hover:bg-gray-100 disabled:hover:border-gray-300 dark:disabled:hover:bg-gray-700"
+              title="Move up"
+              aria-label="Move resource up"
+            >
+              <ChevronUp size={14} className="text-gray-600 dark:text-gray-400" />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onMoveDown?.();
+              }}
+              disabled={!onMoveDown}
+              className="p-1 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded hover:bg-purple-50 hover:border-purple-500 dark:hover:bg-purple-900/30 transition-all disabled:opacity-20 disabled:cursor-not-allowed disabled:hover:bg-gray-100 disabled:hover:border-gray-300 dark:disabled:hover:bg-gray-700"
+              title="Move down"
+              aria-label="Move resource down"
+            >
+              <ChevronDown size={14} className="text-gray-600 dark:text-gray-400" />
+            </button>
+          </div>
+        )}
+      </div>
       <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
         {/* Image */}
         <div className="w-16 h-16 sm:w-24 sm:h-24 flex-shrink-0 rounded-lg overflow-hidden bg-gray-100 mx-auto sm:mx-0">

@@ -389,40 +389,19 @@ function ResourcesManagement({
                     {showDropIndicatorAbove && (
                       <div className="h-2 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full shadow-lg animate-pulse mb-3 mx-4" />
                     )}
-                    <div className="relative">
-                      {/* Up/Down Arrow Buttons */}
-                      <div className="absolute -left-10 top-1/2 -translate-y-1/2 flex flex-col gap-1 z-10">
-                        <button
-                          onClick={() => handleMoveResource(resource.id, 'up')}
-                          disabled={index === 0}
-                          className="p-1.5 sm:p-2 bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600 rounded-lg hover:border-purple-500 hover:bg-purple-50 dark:hover:bg-purple-900/30 transition-all disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:border-gray-300 disabled:hover:bg-white dark:disabled:hover:bg-gray-800 shadow-md"
-                          title="Move up"
-                          aria-label="Move resource up"
-                        >
-                          <ChevronUp size={16} className="text-gray-600 dark:text-gray-400" />
-                        </button>
-                        <button
-                          onClick={() => handleMoveResource(resource.id, 'down')}
-                          disabled={index === filteredByCategory.length - 1}
-                          className="p-1.5 sm:p-2 bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600 rounded-lg hover:border-purple-500 hover:bg-purple-50 dark:hover:bg-purple-900/30 transition-all disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:border-gray-300 disabled:hover:bg-white dark:disabled:hover:bg-gray-800 shadow-md"
-                          title="Move down"
-                          aria-label="Move resource down"
-                        >
-                          <ChevronDown size={16} className="text-gray-600 dark:text-gray-400" />
-                        </button>
-                      </div>
-                      <AdminResourceCard
-                        resource={resource}
-                        onEdit={onEditResource}
-                        onDelete={onDeleteResource}
-                        index={index}
-                        onDragStart={handleDragStart}
-                        onDragOver={handleDragOver}
-                        onDragEnd={handleDragEnd}
-                        onDrop={handleDrop}
-                        isDragging={draggedResourceId === resource.id}
-                      />
-                    </div>
+                    <AdminResourceCard
+                      resource={resource}
+                      onEdit={onEditResource}
+                      onDelete={onDeleteResource}
+                      index={index}
+                      onDragStart={handleDragStart}
+                      onDragOver={handleDragOver}
+                      onDragEnd={handleDragEnd}
+                      onDrop={handleDrop}
+                      isDragging={draggedResourceId === resource.id}
+                      onMoveUp={index > 0 ? () => handleMoveResource(resource.id, 'up') : null}
+                      onMoveDown={index < filteredByCategory.length - 1 ? () => handleMoveResource(resource.id, 'down') : null}
+                    />
                     {showDropIndicatorBelow && (
                       <div className="h-2 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full shadow-lg animate-pulse mt-3 mx-4" />
                     )}
