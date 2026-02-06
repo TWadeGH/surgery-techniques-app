@@ -1563,6 +1563,9 @@ function SurgicalTechniquesApp() {
             onDismissReport={handleDismissReport}
             onMarkReviewedReport={handleMarkReviewedReport}
             availableSubspecialties={availableSubspecialties}
+            categories={categories}
+            selectedCategoryId={selectedCategoryId}
+            onCategorySelect={setSelectedCategoryId}
           />
         ) : (
           <div className="text-center py-12">
