@@ -19,3 +19,4 @@ export { default as ErrorBoundary, ComponentErrorBoundary } from './ErrorBoundar
 export { default as Input, Textarea, Select } from './Input';
 export { ToastProvider, useToast } from './Toast';
 export { default as ConfirmDialog } from './ConfirmDialog';
+export { default as CompanyProductSelector } from './CompanyProductSelector';

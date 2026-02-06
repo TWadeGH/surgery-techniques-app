@@ -24,6 +24,53 @@ import { initAnalyticsSession, endAnalyticsSession } from '../lib/analytics';
 import { ERROR_MESSAGES } from '../utils/constants';
 import { includeInAnalytics } from '../utils/helpers';
 
+/**
+ * Check if a user email matches any company contact
+ * @param {string} email - User's email
+ * @returns {Promise<{isRep: boolean, repCompanies: Array}>}
+ */
+async function checkRepAccess(email) {
+  if (!email) return { isRep: false, repCompanies: [] };
+
+  try {
+    const { data, error } = await supabase
+      .from('subspecialty_company_contacts')
+      .select(`
+        subspecialty_company_id,
+        subspecialty_companies(
+          id,
+          company_name,
+          subspecialty_id,
+          subspecialties(name)
+        )
+      `)
+      .ilike('email', email);
+
+    if (error) {
+      // Table might not exist yet - silently fail
+      console.log('Rep access check skipped (table may not exist):', error.code);
+      return { isRep: false, repCompanies: [] };
+    }
+
+    const repCompanies = (data || [])
+      .filter(item => item.subspecialty_companies)
+      .map(item => ({
+        id: item.subspecialty_companies.id,
+        companyName: item.subspecialty_companies.company_name,
+        subspecialtyId: item.subspecialty_companies.subspecialty_id,
+        subspecialtyName: item.subspecialty_companies.subspecialties?.name
+      }));
+
+    return {
+      isRep: repCompanies.length > 0,
+      repCompanies
+    };
+  } catch (err) {
+    console.warn('Error checking rep access:', err);
+    return { isRep: false, repCompanies: [] };
+  }
+}
+
 // Global flag to prevent duplicate auth subscriptions across all instances
 // This is necessary because React Fast Refresh can cause multiple hook instances
 let AUTH_SUBSCRIPTION_ACTIVE = false;
@@ -33,7 +80,9 @@ export function useAuth() {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  
+  const [isRep, setIsRep] = useState(false);
+  const [repCompanies, setRepCompanies] = useState([]);
+
   // Refs for cleanup and race condition prevention
   const isMounted = useRef(true);
   const authSubscription = useRef(null);
@@ -256,39 +305,6 @@ export function useAuth() {
         console.warn('No email found in session or profile');
       }
       
-      // Check if user is a company rep (email matches any company contact)
-      let isRep = false;
-      let repCompanies = [];
-
-      if (userEmail) {
-        try {
-          const { data: repData } = await supabase
-            .from('subspecialty_company_contacts')
-            .select(`
-              id,
-              subspecialty_company_id,
-              subspecialty_companies!inner(
-                id,
-                company_name,
-                subspecialty_id
-              )
-            `)
-            .eq('email', userEmail);
-
-          if (repData && repData.length > 0) {
-            isRep = true;
-            repCompanies = repData.map(rd => ({
-              id: rd.subspecialty_companies.id,
-              name: rd.subspecialty_companies.company_name,
-              subspecialtyId: rd.subspecialty_companies.subspecialty_id,
-            }));
-            console.log('👔 User is a company rep for', repCompanies.length, 'companies');
-          }
-        } catch (repCheckError) {
-          console.warn('Rep access check failed (non-blocking):', repCheckError);
-        }
-      }
-
       // Transform profile data to camelCase for consistency
       const transformedProfile = {
         id: profile.id,
@@ -301,10 +317,8 @@ export function useAuth() {
         updatedAt: profile.updated_at,
         onboardingComplete: profile.onboarding_complete,
         termsAcceptedAt: profile.terms_accepted_at ?? null,
-        isRep,
-        repCompanies,
       };
-
+      
       // Debug: Log profile data
       console.log('👤 User Profile Loaded:', {
         userId: profile.id?.substring(0, 8) + '...',
@@ -340,6 +354,18 @@ export function useAuth() {
         }
       } catch (analyticsError) {
         console.warn('Analytics initialization failed (non-blocking):', analyticsError);
+      }
+
+      // Check if user is a company rep (non-blocking)
+      try {
+        const repAccessResult = await checkRepAccess(userEmail);
+        setIsRep(repAccessResult.isRep);
+        setRepCompanies(repAccessResult.repCompanies);
+        console.log('Rep access check:', repAccessResult.isRep ? 'User is a rep' : 'User is not a rep');
+      } catch (repError) {
+        console.warn('Rep access check failed (non-blocking):', repError);
+        setIsRep(false);
+        setRepCompanies([]);
       }
     } catch (err) {
         console.error('Error loading profile:', err);
@@ -785,7 +811,9 @@ export function useAuth() {
     loading,
     error,
     isAuthenticated: !!currentUser,
-    
+    isRep,
+    repCompanies,
+
     // Methods
     signIn,
     signUp,

@@ -9,7 +9,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Upload, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { processResourceImage, createImagePreview, validateImageFile } from '../../lib/imageUtils';
-import { useToast } from '../common';
+import { useToast, CompanyProductSelector } from '../common';
 
 /**
  * EditResourceModal Component
@@ -40,7 +40,10 @@ export default function EditResourceModal({ resource, currentUser, onSubmit, onC
     description: resource.description || '',
     keywords: resource.keywords || '',
     duration_seconds: resource.duration_seconds || null,
-    implant_info_url: resource.implant_info_url || ''
+    implant_info_url: resource.implant_info_url || '',
+    company_name: resource.company_name || '',
+    product_name: resource.product_name || '',
+    year_of_publication: resource.year_of_publication || ''
   });
   const [durationHours, setDurationHours] = useState(initialDuration.hours);
   const [durationMinutes, setDurationMinutes] = useState(initialDuration.minutes);
@@ -743,6 +746,33 @@ export default function EditResourceModal({ resource, currentUser, onSubmit, onC
                 placeholder="Enter key words separated by commas (e.g., bunion, MIS, osteotomy)"
               />
               <p className="text-xs text-gray-500 mt-1">Optional: Add key words to help with searchability</p>
+            </div>
+
+            {/* Company & Product Selection */}
+            <CompanyProductSelector
+              companyName={formData.company_name}
+              productName={formData.product_name}
+              onCompanyChange={(value) => setFormData({ ...formData, company_name: value })}
+              onProductChange={(value) => setFormData({ ...formData, product_name: value })}
+              subspecialtyId={selectedSubspecialty}
+            />
+
+            {/* Year of Publication */}
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Year of Publication
+                <span className="text-xs font-normal text-gray-500 ml-2">(Optional)</span>
+              </label>
+              <input
+                type="number"
+                min="1900"
+                max="2100"
+                value={formData.year_of_publication || ''}
+                onChange={(e) => setFormData({ ...formData, year_of_publication: e.target.value ? parseInt(e.target.value) : '' })}
+                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors"
+                placeholder="e.g., 2024"
+              />
+              <p className="text-xs text-gray-500 mt-1">Year this resource was published or created</p>
             </div>
 
             <div className="flex justify-end gap-3 pt-4 border-t-2 border-gray-100">

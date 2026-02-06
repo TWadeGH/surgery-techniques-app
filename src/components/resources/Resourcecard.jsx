@@ -21,7 +21,7 @@ import {
   ArrowRight,
   X,
   Flag,
-  Package
+  MessageSquare
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { trackResourceCoview, trackRatingEvent, trackResourceLinkClick } from '../../lib/analytics';
@@ -102,10 +102,19 @@ function canUserRate(user) {
   
   const userType = user.userType.toLowerCase().trim();
   
-  // Security: Allowlist of valid user types (all 4 onboarding options can rate)
-  const ALLOWED_USER_TYPES = ['surgeon', 'attending', 'trainee', 'resident', 'fellow', 'industry', 'student', 'other'];
+  // Security: Allowlist of valid user types (all onboarding options can rate)
+  const ALLOWED_USER_TYPES = ['surgeon', 'attending', 'trainee', 'resident', 'fellow', 'app', 'industry', 'student', 'other'];
   
   return ALLOWED_USER_TYPES.includes(userType);
+}
+
+/**
+ * Check if user can favorite resources
+ * @param {Object} user - User object
+ * @returns {boolean}
+ */
+function canUserFavorite(user) {
+  return !!user?.id;
 }
 
 /** Character limit for description preview; longer descriptions show "... read more" */
@@ -157,18 +166,22 @@ function getSourceLine(resource) {
  * @param {number} props.index - Index for animation delay
  * @param {Object} props.currentUser - Current user object
  * @param {Function} props.onReportResource - Callback to open report modal for this resource
+ * @param {Function} props.onContactRep - Callback to contact company rep
+ * @param {boolean} props.companyIsActive - Whether the resource's company has active contacts
  */
 function ResourceCard({
-  resource, 
-  isFavorited, 
-  note, 
-  onToggleFavorite, 
-  onUpdateNote, 
-  onToggleUpcomingCase, 
-  isUpcomingCase, 
-  index, 
+  resource,
+  isFavorited,
+  note,
+  onToggleFavorite,
+  onUpdateNote,
+  onToggleUpcomingCase,
+  isUpcomingCase,
+  index,
   currentUser,
-  onReportResource
+  onReportResource,
+  onContactRep,
+  companyIsActive = false
 }) {
   const toast = useToast();
   const [showNoteInput, setShowNoteInput] = useState(false);
@@ -327,8 +340,7 @@ function ResourceCard({
   }
 
   const canRate = canUserRate(currentUser);
-  // Allow favorites for surgeons (surgeon/attending) and trainees (trainee/resident/fellow)
-  const canFavorite = canUserRate(currentUser); // Same logic as canRate
+  const canFavorite = canUserFavorite(currentUser); // All logged-in users can favorite
   const safeResourceHref = getSafeResourceHref(resource?.url);
 
   const handleViewExternalClick = () => setShowExternalLinkModal(true);
@@ -369,6 +381,9 @@ function ResourceCard({
         <div className="flex-1">
           {/* Badges */}
           <div className="flex gap-1.5 mb-1.5 flex-wrap">
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg text-gray-600 dark:text-gray-300 text-xs font-medium">
+              Third-party content
+            </div>
             {resource.is_sponsored && (
               <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-800 rounded-lg text-yellow-700 dark:text-yellow-300 text-xs font-medium">
                 <Sparkles size={12} />
@@ -454,29 +469,17 @@ function ResourceCard({
           {/* View on [Source] button — opens confirmation modal then external link */}
           {safeResourceHref ? (
             <>
-              <div className="flex flex-wrap gap-2 mb-2">
-                <button
-                  type="button"
-                  onClick={handleViewExternalClick}
-                  className="inline-flex items-center gap-2 px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-colors"
-                >
-                  <ArrowRight size={14} />
-                  {getViewOnLabel(resource)}
-                </button>
-                {/* View Implant Info button - only shows if implant_info_url exists */}
-                {resource.implant_info_url && (
-                  <a
-                    href={resource.implant_info_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors"
-                  >
-                    <Package size={14} />
-                    View Implant Info
-                  </a>
-                )}
-              </div>
-              {/* Disclaimer moved to bottom bar next to icons */}
+              <button
+                type="button"
+                onClick={handleViewExternalClick}
+                className="inline-flex items-center gap-2 px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-colors mb-2"
+              >
+                <ArrowRight size={14} />
+                {getViewOnLabel(resource)}
+              </button>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                {EXTERNAL_LINK_DISCLOSURE.CARD_DISCLAIMER} {EXTERNAL_LINK_DISCLOSURE.COPYRIGHT_REPORT}
+              </p>
             </>
           ) : resource?.url ? (
             <span className="text-gray-500 dark:text-gray-400 text-xs break-all flex items-center gap-1 mb-2">
@@ -570,14 +573,9 @@ function ResourceCard({
             </div>
           )}
 
-          {/* Bottom bar: disclaimer + action buttons */}
-          <div className="flex items-end justify-between gap-3 pt-4 border-t border-gray-100 dark:border-gray-700 overflow-visible">
-            {safeResourceHref ? (
-              <p className="text-[10px] leading-tight text-gray-400 dark:text-gray-500 max-w-[260px] flex-shrink">
-                {EXTERNAL_LINK_DISCLOSURE.CARD_DISCLAIMER}
-              </p>
-            ) : <div />}
-            <div className="flex gap-2 flex-shrink-0 overflow-visible">
+          {/* Action Buttons — overflow-visible so tooltips show */}
+          <div className="flex items-center justify-end pt-4 border-t border-gray-100 dark:border-gray-700 overflow-visible">
+            <div className="flex gap-2 flex-wrap overflow-visible">
               {/* Note Button */}
               <div className="group relative">
                 <button
@@ -596,47 +594,60 @@ function ResourceCard({
                 </span>
               </div>
 
-              {/* Favorite Button - Show for all users, but only allow interaction for surgeons/trainees */}
-              {/* Security: Client-side disabled state + server-side RLS enforces permissions */}
+              {/* Favorite Button - Available to all logged-in users */}
               {onToggleFavorite && (
                 <div className="group relative">
                   <button
-                    onClick={() => canFavorite && onToggleFavorite && onToggleFavorite(resource.id)}
-                    disabled={!canFavorite}
+                    onClick={() => onToggleFavorite(resource.id)}
                     className={`p-2.5 rounded-lg transition-all ${
                       isFavorited 
                         ? 'bg-red-100 dark:bg-red-900/30 text-red-500 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50' 
                         : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                    } ${!canFavorite ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    aria-label={canFavorite ? (isFavorited ? 'Remove from Favorites' : 'Add to Favorites') : 'Favorites not available'}
+                    }`}
+                    aria-label={isFavorited ? 'Remove from Favorites' : 'Add to Favorites'}
                   >
                     <Heart size={18} fill={isFavorited ? 'currentColor' : 'none'} strokeWidth={isFavorited ? 0 : 2} />
                   </button>
                   <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1.5 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded shadow-lg whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 pointer-events-none z-50">
-                    {canFavorite ? (isFavorited ? 'Remove this resource from your Favorites list' : 'Save this resource to your Favorites list') : 'Favorites available for Surgeons and Trainees'}
+                    {isFavorited ? 'Remove this resource from your Favorites list' : 'Save this resource to your Favorites list'}
                   </span>
                 </div>
               )}
 
-              {/* Upcoming Case Button - Show for all users, but only allow interaction for surgeons/trainees */}
-              {/* Security: Client-side disabled state + server-side RLS enforces permissions */}
+              {/* Upcoming Case Button - Available to all logged-in users */}
               {onToggleUpcomingCase && (
                 <div className="group relative">
                 <button
-                  onClick={() => canFavorite && onToggleUpcomingCase(resource.id)}
-                  disabled={!canFavorite}
+                  onClick={() => onToggleUpcomingCase(resource.id)}
                   className={`p-2.5 rounded-lg transition-all ${
                     isUpcomingCase 
                       ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900/50' 
                       : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-                  } ${!canFavorite ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  aria-label={canFavorite ? (isUpcomingCase ? 'Remove from Upcoming Cases' : 'Add to Upcoming Cases') : 'Upcoming Cases not available'}
+                  }`}
+                  aria-label={isUpcomingCase ? 'Remove from Upcoming Cases' : 'Add to Upcoming Cases'}
                 >
                   <Plus size={18} className={isUpcomingCase ? 'rotate-45' : ''} strokeWidth={2} />
                 </button>
-                <span className="absolute bottom-full right-0 mb-2 px-2 py-1.5 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded shadow-lg max-w-48 text-center opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 pointer-events-none z-50">
-                  {canFavorite ? (isUpcomingCase ? 'Remove from Upcoming Cases' : 'Add to Upcoming Cases') : 'Upcoming Cases available for Surgeons and Trainees'}
+                <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1.5 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded shadow-lg whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 pointer-events-none z-50">
+                  {isUpcomingCase ? 'Remove this resource from your Upcoming Cases list' : 'Add this resource to your Upcoming Cases for a future procedure'}
                 </span>
+                </div>
+              )}
+
+              {/* Contact Rep Button - Shows when resource has product_name AND company is active */}
+              {resource.product_name && resource.company_name && companyIsActive && onContactRep && (
+                <div className="group relative">
+                  <button
+                    type="button"
+                    onClick={() => onContactRep(resource)}
+                    className="p-2.5 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-all"
+                    aria-label="Contact company representative"
+                  >
+                    <MessageSquare size={18} />
+                  </button>
+                  <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1.5 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded shadow-lg whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 pointer-events-none z-50">
+                    Contact {resource.company_name} rep about {resource.product_name}
+                  </span>
                 </div>
               )}
 
@@ -650,8 +661,8 @@ function ResourceCard({
                 >
                   <Flag size={18} />
                 </button>
-                <span className="absolute bottom-full right-0 mb-2 px-2 py-1.5 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded shadow-lg max-w-48 text-center opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 pointer-events-none z-50">
-                  Report a problem or copyright concern
+                <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1.5 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded shadow-lg whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 pointer-events-none z-50">
+                  Report this link — report a problem or copyright concern
                 </span>
               </div>
             </div>
@@ -678,5 +689,7 @@ export default memo(ResourceCard, (prevProps, nextProps) => (
   prevProps.isUpcomingCase === nextProps.isUpcomingCase &&
   prevProps.index === nextProps.index &&
   prevProps.currentUser?.id === nextProps.currentUser?.id &&
-  prevProps.onReportResource === nextProps.onReportResource
+  prevProps.onReportResource === nextProps.onReportResource &&
+  prevProps.onContactRep === nextProps.onContactRep &&
+  prevProps.companyIsActive === nextProps.companyIsActive
 ));
