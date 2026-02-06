@@ -79,7 +79,7 @@ function UpcomingCasesButton({ showUpcomingCases, upcomingCasesCount, onClick, d
       <span className="hidden sm:inline">Upcoming Cases</span>
       <span className="sm:hidden">Cases</span>
       {upcomingCasesCount > 0 && (
-        <span className="bg-purple-600 text-white text-xs px-2 py-0.5 rounded-full">
+        <span className="flex items-center justify-center w-5 h-5 bg-pink-500 text-white text-xs font-bold rounded-full shadow-md">
           {upcomingCasesCount}
         </span>
       )}
@@ -141,9 +141,15 @@ export default function Header({
   }
 
   return (
-    <header className="bg-purple-600">
+    <header className="gradient-bg relative overflow-hidden">
+      {/* Animated Background */}
+      <div className="absolute inset-0 opacity-10" aria-hidden="true">
+        <div className="absolute top-0 left-1/4 w-96 h-96 bg-pink-500 rounded-full blur-3xl"></div>
+        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-purple-500 rounded-full blur-3xl"></div>
+      </div>
+      
       {/* Header Content */}
-      <div className="max-w-7xl mx-auto px-6 py-6">
+      <div className="relative max-w-7xl mx-auto px-6 py-6">
         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
           {/* Logo & Title */}
           <div>
