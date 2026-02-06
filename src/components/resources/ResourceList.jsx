@@ -10,6 +10,57 @@ import { FileText } from 'lucide-react';
 import ResourceCard from './Resourcecard';
 
 /**
+ * Loading Skeleton Component
+ * Displayed while resources are loading
+ */
+const LoadingSkeleton = memo(function LoadingSkeleton() {
+  return (
+    <div className="space-y-2">
+      {[1, 2, 3].map((i) => (
+        <div key={i} className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-md border border-gray-200 dark:border-gray-700 animate-pulse">
+          <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+            {/* Image skeleton */}
+            <div className="w-20 h-20 sm:w-24 sm:h-24 flex-shrink-0 rounded-lg bg-gray-200 dark:bg-gray-700 mx-auto sm:mx-0"></div>
+            
+            {/* Content skeleton */}
+            <div className="flex-1 space-y-2">
+              {/* Badges */}
+              <div className="flex gap-2">
+                <div className="h-6 w-24 bg-gray-200 dark:bg-gray-700 rounded-full"></div>
+                <div className="h-6 w-32 bg-gray-200 dark:bg-gray-700 rounded-full"></div>
+              </div>
+              
+              {/* Title */}
+              <div className="h-7 bg-gray-200 dark:bg-gray-700 rounded w-3/4"></div>
+              
+              {/* Description */}
+              <div className="space-y-1">
+                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded"></div>
+                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-5/6"></div>
+              </div>
+              
+              {/* Source line */}
+              <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/2"></div>
+              
+              {/* Button */}
+              <div className="h-9 bg-gray-200 dark:bg-gray-700 rounded-lg w-40"></div>
+              
+              {/* Action buttons */}
+              <div className="flex justify-end gap-2 pt-4 border-t border-gray-100 dark:border-gray-700">
+                <div className="w-11 h-11 bg-gray-200 dark:bg-gray-700 rounded-lg"></div>
+                <div className="w-11 h-11 bg-gray-200 dark:bg-gray-700 rounded-lg"></div>
+                <div className="w-11 h-11 bg-gray-200 dark:bg-gray-700 rounded-lg"></div>
+                <div className="w-11 h-11 bg-gray-200 dark:bg-gray-700 rounded-lg"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+});
+
+/**
  * Empty State Component
  * Displayed when no resources are found
  * 
@@ -18,10 +69,10 @@ import ResourceCard from './Resourcecard';
  */
 const EmptyState = memo(function EmptyState({ showFavoritesOnly }) {
   return (
-    <div className="glass rounded-2xl p-16 text-center shadow-lg">
+    <div className="bg-white dark:bg-gray-800 rounded-xl p-12 sm:p-16 text-center shadow-md border border-gray-200 dark:border-gray-700">
       <div className="max-w-md mx-auto">
-        <div className="w-20 h-20 mx-auto mb-6 bg-gradient-to-br from-purple-100 to-pink-100 rounded-full flex items-center justify-center">
-          <FileText size={32} className="text-purple-600" />
+        <div className="w-20 h-20 mx-auto mb-6 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center">
+          <FileText size={32} className="text-purple-600 dark:text-purple-400" />
         </div>
         <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
           {showFavoritesOnly ? 'No favorites yet' : 'No resources found'}
@@ -52,6 +103,7 @@ const EmptyState = memo(function EmptyState({ showFavoritesOnly }) {
  * @param {Object} props.currentUser - Current user object
  * @param {boolean} props.showFavoritesOnly - Whether showing favorites only
  * @param {Function} props.onReportResource - Callback to open report modal for a resource
+ * @param {boolean} props.loading - Whether resources are loading
  */
 function ResourceList({
   resources,
@@ -66,7 +118,13 @@ function ResourceList({
   currentUser,
   showFavoritesOnly = false,
   onReportResource,
+  loading = false,
 }) {
+  // Show loading skeleton while loading
+  if (loading) {
+    return <LoadingSkeleton />;
+  }
+
   // Safety check for resources
   if (!resources || !Array.isArray(resources)) {
     console.warn('ResourceList: resources prop is not an array', resources);

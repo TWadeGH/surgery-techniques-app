@@ -139,7 +139,7 @@ function getViewOnLabel(resource) {
   return 'View on External Site';
 }
 
-/** Source line: "Source: YouTube • Video • 9:12" */
+/** Source line: "Source: YouTube / Video / 9:12" */
 function getSourceLine(resource) {
   const st = resource?.source_type;
   const sourceLabel = (st && SOURCE_DISPLAY[st]) || resource?.source_name || 'External';
@@ -149,7 +149,7 @@ function getSourceLine(resource) {
   if (resource?.resource_type === 'video' && resource?.duration_seconds) {
     parts.push(formatDuration(resource.duration_seconds));
   }
-  return parts.join(' · ');
+  return parts.join(' / ');
 }
 
 /**
@@ -362,7 +362,7 @@ function ResourceCard({
     >
       <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
         {/* Resource Image */}
-        <div className="w-16 h-16 sm:w-24 sm:h-24 flex-shrink-0 rounded-lg overflow-hidden bg-gray-100 mx-auto sm:mx-0">
+        <div className="w-20 h-20 sm:w-24 sm:h-24 flex-shrink-0 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-700 mx-auto sm:mx-0">
           {resource.image_url ? (
             <img 
               src={resource.image_url} 
@@ -371,8 +371,8 @@ function ResourceCard({
               loading="lazy"
             />
           ) : (
-            <div className="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
-              <FileText size={20} className="text-gray-400" />
+            <div className="w-full h-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
+              <FileText size={20} className="text-gray-400 dark:text-gray-500" />
             </div>
           )}
         </div>
@@ -416,7 +416,7 @@ function ResourceCard({
                     <button
                       type="button"
                       onClick={() => setShowFullDescriptionPopover(true)}
-                      className="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 font-normal align-baseline hover:underline"
+                      className="inline-flex items-center text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 font-normal hover:underline focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-1 rounded px-1 py-0.5"
                     >
                       read more
                     </button>
@@ -461,8 +461,8 @@ function ResourceCard({
             </>
           )}
 
-          {/* Source line: Source • Type • Duration */}
-          <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">
+          {/* Source line: Source / Type / Duration */}
+          <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
             {getSourceLine(resource)}
           </p>
 
@@ -524,7 +524,7 @@ function ResourceCard({
 
           {/* Note Display */}
           {note && !showNoteInput && (
-            <div className="mb-3 p-2.5 bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-yellow-900/20 dark:to-orange-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+            <div className="mb-3 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
               <div className="flex justify-between items-start gap-2">
                 <p className="text-gray-700 dark:text-gray-200 text-sm flex-1">{note}</p>
                 <button
@@ -535,7 +535,7 @@ function ResourceCard({
                   className="text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 transition-colors"
                   aria-label="Edit note"
                 >
-                  <Edit size={14} />
+                  <Edit size={16} />
                 </button>
               </div>
             </div>
@@ -583,7 +583,7 @@ function ResourceCard({
                   }`}
                   aria-label={note ? 'Edit note' : 'Add note'}
                 >
-                  <StickyNote size={18} fill={note ? 'currentColor' : 'none'} strokeWidth={note ? 0 : 2} />
+                  <StickyNote size={20} fill={note ? 'currentColor' : 'none'} strokeWidth={note ? 0 : 2} />
                 </button>
                 <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1.5 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded shadow-lg whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 pointer-events-none z-50">
                   {note ? 'Edit your personal note for this resource' : 'Add a personal note for this resource'}
@@ -602,7 +602,7 @@ function ResourceCard({
                     }`}
                     aria-label={isFavorited ? 'Remove from Favorites' : 'Add to Favorites'}
                   >
-                    <Heart size={18} fill={isFavorited ? 'currentColor' : 'none'} strokeWidth={isFavorited ? 0 : 2} />
+                    <Heart size={20} fill={isFavorited ? 'currentColor' : 'none'} strokeWidth={isFavorited ? 0 : 2} />
                   </button>
                   <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1.5 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded shadow-lg whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 pointer-events-none z-50">
                     {isFavorited ? 'Remove this resource from your Favorites list' : 'Save this resource to your Favorites list'}
@@ -622,7 +622,7 @@ function ResourceCard({
                   }`}
                   aria-label={isUpcomingCase ? 'Remove from Upcoming Cases' : 'Add to Upcoming Cases'}
                 >
-                  <Plus size={18} className={isUpcomingCase ? 'rotate-45' : ''} strokeWidth={2} />
+                  <Plus size={20} className={isUpcomingCase ? 'rotate-45' : ''} strokeWidth={2} />
                 </button>
                 <span className="absolute bottom-full right-0 mb-2 px-2 py-1.5 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded shadow-lg whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 pointer-events-none z-50">
                   {isUpcomingCase ? 'Remove this resource from your Upcoming Cases list' : 'Add this resource to your Upcoming Cases for a future procedure'}
@@ -636,10 +636,10 @@ function ResourceCard({
                   <button
                     type="button"
                     onClick={() => onContactRep(resource)}
-                    className="p-2.5 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-all"
+                    className="p-3 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-all focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2"
                     aria-label="Contact company representative"
                   >
-                    <MessageSquare size={18} />
+                    <MessageSquare size={20} />
                   </button>
                   <span className="absolute bottom-full right-0 mb-2 px-2 py-1.5 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded shadow-lg whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 pointer-events-none z-50">
                     Contact {resource.company_name} rep about {resource.product_name}
@@ -655,7 +655,7 @@ function ResourceCard({
                   className="p-3 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 hover:bg-amber-50 hover:text-amber-600 dark:hover:bg-amber-900/20 dark:hover:text-amber-400 transition-all focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2"
                   aria-label="Report link"
                 >
-                  <Flag size={18} />
+                  <Flag size={20} />
                 </button>
                 <span className="absolute bottom-full right-0 mb-2 px-2 py-1.5 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded shadow-lg whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 pointer-events-none z-50">
                   Report this link — report a problem or copyright concern
