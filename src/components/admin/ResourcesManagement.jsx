@@ -364,7 +364,7 @@ function ResourcesManagement({
           </div>
 
           {/* Resources List */}
-          <div className="space-y-3 sm:space-y-4">
+          <div className="space-y-3 sm:space-y-4 pl-12">
             {filteredByCategory.length === 0 ? (
               <div className="glass rounded-2xl p-8 sm:p-16 text-center shadow-lg">
                 <div className="max-w-md mx-auto">
@@ -391,7 +391,7 @@ function ResourcesManagement({
                     )}
                     <div className="relative">
                       {/* Up/Down Arrow Buttons */}
-                      <div className="absolute -left-2 sm:-left-3 top-1/2 -translate-y-1/2 flex flex-col gap-1 z-10">
+                      <div className="absolute -left-10 top-1/2 -translate-y-1/2 flex flex-col gap-1 z-10">
                         <button
                           onClick={() => handleMoveResource(resource.id, 'up')}
                           disabled={index === 0}

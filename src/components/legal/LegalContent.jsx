@@ -323,7 +323,9 @@ export function ContactContent() {
         <li><strong>Privacy Questions:</strong> privacy@surgicaltechniques.app</li>
         <li><strong>Copyright / Takedown Requests:</strong> legal@surgicaltechniques.app</li>
       </ul>
-      <p className={pClass}>For sponsorship inquiries or business partnerships, please use the "Sponsorship" button next to "Contact Us" in the app header.</p>
+      <p className={pClass}>
+        For industry partners interested in sponsoring content or business partnerships, please reach out to our team using the <strong>"Sponsorship"</strong> link located next to the <strong>"Contact Us"</strong> link in the app header.
+      </p>
     </div>
   );
 }

@@ -382,8 +382,8 @@ export default function CategoryManagementModal({ currentUser, onClose }) {
       <div className="glass rounded-2xl p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
         <div className="flex justify-between items-center mb-6">
           <div>
-            <h2 className="text-2xl font-bold text-gray-900">Manage Categories</h2>
-            <p className="text-gray-600 text-sm mt-1">Add, rename, delete, and reorder categories and subcategories</p>
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Manage Categories</h2>
+            <p className="text-gray-600 dark:text-gray-300 text-sm mt-1">Add, rename, delete, and reorder categories and subcategories</p>
           </div>
           <button
             onClick={onClose}
@@ -395,8 +395,8 @@ export default function CategoryManagementModal({ currentUser, onClose }) {
         </div>
 
         {/* Add New Category */}
-        <div className="mb-6 p-4 bg-purple-50 rounded-xl border-2 border-purple-200">
-          <label className="block text-sm font-semibold text-gray-700 mb-2">Add New Category</label>
+        <div className="mb-6 p-4 bg-purple-50 dark:bg-purple-900/20 rounded-xl border-2 border-purple-200 dark:border-purple-800">
+          <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">Add New Category</label>
           <div className="flex gap-2">
             <input
               type="text"
@@ -404,7 +404,7 @@ export default function CategoryManagementModal({ currentUser, onClose }) {
               onChange={(e) => setNewCategoryName(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && handleAddCategory()}
               placeholder="Category name..."
-              className="flex-1 px-4 py-2 border-2 border-gray-200 rounded-lg focus:border-purple-500 focus:outline-none transition-colors"
+              className="flex-1 px-4 py-2 border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 rounded-lg focus:border-purple-500 focus:outline-none transition-colors"
             />
             <button
               onClick={handleAddCategory}
@@ -422,11 +422,11 @@ export default function CategoryManagementModal({ currentUser, onClose }) {
             <div className="w-8 h-8 mx-auto border-4 border-purple-600 border-t-transparent rounded-full animate-spin"></div>
           </div>
         ) : categories.length === 0 ? (
-          <div className="text-center py-8 text-gray-500">
+          <div className="text-center py-8 text-gray-500 dark:text-gray-400">
             <p>No categories yet. Add one above!</p>
           </div>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-2 pl-12">
             {categories.map((category, index) => (
               <div key={category.id} className="space-y-2">
                 {/* Drop indicator line above this category */}
@@ -437,7 +437,7 @@ export default function CategoryManagementModal({ currentUser, onClose }) {
                 {/* Category */}
                 <div className="relative">
                   {/* Up/Down Arrow Buttons */}
-                  <div className="absolute -left-3 top-1/2 -translate-y-1/2 flex flex-col gap-1 z-10">
+                  <div className="absolute -left-10 top-1/2 -translate-y-1/2 flex flex-col gap-1 z-10">
                     <button
                       onClick={() => handleMoveCategory(index, 'up')}
                       disabled={index === 0}
@@ -463,15 +463,15 @@ export default function CategoryManagementModal({ currentUser, onClose }) {
                     onDragOver={(e) => handleDragOver(e, index)}
                     onDragLeave={handleDragLeave}
                     onDrop={(e) => handleDrop(e, index)}
-                    className={`flex items-center gap-3 p-4 bg-white rounded-xl border-2 transition-all ${
+                    className={`flex items-center gap-3 p-4 bg-white dark:bg-gray-800 rounded-xl border-2 transition-all ${
                       draggedItem === index 
                         ? 'opacity-50 border-purple-400 scale-95' 
                         : (dropIndex === index && dropPosition === 'above') || (dropIndex === index + 1 && dropPosition === 'below')
                         ? 'border-purple-400 shadow-md'
-                        : 'border-gray-200 hover:border-purple-300'
+                        : 'border-gray-200 dark:border-gray-700 hover:border-purple-300 dark:hover:border-purple-600'
                     }`}
                   >
-                    <GripVertical size={20} className="text-gray-400 cursor-move" />
+                    <GripVertical size={20} className="text-gray-400 dark:text-gray-500 cursor-move" />
                   
                   {editingId === category.id ? (
                     <input
@@ -488,10 +488,10 @@ export default function CategoryManagementModal({ currentUser, onClose }) {
                         }
                       }}
                       autoFocus
-                      className="flex-1 px-3 py-2 border-2 border-purple-500 rounded-lg focus:outline-none"
+                      className="flex-1 px-3 py-2 border-2 border-purple-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:outline-none"
                     />
                   ) : (
-                    <span className="flex-1 text-gray-900 font-medium">{category.name}</span>
+                    <span className="flex-1 text-gray-900 dark:text-white font-medium">{category.name}</span>
                   )}
 
                   <div className="flex gap-2">
@@ -502,7 +502,7 @@ export default function CategoryManagementModal({ currentUser, onClose }) {
                           [category.id]: !expandedCategories[category.id]
                         });
                       }}
-                      className="p-2 text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
+                      className="p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors"
                       title={expandedCategories[category.id] ? "Collapse" : "Expand"}
                       aria-label={expandedCategories[category.id] ? "Collapse category" : "Expand category"}
                     >
@@ -517,7 +517,7 @@ export default function CategoryManagementModal({ currentUser, onClose }) {
                         setEditingId(category.id);
                         setEditingName(category.name);
                       }}
-                      className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                      className="p-2 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/30 rounded-lg transition-colors"
                       title="Rename"
                       aria-label={`Rename category: ${category.name}`}
                     >
@@ -525,7 +525,7 @@ export default function CategoryManagementModal({ currentUser, onClose }) {
                     </button>
                     <button
                       onClick={() => handleDeleteCategory(category.id)}
-                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      className="p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
                       title="Delete"
                       aria-label={`Delete category: ${category.name}`}
                     >
