@@ -6,8 +6,9 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { X, Edit, Trash2, GripVertical } from 'lucide-react';
+import { X, Edit, Trash2, GripVertical, ChevronUp, ChevronDown } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { useToast } from '../common';
 
 /**
  * CategoryManagementModal Component
@@ -17,6 +18,7 @@ import { supabase } from '../../lib/supabase';
  * @param {Function} props.onClose - Callback to close modal
  */
 export default function CategoryManagementModal({ currentUser, onClose }) {
+  const toast = useToast();
   const [allCategories, setAllCategories] = useState([]); // All categories flat
   const [categories, setCategories] = useState([]); // Organized hierarchically
   const [loading, setLoading] = useState(true);
@@ -237,6 +239,40 @@ export default function CategoryManagementModal({ currentUser, onClose }) {
     }
   }
 
+  // Handle manual reorder with up/down buttons
+  const handleMoveCategory = async (index, direction) => {
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= categories.length) return;
+    
+    const newCategories = [...categories];
+    const [removed] = newCategories.splice(index, 1);
+    newCategories.splice(targetIndex, 0, removed);
+    
+    // Update database with new order
+    try {
+      const updates = newCategories.map((cat, idx) => ({
+        id: cat.id,
+        order: idx
+      }));
+      
+      for (const update of updates) {
+        const { error } = await supabase
+          .from('categories')
+          .update({ order: update.order })
+          .eq('id', update.id);
+        
+        if (error) throw error;
+      }
+      
+      // Reload categories to get fresh data
+      await loadCategories();
+      toast.success('Category order updated');
+    } catch (error) {
+      console.error('Error reordering category:', error);
+      toast.error('Error reordering category: ' + error.message);
+    }
+  };
+
   const handleDragStart = (e, index) => {
     setDraggedItem(index);
     e.dataTransfer.effectAllowed = 'move';
@@ -395,25 +431,47 @@ export default function CategoryManagementModal({ currentUser, onClose }) {
               <div key={category.id} className="space-y-2">
                 {/* Drop indicator line above this category */}
                 {dropIndex === index && dropPosition === 'above' && draggedItem !== null && draggedItem !== index && (
-                  <div className="h-1.5 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full mx-4 shadow-lg animate-pulse"></div>
+                  <div className="h-2 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full mx-4 shadow-lg animate-pulse mb-2"></div>
                 )}
                 
                 {/* Category */}
-                <div
-                  draggable
-                  onDragStart={(e) => handleDragStart(e, index)}
-                  onDragOver={(e) => handleDragOver(e, index)}
-                  onDragLeave={handleDragLeave}
-                  onDrop={(e) => handleDrop(e, index)}
-                  className={`flex items-center gap-3 p-4 bg-white rounded-xl border-2 transition-all ${
-                    draggedItem === index 
-                      ? 'opacity-50 border-purple-400 scale-95' 
-                      : (dropIndex === index && dropPosition === 'above') || (dropIndex === index + 1 && dropPosition === 'below')
-                      ? 'border-purple-400 shadow-md'
-                      : 'border-gray-200 hover:border-purple-300'
-                  }`}
-                >
-                  <GripVertical size={20} className="text-gray-400 cursor-move" />
+                <div className="relative">
+                  {/* Up/Down Arrow Buttons */}
+                  <div className="absolute -left-3 top-1/2 -translate-y-1/2 flex flex-col gap-1 z-10">
+                    <button
+                      onClick={() => handleMoveCategory(index, 'up')}
+                      disabled={index === 0}
+                      className="p-1.5 bg-white border-2 border-gray-300 rounded-lg hover:border-purple-500 hover:bg-purple-50 transition-all disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:border-gray-300 disabled:hover:bg-white shadow-md"
+                      title="Move up"
+                      aria-label="Move category up"
+                    >
+                      <ChevronUp size={16} className="text-gray-600" />
+                    </button>
+                    <button
+                      onClick={() => handleMoveCategory(index, 'down')}
+                      disabled={index === categories.length - 1}
+                      className="p-1.5 bg-white border-2 border-gray-300 rounded-lg hover:border-purple-500 hover:bg-purple-50 transition-all disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:border-gray-300 disabled:hover:bg-white shadow-md"
+                      title="Move down"
+                      aria-label="Move category down"
+                    >
+                      <ChevronDown size={16} className="text-gray-600" />
+                    </button>
+                  </div>
+                  <div
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, index)}
+                    onDragOver={(e) => handleDragOver(e, index)}
+                    onDragLeave={handleDragLeave}
+                    onDrop={(e) => handleDrop(e, index)}
+                    className={`flex items-center gap-3 p-4 bg-white rounded-xl border-2 transition-all ${
+                      draggedItem === index 
+                        ? 'opacity-50 border-purple-400 scale-95' 
+                        : (dropIndex === index && dropPosition === 'above') || (dropIndex === index + 1 && dropPosition === 'below')
+                        ? 'border-purple-400 shadow-md'
+                        : 'border-gray-200 hover:border-purple-300'
+                    }`}
+                  >
+                    <GripVertical size={20} className="text-gray-400 cursor-move" />
                   
                   {editingId === category.id ? (
                     <input
@@ -474,11 +532,12 @@ export default function CategoryManagementModal({ currentUser, onClose }) {
                       <Trash2 size={18} />
                     </button>
                   </div>
+                  </div>
                 </div>
 
                 {/* Drop indicator line below this category */}
                 {dropIndex === index + 1 && dropPosition === 'below' && draggedItem !== null && draggedItem !== index && (
-                  <div className="h-1.5 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full mx-4 shadow-lg animate-pulse"></div>
+                  <div className="h-2 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full mx-4 shadow-lg animate-pulse mt-2"></div>
                 )}
 
                 {/* Subcategories */}

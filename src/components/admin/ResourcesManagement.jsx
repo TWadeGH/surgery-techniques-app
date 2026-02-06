@@ -6,7 +6,7 @@
  */
 
 import React, { useState, useCallback, useMemo, memo, useRef } from 'react';
-import { Edit, Plus, Search, FileText, GripVertical } from 'lucide-react';
+import { Edit, Plus, Search, FileText, GripVertical, ChevronUp, ChevronDown } from 'lucide-react';
 import AdminResourceCard from './AdminResourceCard';
 
 /**
@@ -121,6 +121,24 @@ function ResourcesManagement({
     // This prevents state from being cleared if dragEnd fires before drop
     e.stopPropagation();
   }, []);
+
+  // Handle manual reorder with up/down buttons
+  const handleMoveResource = useCallback(async (resourceId, direction) => {
+    const resourceIndex = filteredByCategory.findIndex(r => r.id === resourceId);
+    if (resourceIndex === -1) return;
+    
+    const targetIndex = direction === 'up' ? resourceIndex - 1 : resourceIndex + 1;
+    if (targetIndex < 0 || targetIndex >= filteredByCategory.length) return;
+    
+    // Create new order
+    const newOrder = [...filteredByCategory];
+    const [removed] = newOrder.splice(resourceIndex, 1);
+    newOrder.splice(targetIndex, 0, removed);
+    
+    if (onReorderResources) {
+      await onReorderResources(newOrder);
+    }
+  }, [filteredByCategory, onReorderResources]);
 
   // Security: Validate resourceIds, prevent IDOR, calculate correct destination
   const handleDrop = useCallback(async (e, targetResourceId) => {
@@ -369,21 +387,44 @@ function ResourcesManagement({
                 return (
                   <React.Fragment key={resource.id}>
                     {showDropIndicatorAbove && (
-                      <div className="h-1 bg-purple-500 rounded-full animate-pulse mb-2" />
+                      <div className="h-2 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full shadow-lg animate-pulse mb-3 mx-4" />
                     )}
-                    <AdminResourceCard
-                      resource={resource}
-                      onEdit={onEditResource}
-                      onDelete={onDeleteResource}
-                      index={index}
-                      onDragStart={handleDragStart}
-                      onDragOver={handleDragOver}
-                      onDragEnd={handleDragEnd}
-                      onDrop={handleDrop}
-                      isDragging={draggedResourceId === resource.id}
-                    />
+                    <div className="relative">
+                      {/* Up/Down Arrow Buttons */}
+                      <div className="absolute -left-2 sm:-left-3 top-1/2 -translate-y-1/2 flex flex-col gap-1 z-10">
+                        <button
+                          onClick={() => handleMoveResource(resource.id, 'up')}
+                          disabled={index === 0}
+                          className="p-1.5 sm:p-2 bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600 rounded-lg hover:border-purple-500 hover:bg-purple-50 dark:hover:bg-purple-900/30 transition-all disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:border-gray-300 disabled:hover:bg-white dark:disabled:hover:bg-gray-800 shadow-md"
+                          title="Move up"
+                          aria-label="Move resource up"
+                        >
+                          <ChevronUp size={16} className="text-gray-600 dark:text-gray-400" />
+                        </button>
+                        <button
+                          onClick={() => handleMoveResource(resource.id, 'down')}
+                          disabled={index === filteredByCategory.length - 1}
+                          className="p-1.5 sm:p-2 bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600 rounded-lg hover:border-purple-500 hover:bg-purple-50 dark:hover:bg-purple-900/30 transition-all disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:border-gray-300 disabled:hover:bg-white dark:disabled:hover:bg-gray-800 shadow-md"
+                          title="Move down"
+                          aria-label="Move resource down"
+                        >
+                          <ChevronDown size={16} className="text-gray-600 dark:text-gray-400" />
+                        </button>
+                      </div>
+                      <AdminResourceCard
+                        resource={resource}
+                        onEdit={onEditResource}
+                        onDelete={onDeleteResource}
+                        index={index}
+                        onDragStart={handleDragStart}
+                        onDragOver={handleDragOver}
+                        onDragEnd={handleDragEnd}
+                        onDrop={handleDrop}
+                        isDragging={draggedResourceId === resource.id}
+                      />
+                    </div>
                     {showDropIndicatorBelow && (
-                      <div className="h-1 bg-purple-500 rounded-full animate-pulse mt-2" />
+                      <div className="h-2 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full shadow-lg animate-pulse mt-3 mx-4" />
                     )}
                   </React.Fragment>
                 );
