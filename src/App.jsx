@@ -570,7 +570,7 @@ function SurgicalTechniquesApp() {
         insertData.product_name = resourceData.product_name;
       }
 
-      if (resourceData.year_of_publication) {
+      if (resourceData.year_of_publication && !isNaN(resourceData.year_of_publication)) {
         insertData.year_of_publication = resourceData.year_of_publication;
       }
 
@@ -909,7 +909,7 @@ function SurgicalTechniquesApp() {
         keywords: resourceData.keywords || null,
         company_name: resourceData.company_name || null,
         product_name: resourceData.product_name || null,
-        year_of_publication: resourceData.year_of_publication || null,
+        year_of_publication: (resourceData.year_of_publication && !isNaN(resourceData.year_of_publication)) ? resourceData.year_of_publication : null,
       };
       
       // Always include category_id if it's provided (even if null, to clear it)

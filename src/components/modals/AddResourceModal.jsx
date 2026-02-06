@@ -681,7 +681,12 @@ export default function AddResourceModal({ currentUser, onSubmit, onClose }) {
                 value={formData.year_of_publication || ''}
                 onChange={(e) => {
                   const val = e.target.value.trim();
-                  setFormData({ ...formData, year_of_publication: val ? parseInt(val, 10) : null });
+                  if (!val) {
+                    setFormData({ ...formData, year_of_publication: null });
+                  } else {
+                    const parsed = parseInt(val, 10);
+                    setFormData({ ...formData, year_of_publication: isNaN(parsed) ? null : parsed });
+                  }
                 }}
                 className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors"
                 placeholder="e.g., 2024"
