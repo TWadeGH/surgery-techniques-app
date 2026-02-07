@@ -1364,16 +1364,29 @@ function SurgicalTechniquesApp() {
   }, []);
 
   // Load active companies for Contact Rep feature
-  // TODO: Filter by subspecialty once we understand the schema
+  // Filters by subspecialty using the subspecialty_companies junction table
   const loadCompanies = useCallback(async () => {
     try {
-      console.log('🏢 Loading all active companies (temporary - need to add subspecialty filtering)');
+      // Determine which subspecialty to use (browsing or profile)
+      const effectiveSubspecialtyId = browsingSubspecialtyId || currentUser?.subspecialtyId;
       
+      if (!effectiveSubspecialtyId) {
+        console.log('No subspecialty selected, not loading companies');
+        setCompanies([]);
+        return;
+      }
+      
+      console.log('🏢 Loading companies for subspecialty:', effectiveSubspecialtyId?.substring(0, 8));
+      
+      // Query through the junction table to get companies for this subspecialty
       const { data, error } = await supabase
-        .from('companies')
-        .select('*')
-        .eq('is_active', true)
-        .order('name');
+        .from('subspecialty_companies')
+        .select(`
+          company_id,
+          companies!inner(id, name, is_active)
+        `)
+        .eq('subspecialty_id', effectiveSubspecialtyId)
+        .eq('companies.is_active', true);
       
       if (error) {
         console.error('Error loading companies:', error);
@@ -1381,13 +1394,15 @@ function SurgicalTechniquesApp() {
         return;
       }
       
-      console.log('🏢 Loaded companies:', data);
-      setCompanies(data || []);
+      // Extract company data from the joined result
+      const companies = (data || []).map(item => item.companies).filter(Boolean);
+      console.log('🏢 Loaded companies:', companies);
+      setCompanies(companies);
     } catch (error) {
       console.error('Error loading companies:', error);
       setCompanies([]);
     }
-  }, []);
+  }, [browsingSubspecialtyId, currentUser?.subspecialtyId]);
 
   // Handle contact rep click
   const handleContactRep = useCallback((resource) => {
