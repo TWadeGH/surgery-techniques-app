@@ -504,10 +504,16 @@ function SurgicalTechniquesApp() {
       lastLoadedProfileRef.current = { specialtyId: currentUser.specialtyId ?? null, subspecialtyId: currentUser.subspecialtyId ?? null };
       loadAllData();
       loadAvailableSubspecialties();
-      loadCompanies();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.id, currentUser?.specialtyId, currentUser?.subspecialtyId]);
+
+  // Load companies when subspecialty changes (either browsing or profile)
+  useEffect(() => {
+    if (currentUser?.id) {
+      loadCompanies();
+    }
+  }, [currentUser?.id, browsingSubspecialtyId, currentUser?.subspecialtyId, loadCompanies]);
 
   // Load suggested and reported resources when switching to Admin view
   useEffect(() => {
@@ -1358,13 +1364,25 @@ function SurgicalTechniquesApp() {
   }, []);
 
   // Load active companies for Contact Rep feature
-  // Only loads companies that have at least one active contact
+  // Only loads companies that are active for the current subspecialty
   const loadCompanies = useCallback(async () => {
     try {
+      // Determine which subspecialty to use (browsing or profile)
+      const effectiveSubspecialtyId = browsingSubspecialtyId || currentUser?.subspecialtyId;
+      
+      if (!effectiveSubspecialtyId) {
+        console.log('No subspecialty selected, not loading companies');
+        setCompanies([]);
+        return;
+      }
+      
+      console.log('🏢 Loading companies for subspecialty:', effectiveSubspecialtyId?.substring(0, 8));
+      
       const { data, error } = await supabase
         .from('companies')
-        .select('id, name, is_active')
+        .select('id, name, is_active, subspecialty_id')
         .eq('is_active', true)
+        .eq('subspecialty_id', effectiveSubspecialtyId)
         .order('name');
       
       if (error) {
@@ -1373,12 +1391,13 @@ function SurgicalTechniquesApp() {
         return;
       }
       
+      console.log('🏢 Loaded companies:', data);
       setCompanies(data || []);
     } catch (error) {
       console.error('Error loading companies:', error);
       setCompanies([]);
     }
-  }, []);
+  }, [browsingSubspecialtyId, currentUser?.subspecialtyId]);
 
   // Handle contact rep click
   const handleContactRep = useCallback((resource) => {
@@ -1410,11 +1429,14 @@ function SurgicalTechniquesApp() {
     setBrowsingSubspecialtyId(subspecialtyId);
     setSelectedCategoryId(null); // Clear category selection when switching subspecialties
     
-    // Reload categories and procedures for the selected subspecialty
+    // Reload categories, procedures, and companies for the selected subspecialty
     try {
       const { categoriesData, proceduresData } = await fetchCategoriesAndProceduresForUser(currentUser, subspecialtyId);
       setCategories(categoriesData);
       setProcedures(proceduresData);
+      
+      // Reload companies for this subspecialty
+      await loadCompanies();
       
       // Show all resources for this subspecialty until user picks a category
       setSelectedCategoryId(null);
