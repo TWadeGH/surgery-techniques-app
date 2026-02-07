@@ -308,6 +308,12 @@ export function useAuth() {
       const { data: { user: currentAuthUser } } = await supabase.auth.getUser();
       const userEmail = currentAuthUser?.email || profile.email || '';
       
+      console.log('📧 Email sources:', {
+        sessionEmail: currentAuthUser?.email,
+        profileEmail: profile.email,
+        usingEmail: userEmail
+      });
+      
       if (!userEmail) {
         console.warn('No email found in session or profile');
       }
