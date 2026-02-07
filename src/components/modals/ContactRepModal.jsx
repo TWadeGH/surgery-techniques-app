@@ -154,19 +154,26 @@ function ContactRepModal({
       const { error } = await supabase
         .from('rep_inquiries')
         .insert({
-          subspecialty_company_id: companyId,
-          resource_id: resource.id,
+          // OLD required columns (NOT NULL constraints)
+          surgeon_name: formData.userName.trim(),
+          surgeon_email: formData.userEmail.trim(),
+          surgeon_phone: formData.cellPhone.trim() || null,
+          company_id: companyId, // Required, using subspecialty_company_id
+          contact_method: 'either', // Required, defaults to 'either'
+          // NEW columns (using correct names from schema)
           user_id: currentUser.id,
           user_name: formData.userName.trim(),
           user_email: formData.userEmail.trim(),
-          user_location: locationString, // For backward compatibility
-          user_country: formData.country,
-          user_city: formData.city.trim() || null,
-          user_state: formData.state.trim() || null,
           user_phone: formData.cellPhone.trim() || null,
+          country: formData.country, // Schema has 'country' not 'user_country'
+          city: formData.city.trim() || null, // Schema has 'city' not 'user_city'
+          state: formData.state.trim() || null, // Schema has 'state' not 'user_state'
+          user_location: locationString, // For display
+          subspecialty_company_id: companyId,
+          resource_id: resource.id,
           product_name: resource.product_name,
           message: formData.message.trim() || null,
-          status: 'new'
+          status: 'pending' // Default is 'pending' not 'new'
         });
 
       if (error) throw error;
