@@ -145,6 +145,12 @@ function ContactRepModal({
     setLoading(true);
 
     try {
+      // Build location string for backward compatibility
+      let locationString = formData.country;
+      if (formData.country === 'United States' && formData.city && formData.state) {
+        locationString = `${formData.city.trim()}, ${formData.state.trim()}, United States`;
+      }
+
       const { error } = await supabase
         .from('rep_inquiries')
         .insert({
@@ -153,6 +159,7 @@ function ContactRepModal({
           user_id: currentUser.id,
           user_name: formData.userName.trim(),
           user_email: formData.userEmail.trim(),
+          user_location: locationString, // For backward compatibility
           user_country: formData.country,
           user_city: formData.city.trim() || null,
           user_state: formData.state.trim() || null,
