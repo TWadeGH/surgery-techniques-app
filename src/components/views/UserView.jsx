@@ -46,6 +46,8 @@ import { canRateOrFavorite } from '../../utils/helpers';
  * @param {Function} props.onPaginationPrevious - Callback for Previous
  * @param {Function} props.onPaginationNext - Callback for Next
  * @param {Function} props.onReportResource - Callback to open report modal for a resource
+ * @param {Array} props.companies - Array of active companies for Contact Rep feature
+ * @param {Function} props.onContactRep - Callback to contact company rep
  */
 function UserView({ 
   resources, 
@@ -78,6 +80,8 @@ function UserView({
   onPaginationPrevious,
   onPaginationNext,
   onReportResource,
+  companies = [],
+  onContactRep,
 }) {
   // Organize categories hierarchically
   const organizedCategories = useMemo(() => {
@@ -607,6 +611,8 @@ function UserView({
             isFavorited={isFavorited}
             getNote={getNote}
             onReportResource={onReportResource}
+            companies={companies}
+            onContactRep={onContactRep}
           />
 
           {/* Pagination: [Next] when >10 resources; [Previous] and [Next] when on page 2+ */}

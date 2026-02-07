@@ -104,6 +104,8 @@ const EmptyState = memo(function EmptyState({ showFavoritesOnly }) {
  * @param {boolean} props.showFavoritesOnly - Whether showing favorites only
  * @param {Function} props.onReportResource - Callback to open report modal for a resource
  * @param {boolean} props.loading - Whether resources are loading
+ * @param {Array} props.companies - Array of active companies for Contact Rep feature
+ * @param {Function} props.onContactRep - Callback to contact company rep
  */
 function ResourceList({
   resources,
@@ -119,6 +121,8 @@ function ResourceList({
   showFavoritesOnly = false,
   onReportResource,
   loading = false,
+  companies = [],
+  onContactRep,
 }) {
   // Show loading skeleton while loading
   if (loading) {
@@ -168,6 +172,17 @@ function ResourceList({
     });
   }, [resources]);
 
+  // Memoize company lookup for performance
+  const activeCompanyNames = useMemo(() => {
+    return new Set(companies.map(c => c.name?.toLowerCase()).filter(Boolean));
+  }, [companies]);
+
+  // Helper to check if resource's company is active
+  const isCompanyActive = useCallback((resource) => {
+    if (!resource.company_name) return false;
+    return activeCompanyNames.has(resource.company_name.toLowerCase());
+  }, [activeCompanyNames]);
+
   return (
     <div className="space-y-2">
       {validResources.map((resource, index) => (
@@ -183,6 +198,8 @@ function ResourceList({
           index={index}
           currentUser={currentUser}
           onReportResource={onReportResource}
+          companyIsActive={isCompanyActive(resource)}
+          onContactRep={onContactRep}
         />
       ))}
     </div>

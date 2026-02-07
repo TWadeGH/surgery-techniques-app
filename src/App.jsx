@@ -128,6 +128,9 @@ function SurgicalTechniquesApp() {
   // Browse by subspecialty feature - allows temporary browsing without changing profile
   const [browsingSubspecialtyId, setBrowsingSubspecialtyId] = useState(null); // null = use profile subspecialty
   const [availableSubspecialties, setAvailableSubspecialties] = useState([]); // All subspecialties for dropdown
+  const [companies, setCompanies] = useState([]); // Active companies for Contact Rep feature
+  const [showContactRepModal, setShowContactRepModal] = useState(false);
+  const [selectedResourceForContact, setSelectedResourceForContact] = useState(null);
 
   // Apply dark mode
   useEffect(() => {
@@ -501,6 +504,7 @@ function SurgicalTechniquesApp() {
       lastLoadedProfileRef.current = { specialtyId: currentUser.specialtyId ?? null, subspecialtyId: currentUser.subspecialtyId ?? null };
       loadAllData();
       loadAvailableSubspecialties();
+      loadCompanies();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.id, currentUser?.specialtyId, currentUser?.subspecialtyId]);
@@ -1353,6 +1357,35 @@ function SurgicalTechniquesApp() {
     }
   }, []);
 
+  // Load active companies for Contact Rep feature
+  // Only loads companies that have at least one active contact
+  const loadCompanies = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('companies')
+        .select('id, name, is_active')
+        .eq('is_active', true)
+        .order('name');
+      
+      if (error) {
+        console.error('Error loading companies:', error);
+        setCompanies([]);
+        return;
+      }
+      
+      setCompanies(data || []);
+    } catch (error) {
+      console.error('Error loading companies:', error);
+      setCompanies([]);
+    }
+  }, []);
+
+  // Handle contact rep click
+  const handleContactRep = useCallback((resource) => {
+    setSelectedResourceForContact(resource);
+    setShowContactRepModal(true);
+  }, []);
+
   // Handle browsing subspecialty change
   // Security: Validates UUID format and reloads categories/resources
   const handleBrowsingSubspecialtyChange = useCallback(async (subspecialtyId) => {
@@ -1537,6 +1570,8 @@ function SurgicalTechniquesApp() {
             onBrowsingSubspecialtyChange={handleBrowsingSubspecialtyChange}
             isInUpcomingCases={isInUpcomingCases}
             onReportResource={handleReportResource}
+            companies={companies}
+            onContactRep={handleContactRep}
           />
         ) : currentView === VIEW_MODES.REP && isRep ? (
           <RepView
