@@ -508,13 +508,6 @@ function SurgicalTechniquesApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?.id, currentUser?.specialtyId, currentUser?.subspecialtyId]);
 
-  // Load companies when subspecialty changes (either browsing or profile)
-  useEffect(() => {
-    if (currentUser?.id) {
-      loadCompanies();
-    }
-  }, [currentUser?.id, browsingSubspecialtyId, currentUser?.subspecialtyId, loadCompanies]);
-
   // Load suggested and reported resources when switching to Admin view
   useEffect(() => {
     if (currentView === VIEW_MODES.ADMIN && isAdmin(currentUser)) {
@@ -1403,6 +1396,13 @@ function SurgicalTechniquesApp() {
       setCompanies([]);
     }
   }, [browsingSubspecialtyId, currentUser?.subspecialtyId]);
+
+  // Load companies when subspecialty changes (either browsing or profile)
+  useEffect(() => {
+    if (currentUser?.id) {
+      loadCompanies();
+    }
+  }, [currentUser?.id, browsingSubspecialtyId, currentUser?.subspecialtyId, loadCompanies]);
 
   // Handle contact rep click
   const handleContactRep = useCallback((resource) => {
