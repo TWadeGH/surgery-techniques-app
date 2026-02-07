@@ -5,8 +5,8 @@
  * Shows company list with contact counts, active status, and actions.
  */
 
-import React, { useState, useMemo, memo } from 'react';
-import { Users, BarChart3, Search, Building2, CheckCircle, Circle, Plus } from 'lucide-react';
+import React, { useState, useMemo, memo, useRef, useEffect } from 'react';
+import { Users, BarChart3, Search, Building2, CheckCircle, Circle, Plus, Pencil, Trash2, MoreVertical } from 'lucide-react';
 import { useSubspecialtyCompanies } from '../../../hooks/useSubspecialtyCompanies';
 import { useToast } from '../../common';
 import CompanyContactsModal from './CompanyContactsModal';
@@ -40,8 +40,26 @@ function CompaniesManagementPanel({
     loading,
     error,
     createCompany,
+    updateCompany,
+    deleteCompany,
     searchCompanies
   } = useSubspecialtyCompanies(selectedSubspecialty || null);
+
+  const [editingCompanyId, setEditingCompanyId] = useState(null);
+  const [editingName, setEditingName] = useState('');
+  const [deletingCompanyId, setDeletingCompanyId] = useState(null);
+  const [menuOpenCompanyId, setMenuOpenCompanyId] = useState(null);
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) {
+        setMenuOpenCompanyId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Filter companies by search term
   const filteredCompanies = useMemo(() => {
@@ -82,6 +100,50 @@ function CompaniesManagementPanel({
     } else {
       toast.error(result.error || 'Failed to create company');
     }
+  };
+
+  const handleStartEdit = (company) => {
+    setEditingCompanyId(company.id);
+    setEditingName(company.company_name || '');
+  };
+
+  const handleCancelEdit = () => {
+    setEditingCompanyId(null);
+    setEditingName('');
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingCompanyId || !editingName.trim()) {
+      toast.error('Company name is required');
+      return;
+    }
+    const result = await updateCompany(editingCompanyId, { company_name: editingName.trim() });
+    if (result.success) {
+      toast.success('Company updated');
+      setEditingCompanyId(null);
+      setEditingName('');
+    } else {
+      toast.error(result.error || 'Failed to update company');
+    }
+  };
+
+  const handleDeleteClick = (company) => {
+    setDeletingCompanyId(company.id);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deletingCompanyId) return;
+    const result = await deleteCompany(deletingCompanyId);
+    setDeletingCompanyId(null);
+    if (result.success) {
+      toast.success('Company deleted');
+    } else {
+      toast.error(result.error || 'Failed to delete company');
+    }
+  };
+
+  const handleCancelDelete = () => {
+    setDeletingCompanyId(null);
   };
 
   if (loading) {
@@ -238,16 +300,41 @@ function CompaniesManagementPanel({
                 >
                   {/* Company Name */}
                   <td className="py-4 px-4">
-                    <div>
-                      <p className="font-medium text-gray-900 dark:text-white">
-                        {company.company_name}
-                      </p>
-                      {company.subspecialtyName && (
-                        <p className="text-xs text-gray-500 dark:text-gray-400">
-                          {company.subspecialtyName}
+                    {editingCompanyId === company.id ? (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <input
+                          type="text"
+                          value={editingName}
+                          onChange={(e) => setEditingName(e.target.value)}
+                          placeholder="Company name"
+                          className="flex-1 min-w-[140px] px-3 py-1.5 border-2 border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm focus:border-purple-500 focus:outline-none"
+                          autoFocus
+                        />
+                        <button
+                          onClick={handleSaveEdit}
+                          className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700"
+                        >
+                          Save
+                        </button>
+                        <button
+                          onClick={handleCancelEdit}
+                          className="px-3 py-1.5 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm hover:bg-gray-100 dark:hover:bg-gray-700"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <div>
+                        <p className="font-medium text-gray-900 dark:text-white">
+                          {company.company_name}
                         </p>
-                      )}
-                    </div>
+                        {company.subspecialtyName && (
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
+                            {company.subspecialtyName}
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </td>
 
                   {/* Contacts Count */}
@@ -275,7 +362,7 @@ function CompaniesManagementPanel({
                   {/* Actions */}
                   <td className="py-4 px-4">
                     <div className="flex items-center justify-end gap-2">
-                      {/* Contacts Button */}
+                      {/* Contacts & History (same as before) */}
                       <button
                         onClick={() => setContactsModalCompany(company)}
                         className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg text-sm font-medium hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
@@ -284,8 +371,6 @@ function CompaniesManagementPanel({
                         <Users size={14} />
                         Contacts
                       </button>
-
-                      {/* History Button */}
                       <button
                         onClick={() => setHistoryModalCompany(company)}
                         className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-lg text-sm font-medium hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-colors"
@@ -295,6 +380,42 @@ function CompaniesManagementPanel({
                         <span className="hidden sm:inline">History</span>
                         <span className="text-xs">({company.inquiryCount})</span>
                       </button>
+                      {/* Burger menu: Edit / Delete (only when not editing this row) */}
+                      {editingCompanyId !== company.id && (
+                        <div className="relative" ref={menuOpenCompanyId === company.id ? menuRef : null}>
+                          <button
+                            onClick={() => setMenuOpenCompanyId((id) => (id === company.id ? null : company.id))}
+                            className="p-1.5 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+                            title="More actions"
+                          >
+                            <MoreVertical size={18} />
+                          </button>
+                          {menuOpenCompanyId === company.id && (
+                            <div className="absolute right-0 top-full mt-1 py-1 min-w-[120px] bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg z-10">
+                              <button
+                                onClick={() => {
+                                  handleStartEdit(company);
+                                  setMenuOpenCompanyId(null);
+                                }}
+                                className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                              >
+                                <Pencil size={14} />
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => {
+                                  handleDeleteClick(company);
+                                  setMenuOpenCompanyId(null);
+                                }}
+                                className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30"
+                              >
+                                <Trash2 size={14} />
+                                Delete
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -330,6 +451,35 @@ function CompaniesManagementPanel({
           company={historyModalCompany}
           onClose={() => setHistoryModalCompany(null)}
         />
+      )}
+
+      {/* Delete confirmation modal */}
+      {deletingCompanyId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={handleCancelDelete}>
+          <div
+            className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full p-6 border border-gray-200 dark:border-gray-700"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Delete company?</h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+              This will permanently delete the company and all its contacts. Resources that reference this company name will not be changed. This cannot be undone.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={handleCancelDelete}
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium hover:bg-gray-100 dark:hover:bg-gray-700"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmDelete}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -223,6 +223,36 @@ export function useSubspecialtyCompanies(subspecialtyId = null, options = {}) {
   }, [loadCompanies]);
 
   /**
+   * Update a company (e.g. company name)
+   * @param {string} companyId - Company UUID
+   * @param {Object} updates - { company_name }
+   */
+  const updateCompany = useCallback(async (companyId, updates) => {
+    try {
+      const { company_name } = updates;
+      if (!company_name?.trim()) {
+        throw new Error('Company name is required');
+      }
+
+      const { data, error } = await supabase
+        .from('subspecialty_companies')
+        .update({ company_name: company_name.trim() })
+        .eq('id', companyId)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      await loadCompanies();
+
+      return { success: true, data };
+    } catch (err) {
+      console.error('Error updating company:', err);
+      return { success: false, error: err.message };
+    }
+  }, [loadCompanies]);
+
+  /**
    * Delete a company (cascades to contacts)
    * @param {string} companyId - Company UUID
    */
@@ -316,6 +346,7 @@ export function useSubspecialtyCompanies(subspecialtyId = null, options = {}) {
     // Methods
     loadCompanies,
     createCompany,
+    updateCompany,
     deleteCompany,
     addContact,
     updateContact,

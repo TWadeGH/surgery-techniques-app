@@ -160,17 +160,17 @@ function getViewOnLabel(resource) {
   return 'View on External Site';
 }
 
-/** Source line: "Source: YouTube / Video / 9:12" */
-function getSourceLine(resource) {
+/** Source line segments for display */
+function getSourceLineSegments(resource) {
   const st = resource?.source_type;
   const sourceLabel = (st && SOURCE_DISPLAY[st]) || resource?.source_name || 'External';
   const typeKey = resource?.content_type || resource?.resource_type;
   const typeLabel = (typeKey && CONTENT_TYPE_LABELS[typeKey]) || (typeKey && typeKey.charAt(0).toUpperCase() + typeKey.slice(1)) || 'Link';
-  const parts = [`Source: ${sourceLabel}`, typeLabel];
-  if (resource?.resource_type === 'video' && resource?.duration_seconds) {
-    parts.push(formatDuration(resource.duration_seconds));
-  }
-  return parts.join(' / ');
+  const duration = resource?.resource_type === 'video' && resource?.duration_seconds
+    ? formatDuration(resource.duration_seconds)
+    : null;
+  const year = resource?.year_of_publication ? String(resource.year_of_publication) : null;
+  return { sourceLabel, typeLabel, duration, year };
 }
 
 /**
@@ -417,11 +417,6 @@ function ResourceCard({
                 </span>
               )}
             </div>
-            {resource.year_of_publication && (
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-full text-sm font-normal">
-                📅 {resource.year_of_publication}
-              </div>
-            )}
           </div>
 
           {/* Title and Description */}
@@ -484,9 +479,22 @@ function ResourceCard({
             </>
           )}
 
-          {/* Source line: Source / Type / Duration */}
+          {/* Source line: Source / Type / Duration / Year (duration and year slightly emphasized) */}
           <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
-            {getSourceLine(resource)}
+            {(() => {
+              const { sourceLabel, typeLabel, duration, year } = getSourceLineSegments(resource);
+              return (
+                <>
+                  Source: {sourceLabel} / {typeLabel}
+                  {duration && (
+                    <> / <span className="text-gray-600 dark:text-gray-300 font-semibold">{duration}</span></>
+                  )}
+                  {year && (
+                    <> / <span className="text-gray-600 dark:text-gray-300 font-semibold">{year}</span></>
+                  )}
+                </>
+              );
+            })()}
           </p>
 
           {/* View on [Source] button — opens confirmation modal then external link */}
