@@ -174,19 +174,17 @@ function ResourceList({
 
   // Memoize company lookup for performance
   const activeCompanyNames = useMemo(() => {
-    console.log('🏢 Active companies loaded:', companies);
-    return new Set(companies.map(c => c.name?.toLowerCase()).filter(Boolean));
+    const names = new Set(companies.map(c => c.name?.toLowerCase()).filter(Boolean));
+    if (names.size > 0) {
+      console.log('🏢 Active companies:', Array.from(names));
+    }
+    return names;
   }, [companies]);
 
   // Helper to check if resource's company is active
   const isCompanyActive = useCallback((resource) => {
-    if (!resource.company_name) {
-      console.log('❌ No company_name for resource:', resource.id?.substring(0, 8));
-      return false;
-    }
-    const isActive = activeCompanyNames.has(resource.company_name.toLowerCase());
-    console.log('🔍 Checking company:', resource.company_name, '→', isActive, 'Active companies:', Array.from(activeCompanyNames));
-    return isActive;
+    if (!resource.company_name) return false;
+    return activeCompanyNames.has(resource.company_name.toLowerCase());
   }, [activeCompanyNames]);
 
   return (

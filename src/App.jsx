@@ -1357,29 +1357,27 @@ function SurgicalTechniquesApp() {
   }, []);
 
   // Load active companies for Contact Rep feature
-  // Filters by subspecialty using the subspecialty_companies junction table
+  // A company is "active" when it has at least one contact in subspecialty_company_contacts
   const loadCompanies = useCallback(async () => {
     try {
-      // Determine which subspecialty to use (browsing or profile)
       const effectiveSubspecialtyId = browsingSubspecialtyId || currentUser?.subspecialtyId;
       
       if (!effectiveSubspecialtyId) {
-        console.log('No subspecialty selected, not loading companies');
         setCompanies([]);
         return;
       }
       
-      console.log('🏢 Loading companies for subspecialty:', effectiveSubspecialtyId?.substring(0, 8));
-      
-      // Query through the junction table to get companies for this subspecialty
+      // Query subspecialty_companies with their contacts
       const { data, error } = await supabase
         .from('subspecialty_companies')
         .select(`
-          company_id,
-          companies!inner(id, name, is_active)
+          id,
+          company_name,
+          subspecialty_id,
+          subspecialty_company_contacts(id)
         `)
         .eq('subspecialty_id', effectiveSubspecialtyId)
-        .eq('companies.is_active', true);
+        .order('company_name');
       
       if (error) {
         console.error('Error loading companies:', error);
@@ -1387,10 +1385,13 @@ function SurgicalTechniquesApp() {
         return;
       }
       
-      // Extract company data from the joined result
-      const companies = (data || []).map(item => item.companies).filter(Boolean);
-      console.log('🏢 Loaded companies:', companies);
-      setCompanies(companies);
+      // A company is active if it has at least one contact
+      const activeCompanies = (data || [])
+        .filter(c => c.subspecialty_company_contacts && c.subspecialty_company_contacts.length > 0)
+        .map(c => ({ id: c.id, name: c.company_name }));
+      
+      console.log('🏢 Active companies for subspecialty:', activeCompanies);
+      setCompanies(activeCompanies);
     } catch (error) {
       console.error('Error loading companies:', error);
       setCompanies([]);
