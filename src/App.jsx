@@ -1440,8 +1440,7 @@ function SurgicalTechniquesApp() {
       setCategories(categoriesData);
       setProcedures(proceduresData);
       
-      // Reload companies for this subspecialty
-      await loadCompanies();
+      // Note: Companies will reload automatically via useEffect when browsingSubspecialtyId changes
       
       // Show all resources for this subspecialty until user picks a category
       setSelectedCategoryId(null);
@@ -1449,7 +1448,7 @@ function SurgicalTechniquesApp() {
       console.error('Error loading categories for browsing subspecialty:', error);
       toast.error('Error loading resources. Please try again.');
     }
-  }, [currentUser, availableSubspecialties, fetchCategoriesAndProceduresForUser, loadCompanies, toast]);
+  }, [currentUser, availableSubspecialties, fetchCategoriesAndProceduresForUser, toast]);
 
   // Only show login screen if we have no user and loading is stuck
   // Don't timeout if we already have a user - they're logged in!
