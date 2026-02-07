@@ -154,7 +154,9 @@ function SurgicalTechniquesApp() {
   // Check onboarding status.
   // If onboarding_complete === true (from DB), skip onboarding (e.g. Podiatry has no subspecialty).
   // Otherwise require specialty and subspecialty so Podiatry/null-subspecialty users aren't stuck in onboarding.
+  // Don't set showOnboarding while auth is loading to avoid flash when returning to tab (TOKEN_REFRESHED).
   useEffect(() => {
+    if (loading) return;
     if (currentUser) {
       const hasOnboardingCompleteFlag = currentUser.onboardingComplete === true;
       const hasSpecialtyAndSubspecialty = currentUser.specialtyId && currentUser.subspecialtyId;
@@ -168,7 +170,7 @@ function SurgicalTechniquesApp() {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser?.id, currentUser?.specialtyId, currentUser?.subspecialtyId, currentUser?.onboardingComplete]);
+  }, [loading, currentUser?.id, currentUser?.specialtyId, currentUser?.subspecialtyId, currentUser?.onboardingComplete]);
 
   const handleOnboardingComplete = useCallback(async () => {
     setShowOnboarding(false);
@@ -1319,6 +1321,15 @@ function SurgicalTechniquesApp() {
     }
   }, [currentUser?.id, loadReportedResources]);
   const handleReturnToBrowse = useCallback(() => setCurrentView(VIEW_MODES.USER), []);
+
+  // When switching to Admin, clear browse search so admin sees all resources for the category
+  const handleViewChange = useCallback((newView) => {
+    if (newView === VIEW_MODES.ADMIN) {
+      setSearchTerm('');
+    }
+    setCurrentView(newView);
+  }, []);
+
   const handleCloseCategoryManagement = useCallback(() => {
     setShowCategoryManagement(false);
     fetchCategoriesAndProceduresForUser(currentUser, browsingSubspecialtyId).then(({ categoriesData, proceduresData }) => {
@@ -1558,7 +1569,7 @@ function SurgicalTechniquesApp() {
         <Header
           currentUser={currentUser}
           currentView={currentView}
-          onViewChange={setCurrentView}
+          onViewChange={handleViewChange}
           showUpcomingCases={showUpcomingCases}
           upcomingCasesCount={upcomingCases.length}
           onToggleUpcomingCases={handleToggleUpcomingCases}

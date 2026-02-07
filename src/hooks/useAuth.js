@@ -584,19 +584,22 @@ export function useAuth() {
           }
         } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
           if (session?.user) {
-            // CRITICAL: Always use session.email (most current, especially for OAuth)
-            // Don't use profile email here - it might be stale from previous login
             const sessionEmail = session.user.email || '';
-            
-            console.log('✅ SIGNED_IN event received - creating user with email from session');
-            
-            // SIMPLE: Create user immediately with current session email, set loading false, done
-            // Use functional update to ensure state updates
+            const isTokenRefresh = event === 'TOKEN_REFRESHED';
+
             setCurrentUser(prevUser => {
-              // Always update - don't check prevUser (might be stale)
+              // TOKEN_REFRESHED: Keep existing full profile to avoid onboarding flash when
+              // returning to the tab. Only update email if it changed.
+              if (isTokenRefresh && prevUser?.id === session.user.id) {
+                if (prevUser.email !== sessionEmail) {
+                  return { ...prevUser, email: sessionEmail };
+                }
+                return prevUser;
+              }
+              // SIGNED_IN or new user: use minimal user until profile loads
               return {
                 id: session.user.id,
-                email: sessionEmail, // Always use session email (correct for OAuth)
+                email: sessionEmail,
                 userType: 'student',
                 role: 'user',
                 specialtyId: null,
@@ -605,15 +608,13 @@ export function useAuth() {
               };
             });
             setLoading(false);
-            console.log('✅ User state updated - UI should render now');
-            
-            // Load profile in background - don't wait, don't block
-            // Profile load will update with session email if profile email is stale
+
+            // Load profile in background (refresh on TOKEN_REFRESHED, initial load on SIGNED_IN)
             setTimeout(() => {
               loadUserProfile(session.user.id).catch(() => {
                 // Silent fail - user can still use app
               });
-            }, 500);
+            }, isTokenRefresh ? 200 : 500);
           } else {
             console.warn('SIGNED_IN event but no session.user - this should not happen');
           }
