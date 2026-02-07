@@ -5,9 +5,50 @@
  */
 
 import React, { useState, useEffect, memo } from 'react';
-import { X, MessageSquare, Send, User, Mail, MapPin, Package, Building2 } from 'lucide-react';
+import { X, MessageSquare, Send, User, Mail, MapPin, Package, Building2, Globe, Phone } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useToast } from '../common';
+
+// Common countries list
+const COUNTRIES = [
+  'United States',
+  'Canada',
+  'United Kingdom',
+  'Australia',
+  'Germany',
+  'France',
+  'Spain',
+  'Italy',
+  'Netherlands',
+  'Belgium',
+  'Switzerland',
+  'Austria',
+  'Sweden',
+  'Norway',
+  'Denmark',
+  'Finland',
+  'Poland',
+  'Czech Republic',
+  'Ireland',
+  'Portugal',
+  'Greece',
+  'Mexico',
+  'Brazil',
+  'Argentina',
+  'Chile',
+  'Japan',
+  'South Korea',
+  'China',
+  'India',
+  'Singapore',
+  'New Zealand',
+  'South Africa',
+  'Israel',
+  'United Arab Emirates',
+  'Saudi Arabia',
+  'Turkey',
+  'Other'
+];
 
 /**
  * ContactRepModal Component
@@ -30,8 +71,11 @@ function ContactRepModal({
   const [formData, setFormData] = useState({
     userName: '',
     userEmail: currentUser?.email || '',
-    userLocation: '',
-    message: ''
+    country: 'United States',
+    city: '',
+    state: '',
+    cellPhone: '',
+    message: 'Please have a rep from your company contact me about this product.'
   });
 
   // Look up the subspecialty_company_id when modal opens
@@ -86,6 +130,18 @@ function ContactRepModal({
       return;
     }
 
+    // Validate US-specific fields if country is United States
+    if (formData.country === 'United States') {
+      if (!formData.city.trim()) {
+        toast.error('Please enter your city');
+        return;
+      }
+      if (!formData.state.trim()) {
+        toast.error('Please enter your state');
+        return;
+      }
+    }
+
     setLoading(true);
 
     try {
@@ -97,7 +153,10 @@ function ContactRepModal({
           user_id: currentUser.id,
           user_name: formData.userName.trim(),
           user_email: formData.userEmail.trim(),
-          user_location: formData.userLocation.trim() || null,
+          user_country: formData.country,
+          user_city: formData.city.trim() || null,
+          user_state: formData.state.trim() || null,
+          user_phone: formData.cellPhone.trim() || null,
           product_name: resource.product_name,
           message: formData.message.trim() || null,
           status: 'new'
@@ -219,18 +278,70 @@ function ContactRepModal({
               </div>
             </div>
 
-            {/* Location */}
+            {/* Country */}
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Location <span className="text-gray-400">(optional)</span>
+                Country <span className="text-red-500">*</span>
               </label>
               <div className="relative">
-                <MapPin size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <Globe size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                <select
+                  value={formData.country}
+                  onChange={(e) => setFormData(prev => ({ ...prev, country: e.target.value, city: '', state: '' }))}
+                  className="w-full pl-10 pr-4 py-2.5 border-2 border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm focus:border-purple-500 dark:focus:border-purple-400 focus:outline-none appearance-none"
+                  required
+                >
+                  {COUNTRIES.map(country => (
+                    <option key={country} value={country}>{country}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* City and State - Only for United States */}
+            {formData.country === 'United States' && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    City <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.city}
+                    onChange={(e) => setFormData(prev => ({ ...prev, city: e.target.value }))}
+                    placeholder="Denver"
+                    className="w-full px-4 py-2.5 border-2 border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm focus:border-purple-500 dark:focus:border-purple-400 focus:outline-none"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    State <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.state}
+                    onChange={(e) => setFormData(prev => ({ ...prev, state: e.target.value }))}
+                    placeholder="CO"
+                    className="w-full px-4 py-2.5 border-2 border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm focus:border-purple-500 dark:focus:border-purple-400 focus:outline-none"
+                    required
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Cell Phone */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Cell Phone <span className="text-gray-400">(optional)</span>
+              </label>
+              <div className="relative">
+                <Phone size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                 <input
-                  type="text"
-                  value={formData.userLocation}
-                  onChange={(e) => setFormData(prev => ({ ...prev, userLocation: e.target.value }))}
-                  placeholder="Denver, CO"
+                  type="tel"
+                  value={formData.cellPhone}
+                  onChange={(e) => setFormData(prev => ({ ...prev, cellPhone: e.target.value }))}
+                  placeholder="(555) 123-4567"
                   className="w-full pl-10 pr-4 py-2.5 border-2 border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-sm focus:border-purple-500 dark:focus:border-purple-400 focus:outline-none"
                 />
               </div>

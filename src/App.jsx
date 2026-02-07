@@ -46,7 +46,8 @@ import {
   SuggestedResourcesModal,
   SettingsModal,
   ReportResourceModal,
-  ReportedResourcesModal
+  ReportedResourcesModal,
+  ContactRepModal
 } from './components/modals';
 import { LegalModal, TermsAcceptanceModal } from './components/legal';
 
@@ -1715,6 +1716,21 @@ function SurgicalTechniquesApp() {
           onClose={() => setResourceToReport(null)}
           onSuccess={handleReportSuccess}
           currentUser={currentUser}
+        />
+      )}
+
+      {showContactRepModal && selectedResourceForContact && (
+        <ContactRepModal
+          resource={selectedResourceForContact}
+          currentUser={currentUser}
+          onClose={() => {
+            setShowContactRepModal(false);
+            setSelectedResourceForContact(null);
+          }}
+          onSuccess={() => {
+            setShowContactRepModal(false);
+            setSelectedResourceForContact(null);
+          }}
         />
       )}
 
