@@ -1444,7 +1444,7 @@ function SurgicalTechniquesApp() {
       console.error('Error loading categories for browsing subspecialty:', error);
       toast.error('Error loading resources. Please try again.');
     }
-  }, [currentUser, availableSubspecialties, fetchCategoriesAndProceduresForUser, toast]);
+  }, [currentUser, availableSubspecialties, fetchCategoriesAndProceduresForUser, loadCompanies, toast]);
 
   // Only show login screen if we have no user and loading is stuck
   // Don't timeout if we already have a user - they're logged in!
