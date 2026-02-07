@@ -46,7 +46,7 @@ async function checkRepAccess(email) {
           subspecialties(name)
         )
       `)
-      .ilike('email', email);
+      .eq('email', email.trim());
 
     if (error) {
       // Table might not exist yet - silently fail
