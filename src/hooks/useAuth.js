@@ -32,6 +32,8 @@ import { includeInAnalytics } from '../utils/helpers';
 async function checkRepAccess(email) {
   if (!email) return { isRep: false, repCompanies: [] };
 
+  console.log('🔍 Checking rep access for email:', email);
+
   try {
     const { data, error } = await supabase
       .from('subspecialty_company_contacts')
@@ -52,6 +54,8 @@ async function checkRepAccess(email) {
       return { isRep: false, repCompanies: [] };
     }
 
+    console.log('🔍 Rep access query result:', data);
+
     const repCompanies = (data || [])
       .filter(item => item.subspecialty_companies)
       .map(item => ({
@@ -60,6 +64,9 @@ async function checkRepAccess(email) {
         subspecialtyId: item.subspecialty_companies.subspecialty_id,
         subspecialtyName: item.subspecialty_companies.subspecialties?.name
       }));
+
+    console.log('🔍 Rep companies found:', repCompanies);
+    console.log('🔍 Is rep?', repCompanies.length > 0);
 
     return {
       isRep: repCompanies.length > 0,
