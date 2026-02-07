@@ -1364,25 +1364,15 @@ function SurgicalTechniquesApp() {
   }, []);
 
   // Load active companies for Contact Rep feature
-  // Only loads companies that are active for the current subspecialty
+  // TODO: Filter by subspecialty once we understand the schema
   const loadCompanies = useCallback(async () => {
     try {
-      // Determine which subspecialty to use (browsing or profile)
-      const effectiveSubspecialtyId = browsingSubspecialtyId || currentUser?.subspecialtyId;
-      
-      if (!effectiveSubspecialtyId) {
-        console.log('No subspecialty selected, not loading companies');
-        setCompanies([]);
-        return;
-      }
-      
-      console.log('🏢 Loading companies for subspecialty:', effectiveSubspecialtyId?.substring(0, 8));
+      console.log('🏢 Loading all active companies (temporary - need to add subspecialty filtering)');
       
       const { data, error } = await supabase
         .from('companies')
-        .select('id, name, is_active, subspecialty_id')
+        .select('*')
         .eq('is_active', true)
-        .eq('subspecialty_id', effectiveSubspecialtyId)
         .order('name');
       
       if (error) {
@@ -1397,7 +1387,7 @@ function SurgicalTechniquesApp() {
       console.error('Error loading companies:', error);
       setCompanies([]);
     }
-  }, [browsingSubspecialtyId, currentUser?.subspecialtyId]);
+  }, []);
 
   // Handle contact rep click
   const handleContactRep = useCallback((resource) => {
