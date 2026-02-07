@@ -47,7 +47,8 @@ import {
   SettingsModal,
   ReportResourceModal,
   ReportedResourcesModal,
-  ContactRepModal
+  ContactRepModal,
+  ResetPasswordModal
 } from './components/modals';
 import { LegalModal, TermsAcceptanceModal } from './components/legal';
 
@@ -69,7 +70,9 @@ function SurgicalTechniquesApp() {
     refreshSession,
     refreshProfile,
     isRep,
-    repCompanies
+    repCompanies,
+    showPasswordReset,
+    closePasswordReset
   } = useAuth();
   
   // Use authLoading as the main loading state
@@ -1777,6 +1780,17 @@ function SurgicalTechniquesApp() {
             return result;
           }}
           onClose={() => setShowSettings(false)}
+        />
+      )}
+
+      {/* Reset Password Modal */}
+      {showPasswordReset && (
+        <ResetPasswordModal
+          onClose={closePasswordReset}
+          onSuccess={() => {
+            toast.success('Password updated successfully!');
+            closePasswordReset();
+          }}
         />
       )}
 

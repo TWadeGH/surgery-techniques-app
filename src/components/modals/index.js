@@ -8,3 +8,4 @@ export { default as ReportedResourcesModal } from './ReportedResourcesModal';
 export { default as ExternalLinkModal } from './ExternalLinkModal';
 export { default as ContactRepModal } from './ContactRepModal';
 export { default as SponsorshipInquiryModal } from './SponsorshipInquiryModal';
+export { default as ResetPasswordModal } from './ResetPasswordModal';

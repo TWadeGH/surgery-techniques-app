@@ -89,6 +89,7 @@ export function useAuth() {
   const [error, setError] = useState(null);
   const [isRep, setIsRep] = useState(false);
   const [repCompanies, setRepCompanies] = useState([]);
+  const [showPasswordReset, setShowPasswordReset] = useState(false);
 
   // Refs for cleanup and race condition prevention
   const isMounted = useRef(true);
@@ -524,12 +525,21 @@ export function useAuth() {
           clearTimeout(sessionCheckTimeout.current);
         }
         
+        // Handle password recovery - show reset password modal
+        if (event === 'PASSWORD_RECOVERY') {
+          console.log('Password recovery detected - showing reset modal');
+          setShowPasswordReset(true);
+          setLoading(false);
+          return;
+        }
+
         // For SIGNED_OUT, check isMounted to prevent errors
         if (event === 'SIGNED_OUT') {
           if (!isMounted.current) return;
           console.log('User signed out');
           setCurrentUser(null);
           setLoading(false);
+          setShowPasswordReset(false);
           endAnalyticsSession();
         } else if (event === 'INITIAL_SESSION') {
           // INITIAL_SESSION fires on mount - handle it like a session check
@@ -826,6 +836,8 @@ export function useAuth() {
     isAuthenticated: !!currentUser,
     isRep,
     repCompanies,
+    showPasswordReset,
+    closePasswordReset: () => setShowPasswordReset(false),
 
     // Methods
     signIn,

@@ -6,7 +6,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { X, AlertCircle, Info } from 'lucide-react';
+import { X, AlertCircle, Info, Lock } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { validateUuid } from '../../utils/validators';
 
@@ -35,8 +35,18 @@ export default function SettingsModal({
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
 
+  // Password management state
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [passwordMessage, setPasswordMessage] = useState('');
+  const [hasPassword, setHasPassword] = useState(false);
+  const [showPasswordSection, setShowPasswordSection] = useState(false);
+  const [showSpecialtySection, setShowSpecialtySection] = useState(false);
+
   useEffect(() => {
     loadSpecialties();
+    checkPasswordStatus();
     // Initialize from currentUser
     if (currentUser?.specialtyId) {
       setSelectedSpecialty(String(currentUser.specialtyId));
@@ -49,6 +59,20 @@ export default function SettingsModal({
       setSelectedSubspecialty('');
     }
   }, [currentUser]);
+
+  // Check if user has password authentication method
+  async function checkPasswordStatus() {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        // Check if user has email provider (password auth)
+        const providers = user.app_metadata?.providers || [];
+        setHasPassword(providers.includes('email'));
+      }
+    } catch (error) {
+      console.error('Error checking password status:', error);
+    }
+  }
 
   async function loadSpecialties() {
     try {
@@ -156,6 +180,53 @@ export default function SettingsModal({
       setSubspecialties([]);
     }
   };
+
+  async function handlePasswordUpdate() {
+    setPasswordMessage('');
+
+    // Validation
+    if (!newPassword) {
+      setPasswordMessage('Error: Please enter a new password.');
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      setPasswordMessage('Error: Password must be at least 6 characters.');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setPasswordMessage('Error: Passwords do not match.');
+      return;
+    }
+
+    setPasswordLoading(true);
+
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword
+      });
+
+      if (error) throw error;
+
+      setPasswordMessage(`Success: Password ${hasPassword ? 'changed' : 'set'} successfully!`);
+      setNewPassword('');
+      setConfirmPassword('');
+
+      // Update hasPassword state if it was just set
+      if (!hasPassword) {
+        setHasPassword(true);
+      }
+    } catch (error) {
+      console.error('Error updating password:', error);
+      const sanitizedMessage = error.message ?
+        error.message.replace(/[<>]/g, '').substring(0, 200) :
+        'Failed to update password';
+      setPasswordMessage('Error: ' + sanitizedMessage);
+    } finally {
+      setPasswordLoading(false);
+    }
+  }
 
   async function handleSave() {
     // Security: Validate user ID
@@ -277,7 +348,7 @@ export default function SettingsModal({
         </div>
 
         {/* Dark Mode Toggle */}
-        <div className="mb-6 pb-6 border-b border-gray-200">
+        <div className="mb-6 pb-6 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-1">Dark Mode</h3>
@@ -305,25 +376,128 @@ export default function SettingsModal({
           </div>
         </div>
 
-        {/* Specialty/Subspecialty - Permanent Change (Available to all users) */}
-        <div className="space-y-6">
-          <div>
-            <div className="flex items-start gap-2 mb-2">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Change Specialty/Subspecialty</h3>
-              <Info size={18} className="text-blue-500 dark:text-blue-400 mt-0.5 flex-shrink-0" />
-            </div>
-            <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-              <p className="text-sm text-blue-800 dark:text-blue-200 flex items-start gap-2">
-                <AlertCircle size={16} className="mt-0.5 flex-shrink-0" />
-                <span>
-                  <strong>Permanent Change:</strong> Your default view will change to the selected specialty/subspecialty. 
-                  You can still temporarily browse other subspecialties using the "Browse by Subspecialty" dropdown on the main page. 
-                  You can change this again as needed.
-                </span>
+        {/* Password Management */}
+        <div className="mb-6 pb-6 border-b border-gray-200 dark:border-gray-700">
+          <button
+            onClick={() => setShowPasswordSection(!showPasswordSection)}
+            className="w-full flex items-start gap-3 p-4 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-left"
+          >
+            <Lock size={20} className="text-purple-600 dark:text-purple-400 mt-0.5 flex-shrink-0" />
+            <div className="flex-1">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-1">
+                {hasPassword ? 'Change Password' : 'Set Password'}
+              </h3>
+              <p className="text-sm text-gray-600 dark:text-gray-300">
+                {hasPassword
+                  ? 'Update your password for email/password login'
+                  : 'Add password login to your account (you signed up with Google)'}
               </p>
             </div>
-            
-            <div className="space-y-4">
+            <svg
+              className={`w-5 h-5 text-gray-400 transition-transform flex-shrink-0 mt-1 ${showPasswordSection ? 'rotate-180' : ''}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+
+          {showPasswordSection && (
+            <div className="space-y-3 mt-4 px-4">
+            <div>
+              <label htmlFor="new-password" className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                New Password
+              </label>
+              <input
+                id="new-password"
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="w-full px-4 py-3 border-2 border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:border-purple-500 focus:outline-none transition-colors"
+                placeholder="Enter new password"
+                disabled={passwordLoading}
+                minLength={6}
+              />
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Must be at least 6 characters
+              </p>
+            </div>
+
+            <div>
+              <label htmlFor="confirm-password" className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                Confirm Password
+              </label>
+              <input
+                id="confirm-password"
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className="w-full px-4 py-3 border-2 border-gray-200 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:border-purple-500 focus:outline-none transition-colors"
+                placeholder="Confirm new password"
+                disabled={passwordLoading}
+                minLength={6}
+              />
+            </div>
+
+            {passwordMessage && (
+              <div className={`p-3 rounded-lg text-sm ${
+                passwordMessage.includes('Error')
+                  ? 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400'
+                  : 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400'
+              }`}>
+                {passwordMessage}
+              </div>
+            )}
+
+            <button
+              onClick={handlePasswordUpdate}
+              disabled={passwordLoading || !newPassword || !confirmPassword}
+              className="w-full px-6 py-3 bg-purple-600 text-white rounded-xl font-medium hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {passwordLoading ? 'Updating...' : (hasPassword ? 'Change Password' : 'Set Password')}
+            </button>
+            </div>
+          )}
+        </div>
+
+        {/* Specialty/Subspecialty - Permanent Change (Available to all users) */}
+        <div className="space-y-6">
+          <button
+            onClick={() => setShowSpecialtySection(!showSpecialtySection)}
+            className="w-full flex items-start gap-3 p-4 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-left"
+          >
+            <Info size={20} className="text-blue-500 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+            <div className="flex-1">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-1">Change Specialty/Subspecialty</h3>
+              <p className="text-sm text-gray-600 dark:text-gray-300">
+                Permanently change your default specialty/subspecialty view
+              </p>
+            </div>
+            <svg
+              className={`w-5 h-5 text-gray-400 transition-transform flex-shrink-0 mt-1 ${showSpecialtySection ? 'rotate-180' : ''}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+
+          {showSpecialtySection && (
+            <div className="px-4">
+              <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                <p className="text-sm text-blue-800 dark:text-blue-200 flex items-start gap-2">
+                  <AlertCircle size={16} className="mt-0.5 flex-shrink-0" />
+                  <span>
+                    <strong>Permanent Change:</strong> Your default view will change to the selected specialty/subspecialty.
+                    You can still temporarily browse other subspecialties using the "Browse by Subspecialty" dropdown on the main page.
+                    You can change this again as needed.
+                  </span>
+                </p>
+              </div>
+
+              <div className="space-y-4">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-200 mb-2">
                   Specialty
@@ -373,8 +547,9 @@ export default function SettingsModal({
                   )}
                 </div>
               )}
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Message */}
