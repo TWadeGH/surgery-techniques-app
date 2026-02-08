@@ -48,28 +48,32 @@ import { canRateOrFavorite } from '../../utils/helpers';
  * @param {Function} props.onReportResource - Callback to open report modal for a resource
  * @param {Array} props.companies - Array of active companies for Contact Rep feature
  * @param {Function} props.onContactRep - Callback to contact company rep
+ * @param {Function} props.getCalendarEvent - Function to get calendar event for a resource
+ * @param {Function} props.onCreateCalendarEvent - Callback to create calendar event
+ * @param {Function} props.onDeleteCalendarEvent - Callback to delete calendar event
+ * @param {boolean} props.isCalendarConnected - Whether user has connected calendar
  */
-function UserView({ 
-  resources, 
+function UserView({
+  resources,
   allResources,
-  upcomingCases, 
-  showUpcomingCases, 
-  onToggleUpcomingCases, 
-  showFavoritesOnly, 
-  searchTerm, 
-  categories, 
-  selectedCategoryId, 
-  onToggleFavorites, 
-  onSearchChange, 
-  onToggleFavorite, 
-  onToggleUpcomingCase, 
-  onReorderUpcomingCases, 
-  onUpdateNote, 
-  onSuggestResource, 
-  onCategorySelect, 
-  currentUser, 
-  isFavorited, 
-  getNote, 
+  upcomingCases,
+  showUpcomingCases,
+  onToggleUpcomingCases,
+  showFavoritesOnly,
+  searchTerm,
+  categories,
+  selectedCategoryId,
+  onToggleFavorites,
+  onSearchChange,
+  onToggleFavorite,
+  onToggleUpcomingCase,
+  onReorderUpcomingCases,
+  onUpdateNote,
+  onSuggestResource,
+  onCategorySelect,
+  currentUser,
+  isFavorited,
+  getNote,
   isInUpcomingCases,
   availableSubspecialties = [],
   browsingSubspecialtyId = null,
@@ -82,6 +86,10 @@ function UserView({
   onReportResource,
   companies = [],
   onContactRep,
+  getCalendarEvent,
+  onCreateCalendarEvent,
+  onDeleteCalendarEvent,
+  isCalendarConnected = false,
 }) {
   // Organize categories hierarchically
   const organizedCategories = useMemo(() => {
@@ -460,6 +468,10 @@ function UserView({
                       isUpcomingCase={true}
                       currentUser={currentUser}
                       onReportResource={onReportResource}
+                      calendarEvent={getCalendarEvent ? getCalendarEvent(resource.id) : null}
+                      onCreateCalendarEvent={onCreateCalendarEvent}
+                      onDeleteCalendarEvent={onDeleteCalendarEvent}
+                      isCalendarConnected={isCalendarConnected}
                     />
                   </div>
                 </div>
@@ -613,6 +625,10 @@ function UserView({
             onReportResource={onReportResource}
             companies={companies}
             onContactRep={onContactRep}
+            getCalendarEvent={getCalendarEvent}
+            onCreateCalendarEvent={onCreateCalendarEvent}
+            onDeleteCalendarEvent={onDeleteCalendarEvent}
+            isCalendarConnected={isCalendarConnected}
           />
 
           {/* Pagination: [Next] when >10 resources; [Previous] and [Next] when on page 2+ */}

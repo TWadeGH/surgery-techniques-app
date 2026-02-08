@@ -21,12 +21,15 @@ import {
   ArrowRight,
   X,
   Flag,
-  MessageSquare
+  MessageSquare,
+  Calendar,
+  Trash2
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { trackResourceCoview, trackRatingEvent, trackResourceLinkClick } from '../../lib/analytics';
 import { USER_TYPES, SOURCE_DISPLAY, CONTENT_TYPE_LABELS, EXTERNAL_LINK_DISCLOSURE } from '../../utils/constants';
 import ExternalLinkModal from '../modals/ExternalLinkModal';
+import CalendarEventModal from '../modals/CalendarEventModal';
 import { includeInAnalytics } from '../../utils/helpers';
 import { useToast } from '../common';
 
@@ -175,7 +178,7 @@ function getSourceLineSegments(resource) {
 
 /**
  * ResourceCard Component
- * 
+ *
  * @param {Object} props
  * @param {Object} props.resource - Resource object
  * @param {boolean} props.isFavorited - Whether resource is favorited
@@ -189,6 +192,10 @@ function getSourceLineSegments(resource) {
  * @param {Function} props.onReportResource - Callback to open report modal for this resource
  * @param {Function} props.onContactRep - Callback to contact company rep
  * @param {boolean} props.companyIsActive - Whether the resource's company has active contacts
+ * @param {Object} props.calendarEvent - Calendar event for this resource (if exists)
+ * @param {Function} props.onCreateCalendarEvent - Callback to create calendar event
+ * @param {Function} props.onDeleteCalendarEvent - Callback to delete calendar event
+ * @param {boolean} props.isCalendarConnected - Whether user has connected calendar
  */
 function ResourceCard({
   resource,
@@ -202,7 +209,11 @@ function ResourceCard({
   currentUser,
   onReportResource,
   onContactRep,
-  companyIsActive = false
+  companyIsActive = false,
+  calendarEvent = null,
+  onCreateCalendarEvent,
+  onDeleteCalendarEvent,
+  isCalendarConnected = false
 }) {
   const toast = useToast();
   const [showNoteInput, setShowNoteInput] = useState(false);
@@ -213,6 +224,8 @@ function ResourceCard({
   const [loadingRating, setLoadingRating] = useState(false);
   const [showFullDescriptionPopover, setShowFullDescriptionPopover] = useState(false);
   const [showExternalLinkModal, setShowExternalLinkModal] = useState(false);
+  const [showCalendarModal, setShowCalendarModal] = useState(false);
+  const [deletingCalendarEvent, setDeletingCalendarEvent] = useState(false);
 
   // Track view when card is visible (analytics: Surgeon and Resident/Fellow only)
   useEffect(() => {
@@ -372,6 +385,44 @@ function ResourceCard({
       window.open(href, '_blank', 'noopener,noreferrer');
     }
     setShowExternalLinkModal(false);
+  };
+
+  /**
+   * Handle deleting calendar event
+   */
+  const handleDeleteCalendarEvent = async () => {
+    if (!calendarEvent || !onDeleteCalendarEvent) return;
+
+    try {
+      setDeletingCalendarEvent(true);
+      await onDeleteCalendarEvent(calendarEvent.id);
+      toast.success('Calendar event removed');
+    } catch (error) {
+      console.error('Error deleting calendar event:', error);
+      toast.error('Failed to remove calendar event');
+    } finally {
+      setDeletingCalendarEvent(false);
+    }
+  };
+
+  /**
+   * Format calendar event date/time for display
+   */
+  const formatCalendarEventDisplay = () => {
+    if (!calendarEvent) return '';
+    try {
+      const eventDate = new Date(calendarEvent.event_start);
+      const options = {
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+      };
+      return eventDate.toLocaleString('en-US', options);
+    } catch {
+      return 'Scheduled';
+    }
   };
 
   return (
@@ -656,8 +707,8 @@ function ResourceCard({
                 <button
                   onClick={() => onToggleUpcomingCase(resource.id)}
                   className={`p-3 rounded-lg transition-all active:scale-95 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 ${
-                    isUpcomingCase 
-                      ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900/50' 
+                    isUpcomingCase
+                      ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900/50'
                       : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
                   }`}
                   aria-label={isUpcomingCase ? 'Remove from Upcoming Cases' : 'Add to Upcoming Cases'}
@@ -667,6 +718,44 @@ function ResourceCard({
                 <span className="absolute bottom-full right-0 mb-2 px-2 py-1.5 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded shadow-lg whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 pointer-events-none z-50">
                   {isUpcomingCase ? 'Remove this resource from your Upcoming Cases list' : 'Add this resource to your Upcoming Cases for a future procedure'}
                 </span>
+                </div>
+              )}
+
+              {/* Add to Calendar Button - Available to all logged-in users with calendar connected */}
+              {currentUser && isCalendarConnected && (
+                <div className="group relative">
+                  {calendarEvent ? (
+                    // Show scheduled state with delete option
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => setShowCalendarModal(true)}
+                        className="p-3 rounded-lg bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/50 transition-all active:scale-95 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2"
+                        aria-label="View calendar event"
+                      >
+                        <Calendar size={20} fill="currentColor" />
+                      </button>
+                      <button
+                        onClick={handleDeleteCalendarEvent}
+                        disabled={deletingCalendarEvent}
+                        className="p-2 rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all active:scale-95 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 disabled:opacity-50"
+                        aria-label="Remove from calendar"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  ) : (
+                    // Show add to calendar button
+                    <button
+                      onClick={() => setShowCalendarModal(true)}
+                      className="p-3 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-all active:scale-95 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2"
+                      aria-label="Add to calendar"
+                    >
+                      <Calendar size={20} />
+                    </button>
+                  )}
+                  <span className="absolute bottom-full right-0 mb-2 px-2 py-1.5 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded shadow-lg whitespace-nowrap opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150 pointer-events-none z-50">
+                    {calendarEvent ? `On calendar: ${formatCalendarEventDisplay()}` : 'Schedule this resource review on your calendar'}
+                  </span>
                 </div>
               )}
 
@@ -713,6 +802,18 @@ function ResourceCard({
         resourceTitle={resource?.title}
         sourceLabel={(resource?.source_type && SOURCE_DISPLAY[resource.source_type]) || resource?.source_name}
       />
+
+      {showCalendarModal && (
+        <CalendarEventModal
+          resource={resource}
+          userNote={note}
+          onClose={() => setShowCalendarModal(false)}
+          onSuccess={() => {
+            // Modal will close automatically on success
+          }}
+          onCreateEvent={onCreateCalendarEvent}
+        />
+      )}
     </div>
   );
 }
@@ -727,5 +828,7 @@ export default memo(ResourceCard, (prevProps, nextProps) => (
   prevProps.currentUser?.id === nextProps.currentUser?.id &&
   prevProps.onReportResource === nextProps.onReportResource &&
   prevProps.onContactRep === nextProps.onContactRep &&
-  prevProps.companyIsActive === nextProps.companyIsActive
+  prevProps.companyIsActive === nextProps.companyIsActive &&
+  prevProps.calendarEvent?.id === nextProps.calendarEvent?.id &&
+  prevProps.isCalendarConnected === nextProps.isCalendarConnected
 ));

@@ -23,6 +23,7 @@ export { useUpcomingCases } from './useUpcomingCases';
 export { useSubspecialtyCompanies } from './useSubspecialtyCompanies';
 export { useRepPlatform } from './useRepPlatform';
 export { useCalendarConnection } from './useCalendarConnection';
+export { useCalendarEvents } from './useCalendarEvents';
 
 // Future hooks to add:
 // export { default as useCategories } from './useCategories';

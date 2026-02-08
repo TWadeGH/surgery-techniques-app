@@ -89,7 +89,7 @@ const EmptyState = memo(function EmptyState({ showFavoritesOnly }) {
 
 /**
  * ResourceList Component
- * 
+ *
  * @param {Object} props
  * @param {Array} props.resources - Array of resource objects
  * @param {Array} props.favorites - Array of favorited resource IDs (optional, for backward compatibility)
@@ -106,6 +106,10 @@ const EmptyState = memo(function EmptyState({ showFavoritesOnly }) {
  * @param {boolean} props.loading - Whether resources are loading
  * @param {Array} props.companies - Array of active companies for Contact Rep feature
  * @param {Function} props.onContactRep - Callback to contact company rep
+ * @param {Function} props.getCalendarEvent - Function to get calendar event for a resource
+ * @param {Function} props.onCreateCalendarEvent - Callback to create calendar event
+ * @param {Function} props.onDeleteCalendarEvent - Callback to delete calendar event
+ * @param {boolean} props.isCalendarConnected - Whether user has connected calendar
  */
 function ResourceList({
   resources,
@@ -123,6 +127,10 @@ function ResourceList({
   loading = false,
   companies = [],
   onContactRep,
+  getCalendarEvent,
+  onCreateCalendarEvent,
+  onDeleteCalendarEvent,
+  isCalendarConnected = false,
 }) {
   // Show loading skeleton while loading
   if (loading) {
@@ -190,8 +198,8 @@ function ResourceList({
   return (
     <div className="space-y-2">
       {validResources.map((resource, index) => (
-        <ResourceCard 
-          key={resource.id} 
+        <ResourceCard
+          key={resource.id}
           resource={resource}
           isFavorited={checkIsFavorited(resource.id)}
           note={getNoteText(resource.id)}
@@ -204,6 +212,10 @@ function ResourceList({
           onReportResource={onReportResource}
           companyIsActive={isCompanyActive(resource)}
           onContactRep={onContactRep}
+          calendarEvent={getCalendarEvent ? getCalendarEvent(resource.id) : null}
+          onCreateCalendarEvent={onCreateCalendarEvent}
+          onDeleteCalendarEvent={onDeleteCalendarEvent}
+          isCalendarConnected={isCalendarConnected}
         />
       ))}
     </div>

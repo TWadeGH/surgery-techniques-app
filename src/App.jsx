@@ -13,12 +13,14 @@ import { processResourceImage } from './lib/imageUtils';
 import Onboarding from './Onboarding';
 
 // Import custom hooks
-import { 
-  useAuth, 
-  useResources, 
-  useFavorites, 
-  useNotes, 
-  useUpcomingCases 
+import {
+  useAuth,
+  useResources,
+  useFavorites,
+  useNotes,
+  useUpcomingCases,
+  useCalendarConnection,
+  useCalendarEvents
 } from './hooks';
 
 // Import utilities
@@ -94,6 +96,15 @@ function SurgicalTechniquesApp() {
     reorderCases: reorderUpcomingCases,
     isInUpcomingCases,
   } = useUpcomingCases(userId);
+
+  // Calendar Connection & Events
+  const { isConnected: isCalendarConnected } = useCalendarConnection(userId);
+  const {
+    events: calendarEvents,
+    createEvent: createCalendarEvent,
+    deleteEvent: deleteCalendarEvent,
+    getEventForResource
+  } = useCalendarEvents(userId);
 
   // ========================================
   // LOCAL STATE (Non-hook state)
@@ -1614,6 +1625,10 @@ function SurgicalTechniquesApp() {
             onReportResource={handleReportResource}
             companies={companies}
             onContactRep={handleContactRep}
+            getCalendarEvent={getEventForResource}
+            onCreateCalendarEvent={createCalendarEvent}
+            onDeleteCalendarEvent={deleteCalendarEvent}
+            isCalendarConnected={isCalendarConnected('google')}
           />
         ) : currentView === VIEW_MODES.REP && isRep ? (
           <RepView

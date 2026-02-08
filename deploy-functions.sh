@@ -74,12 +74,18 @@ supabase functions deploy disconnect-calendar --no-verify-jwt
 echo "   ✅ disconnect-calendar deployed"
 echo ""
 
+echo "4️⃣  Deploying delete-calendar-event..."
+supabase functions deploy delete-calendar-event --no-verify-jwt
+echo "   ✅ delete-calendar-event deployed"
+echo ""
+
 echo "🎉 All Edge Functions deployed successfully!"
 echo ""
 echo "📍 Your functions are now available at:"
 echo "   • https://bufnygjdkdemacqbxcrh.supabase.co/functions/v1/google-oauth-callback"
 echo "   • https://bufnygjdkdemacqbxcrh.supabase.co/functions/v1/create-calendar-event"
 echo "   • https://bufnygjdkdemacqbxcrh.supabase.co/functions/v1/disconnect-calendar"
+echo "   • https://bufnygjdkdemacqbxcrh.supabase.co/functions/v1/delete-calendar-event"
 echo ""
 echo "✨ Next steps:"
 echo "   1. Test OAuth flow by connecting your calendar"
