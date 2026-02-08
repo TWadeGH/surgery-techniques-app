@@ -22,6 +22,7 @@ export { useNotes } from './useNotes';
 export { useUpcomingCases } from './useUpcomingCases';
 export { useSubspecialtyCompanies } from './useSubspecialtyCompanies';
 export { useRepPlatform } from './useRepPlatform';
+export { useCalendarConnection } from './useCalendarConnection';
 
 // Future hooks to add:
 // export { default as useCategories } from './useCategories';
