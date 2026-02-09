@@ -97,7 +97,9 @@ serve(async (req) => {
     })
 
     if (!calendarResponse.ok) {
-      console.error('Failed to fetch calendar list')
+      const calendarError = await calendarResponse.text()
+      console.error('Failed to fetch calendar list. Status:', calendarResponse.status)
+      console.error('Calendar API error:', calendarError)
       return new Response(null, {
         status: 302,
         headers: {
