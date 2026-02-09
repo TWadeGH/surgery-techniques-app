@@ -16,12 +16,20 @@ serve(async (req) => {
   }
 
   try {
-    // Get environment variables (secrets we just added)
-    const GOOGLE_CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID')!
-    const GOOGLE_CLIENT_SECRET = Deno.env.get('GOOGLE_CLIENT_SECRET')!
-    const APP_URL = Deno.env.get('APP_URL')!
-    const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
-    const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!
+    // Get environment variables (secrets)
+    const GOOGLE_CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID') || ''
+    const GOOGLE_CLIENT_SECRET = Deno.env.get('GOOGLE_CLIENT_SECRET') || ''
+    const APP_URL = Deno.env.get('APP_URL') || 'https://surgicaltechniques.app'
+    const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || 'https://bufnygjdkdemacqbxcrh.supabase.co'
+    const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') || ''
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
+
+    // Debug logging
+    console.log('=== ENV DEBUG ===')
+    console.log('APP_URL:', APP_URL)
+    console.log('SUPABASE_URL:', SUPABASE_URL)
+    console.log('GOOGLE_CLIENT_ID exists:', !!GOOGLE_CLIENT_ID)
+    console.log('==================')
 
     // Parse URL parameters
     const url = new URL(req.url)
@@ -115,26 +123,11 @@ serve(async (req) => {
 
     console.log('Primary calendar found:', primaryCalendar.id)
 
-    // Get user ID from authorization header
-    const authHeader = req.headers.get('Authorization')
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: 'Missing authorization header' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      })
-    }
-
-    // Create Supabase client
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      global: {
-        headers: { Authorization: authHeader }
-      }
-    })
-
-    // Get current user
-    const { data: { user }, error: userError } = await supabase.auth.getUser()
-    if (userError || !user) {
-      console.error('Failed to get user:', userError)
+    // Get user ID from state parameter (we pass it during OAuth initiation)
+    // State format: "userId:randomUUID" for CSRF protection
+    const userId = state?.split(':')[0]
+    if (!userId) {
+      console.error('No user ID in state parameter')
       return new Response(null, {
         status: 302,
         headers: {
@@ -144,7 +137,12 @@ serve(async (req) => {
       })
     }
 
-    console.log('Storing connection for user:', user.id)
+    console.log('User ID from state:', userId)
+
+    // Create Supabase client with service role key (needed to write to DB without user auth)
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+
+    console.log('Storing connection for user:', userId)
 
     // Calculate token expiry
     const tokenExpiresAt = new Date(Date.now() + (expires_in * 1000))
@@ -155,7 +153,7 @@ serve(async (req) => {
     const { error: dbError } = await supabase
       .from('user_calendar_connections')
       .upsert({
-        user_id: user.id,
+        user_id: userId,
         provider: 'google',
         access_token_encrypted: access_token, // TODO: Encrypt in Phase 2
         refresh_token_encrypted: refresh_token, // TODO: Encrypt in Phase 2

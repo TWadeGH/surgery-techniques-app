@@ -61,18 +61,19 @@ export function useCalendarConnection(userId) {
   // Initiate OAuth flow for Google Calendar
   const connectGoogle = useCallback(async () => {
     try {
-      // Generate state parameter for CSRF protection
-      const state = crypto.randomUUID();
-      sessionStorage.setItem('oauth_state', state);
-
-      // Get current user session to pass to callback
+      // Get current user session
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         throw new Error('Not authenticated');
       }
 
+      // Generate state parameter with user ID for callback identification
+      // Format: "userId:randomUUID" - userId lets callback know who to save for
+      const randomPart = crypto.randomUUID();
+      const state = `${session.user.id}:${randomPart}`;
+      sessionStorage.setItem('oauth_state', randomPart);
+
       // Build Google OAuth URL
-      // Using hardcoded Supabase URL (public-facing, not sensitive)
       const supabaseUrl = 'https://bufnygjdkdemacqbxcrh.supabase.co';
       const googleClientId = '663379322167-gkbauqrtkf5ecnib4hpdoelbbncsc38q.apps.googleusercontent.com';
 
@@ -84,13 +85,13 @@ export function useCalendarConnection(userId) {
       googleAuthUrl.searchParams.set('response_type', 'code');
       googleAuthUrl.searchParams.set('scope', 'https://www.googleapis.com/auth/calendar.events');
       googleAuthUrl.searchParams.set('state', state);
-      googleAuthUrl.searchParams.set('access_type', 'offline'); // Get refresh token
-      googleAuthUrl.searchParams.set('prompt', 'consent'); // Force consent to ensure refresh token
+      googleAuthUrl.searchParams.set('access_type', 'offline');
+      googleAuthUrl.searchParams.set('prompt', 'consent');
 
       console.log('=== GOOGLE OAUTH DEBUG ===');
-      console.log('Supabase URL:', supabaseUrl);
+      console.log('User ID:', session.user.id);
       console.log('Redirect URI:', redirectUri);
-      console.log('Full Google Auth URL:', googleAuthUrl.toString());
+      console.log('State:', state);
       console.log('========================');
 
       // Redirect to Google OAuth
