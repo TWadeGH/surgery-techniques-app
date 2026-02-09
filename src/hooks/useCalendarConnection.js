@@ -83,7 +83,7 @@ export function useCalendarConnection(userId) {
       googleAuthUrl.searchParams.set('client_id', googleClientId);
       googleAuthUrl.searchParams.set('redirect_uri', redirectUri);
       googleAuthUrl.searchParams.set('response_type', 'code');
-      googleAuthUrl.searchParams.set('scope', 'https://www.googleapis.com/auth/calendar.events');
+      googleAuthUrl.searchParams.set('scope', 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly');
       googleAuthUrl.searchParams.set('state', state);
       googleAuthUrl.searchParams.set('access_type', 'offline');
       googleAuthUrl.searchParams.set('prompt', 'consent');
