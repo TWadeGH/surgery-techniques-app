@@ -149,19 +149,57 @@ serve(async (req) => {
     // Calculate token expiry
     const tokenExpiresAt = new Date(Date.now() + (expires_in * 1000))
 
-    // Store connection in database
-    // NOTE: For Phase 1, we're storing tokens as plaintext
-    // TODO: Encrypt tokens in Phase 2 using Supabase Vault
+    // Encrypt tokens using Supabase Vault
+    console.log('Encrypting access token...')
+    const { data: accessVaultData, error: accessVaultError } = await supabase
+      .rpc('store_encrypted_token', {
+        p_secret: access_token,
+        p_name: `calendar_access_${userId}_google`
+      })
+
+    if (accessVaultError || !accessVaultData) {
+      console.error('Failed to encrypt access token:', accessVaultError)
+      return new Response(null, {
+        status: 302,
+        headers: {
+          ...corsHeaders,
+          'Location': `${APP_URL}/settings?calendar=error&reason=encryption_failed`
+        }
+      })
+    }
+
+    // Encrypt refresh token
+    console.log('Encrypting refresh token...')
+    const { data: refreshVaultData, error: refreshVaultError } = await supabase
+      .rpc('store_encrypted_token', {
+        p_secret: refresh_token,
+        p_name: `calendar_refresh_${userId}_google`
+      })
+
+    if (refreshVaultError || !refreshVaultData) {
+      console.error('Failed to encrypt refresh token:', refreshVaultError)
+      return new Response(null, {
+        status: 302,
+        headers: {
+          ...corsHeaders,
+          'Location': `${APP_URL}/settings?calendar=error&reason=encryption_failed`
+        }
+      })
+    }
+
+    console.log('Tokens encrypted, storing connection...')
+
+    // Store connection with vault IDs
     const { error: dbError } = await supabase
       .from('user_calendar_connections')
       .upsert({
         user_id: userId,
         provider: 'google',
-        access_token_encrypted: access_token, // TODO: Encrypt in Phase 2
-        refresh_token_encrypted: refresh_token, // TODO: Encrypt in Phase 2
+        access_token_vault_id: accessVaultData,
+        refresh_token_vault_id: refreshVaultData,
         token_expires_at: tokenExpiresAt.toISOString(),
         calendar_id: primaryCalendar.id,
-        calendar_email: primaryCalendar.id, // Google uses email as calendar ID
+        calendar_email: primaryCalendar.id,
         calendar_name: primaryCalendar.summary || primaryCalendar.id,
         last_synced_at: new Date().toISOString()
       }, {

@@ -91,8 +91,6 @@ serve(async (req) => {
     const tokenExpiry = new Date(connection.token_expires_at)
     const now = new Date()
 
-    let accessToken = connection.access_token_encrypted // TODO: Decrypt in Phase 2
-
     // If token expires in < 5 minutes, refresh it
     if (tokenExpiry.getTime() - now.getTime() < 5 * 60 * 1000) {
       console.log('Token expiring soon, refreshing...')
@@ -103,6 +101,24 @@ serve(async (req) => {
         code: 'TOKEN_EXPIRED'
       }), {
         status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      })
+    }
+
+    // Decrypt access token from vault
+    console.log('Decrypting access token from vault...')
+    const { data: accessToken, error: decryptError } = await supabase
+      .rpc('read_encrypted_token', {
+        p_vault_id: connection.access_token_vault_id
+      })
+
+    if (decryptError || !accessToken) {
+      console.error('Failed to decrypt access token:', decryptError)
+      return new Response(JSON.stringify({
+        error: 'Failed to decrypt token, please reconnect your calendar',
+        code: 'DECRYPTION_FAILED'
+      }), {
+        status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
     }

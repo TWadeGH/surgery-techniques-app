@@ -87,34 +87,44 @@ serve(async (req) => {
       // Check if token is expired
       const tokenExpiry = new Date(connection.token_expires_at)
       const now = new Date()
-      const accessToken = connection.access_token_encrypted // TODO: Decrypt in Phase 2
 
       // If token expires in < 5 minutes, skip Google API call
       if (tokenExpiry.getTime() - now.getTime() < 5 * 60 * 1000) {
         console.warn('Token expired, skipping Google API deletion')
       } else {
-        // Delete event from Google Calendar
-        try {
-          const calendarResponse = await fetch(
-            `https://www.googleapis.com/calendar/v3/calendars/${connection.calendar_id}/events/${event.external_event_id}`,
-            {
-              method: 'DELETE',
-              headers: {
-                'Authorization': `Bearer ${accessToken}`
-              }
+        // Decrypt access token from vault
+        console.log('Decrypting access token from vault...')
+        const { data: accessToken, error: decryptError } = await supabase
+          .rpc('read_encrypted_token', {
+            p_vault_id: connection.access_token_vault_id
+          })
+
+        if (decryptError || !accessToken) {
+          console.warn('Failed to decrypt token, skipping Google API deletion:', decryptError)
+        } else {
+          // Delete event from Google Calendar
+          try {
+            const calendarResponse = await fetch(
+              `https://www.googleapis.com/calendar/v3/calendars/${connection.calendar_id}/events/${event.external_event_id}`,
+              {
+                method: 'DELETE',
+                headers: {
+                  'Authorization': `Bearer ${accessToken}`
+                }
             }
           )
 
-          if (!calendarResponse.ok && calendarResponse.status !== 404) {
-            const errorData = await calendarResponse.json().catch(() => ({}))
-            console.error('Google Calendar API error:', errorData)
-            // Continue with database deletion even if API call fails
-          } else {
-            console.log('Event deleted from Google Calendar successfully')
+            if (!calendarResponse.ok && calendarResponse.status !== 404) {
+              const errorData = await calendarResponse.json().catch(() => ({}))
+              console.error('Google Calendar API error:', errorData)
+              // Continue with database deletion even if API call fails
+            } else {
+              console.log('Event deleted from Google Calendar successfully')
+            }
+          } catch (apiError) {
+            console.error('Failed to delete from Google Calendar (non-blocking):', apiError)
+            // Continue with database deletion
           }
-        } catch (apiError) {
-          console.error('Failed to delete from Google Calendar (non-blocking):', apiError)
-          // Continue with database deletion
         }
       }
     }
