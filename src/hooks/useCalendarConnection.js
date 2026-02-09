@@ -72,8 +72,9 @@ export function useCalendarConnection(userId) {
       }
 
       // Build Google OAuth URL
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || window.location.origin;
-      const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '663379322167-gkbauqrtkf5ecnib4hpdoelbbncsc38q.apps.googleusercontent.com';
+      // Using hardcoded Supabase URL (public-facing, not sensitive)
+      const supabaseUrl = 'https://bufnygjdkdemacqbxcrh.supabase.co';
+      const googleClientId = '663379322167-gkbauqrtkf5ecnib4hpdoelbbncsc38q.apps.googleusercontent.com';
 
       const redirectUri = `${supabaseUrl}/functions/v1/google-oauth-callback`;
 
@@ -110,7 +111,7 @@ export function useCalendarConnection(userId) {
       }
 
       // Call disconnect Edge Function
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || window.location.origin;
+      const supabaseUrl = 'https://bufnygjdkdemacqbxcrh.supabase.co';
       const response = await fetch(`${supabaseUrl}/functions/v1/disconnect-calendar`, {
         method: 'POST',
         headers: {

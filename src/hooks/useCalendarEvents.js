@@ -82,7 +82,7 @@ export function useCalendarEvents(userId) {
       const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
       // Call Edge Function to create event
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || window.location.origin;
+      const supabaseUrl = 'https://bufnygjdkdemacqbxcrh.supabase.co';
       const response = await fetch(`${supabaseUrl}/functions/v1/create-calendar-event`, {
         method: 'POST',
         headers: {
@@ -142,7 +142,7 @@ export function useCalendarEvents(userId) {
       }
 
       // Call Edge Function to delete event
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || window.location.origin;
+      const supabaseUrl = 'https://bufnygjdkdemacqbxcrh.supabase.co';
       const response = await fetch(`${supabaseUrl}/functions/v1/delete-calendar-event`, {
         method: 'POST',
         headers: {
