@@ -87,8 +87,11 @@ export function useCalendarConnection(userId) {
       googleAuthUrl.searchParams.set('access_type', 'offline'); // Get refresh token
       googleAuthUrl.searchParams.set('prompt', 'consent'); // Force consent to ensure refresh token
 
-      console.log('Initiating Google OAuth flow...');
+      console.log('=== GOOGLE OAUTH DEBUG ===');
+      console.log('Supabase URL:', supabaseUrl);
       console.log('Redirect URI:', redirectUri);
+      console.log('Full Google Auth URL:', googleAuthUrl.toString());
+      console.log('========================');
 
       // Redirect to Google OAuth
       window.location.href = googleAuthUrl.toString();
