@@ -1,6 +1,6 @@
 SURGICAL TECHNIQUES APP - Progress Tracker
 ==========================================
-Last Updated: 2026-02-04
+Last Updated: 2026-02-09
 
 ## Current State
 - Web app: DEPLOYED to Cloudflare Pages (surgicaltechniques.app)
@@ -18,17 +18,21 @@ Last Updated: 2026-02-04
 - Legal pages with contact emails configured
 - Onboarding flow
 - Mobile app via Capacitor (iOS tested, Android ready)
+- Google Calendar integration (connect, create events, delete events, disconnect)
+- Subspecialty Companies + Rep Platform (Contact Rep button, RepView, inquiry management)
 
-## Completed This Session (2026-02-04)
-- [x] Updated privacy policy age from 13 to 18
-- [x] Added subspecialty admin peer messaging within same specialty
-- [x] Added contact emails (privacy@, support@, legal@surgicaltechniques.app)
-- [x] Set jurisdiction to Harris County, Texas
-- [x] Updated CLAUDE.md with comprehensive coding session guidelines
-- [x] Created full documentation suite (10 files)
-- [x] Built and synced iOS app via Capacitor
-- [x] Successfully ran iOS app in Xcode simulator
-- [x] Moved search bar above categories on browse page (UX improvement)
+## Completed This Session (2026-02-09)
+- [x] Restored working Google Calendar OAuth (was broken by failed Supabase Vault attempt)
+- [x] Implemented AES-256-GCM application-level token encryption in all 4 Edge Functions
+- [x] Added access_token_iv / refresh_token_iv columns to user_calendar_connections
+- [x] Stored TOKEN_ENCRYPTION_KEY as Supabase secret
+- [x] Fixed calendar event end time bug (slice 0,16 → 0,19 was causing 400 from Google API)
+- [x] Fixed calendar tooltip showing wrong time (UTC parse bug → now uses local time parts)
+- [x] Confirmed Rep Platform and Contact Rep button working end-to-end
+- [x] Completed CALENDAR_ENCRYPTION_FIX_PLAN.md — all 3 phases done:
+  - Phase 1: Calendar restored (plaintext rollback)
+  - Phase 2: AES-256-GCM encryption + token refresh implemented
+  - Phase 3: Vault artifacts dropped (functions, trigger, columns)
 
 ## In Progress
 - Android build setup (need Android Studio installation)

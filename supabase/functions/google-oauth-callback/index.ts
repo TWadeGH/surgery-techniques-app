@@ -3,6 +3,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { encryptToken } from '../_shared/crypto.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -23,12 +24,25 @@ serve(async (req) => {
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL') || 'https://bufnygjdkdemacqbxcrh.supabase.co'
     const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') || ''
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
+    const TOKEN_ENCRYPTION_KEY = Deno.env.get('TOKEN_ENCRYPTION_KEY') || ''
+
+    if (!TOKEN_ENCRYPTION_KEY) {
+      console.error('TOKEN_ENCRYPTION_KEY secret is not set')
+      return new Response(null, {
+        status: 302,
+        headers: {
+          ...corsHeaders,
+          'Location': `${APP_URL}/settings?calendar=error&reason=server_config_error`
+        }
+      })
+    }
 
     // Debug logging
     console.log('=== ENV DEBUG ===')
     console.log('APP_URL:', APP_URL)
     console.log('SUPABASE_URL:', SUPABASE_URL)
     console.log('GOOGLE_CLIENT_ID exists:', !!GOOGLE_CLIENT_ID)
+    console.log('TOKEN_ENCRYPTION_KEY exists:', !!TOKEN_ENCRYPTION_KEY)
     console.log('==================')
 
     // Parse URL parameters
@@ -141,6 +155,14 @@ serve(async (req) => {
 
     console.log('User ID from state:', userId)
 
+    // Encrypt tokens with AES-256-GCM
+    console.log('Encrypting tokens...')
+    const [encryptedAccess, encryptedRefresh] = await Promise.all([
+      encryptToken(access_token, TOKEN_ENCRYPTION_KEY),
+      encryptToken(refresh_token || '', TOKEN_ENCRYPTION_KEY)
+    ])
+    console.log('Tokens encrypted successfully')
+
     // Create Supabase client with service role key (needed to write to DB without user auth)
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
@@ -149,54 +171,18 @@ serve(async (req) => {
     // Calculate token expiry
     const tokenExpiresAt = new Date(Date.now() + (expires_in * 1000))
 
-    // Encrypt tokens using Supabase Vault
-    console.log('Encrypting access token...')
-    const { data: accessVaultData, error: accessVaultError } = await supabase
-      .rpc('store_encrypted_token', {
-        p_secret: access_token,
-        p_name: `calendar_access_${userId}_google`
-      })
+    console.log('Storing connection...')
 
-    if (accessVaultError || !accessVaultData) {
-      console.error('Failed to encrypt access token:', accessVaultError)
-      return new Response(null, {
-        status: 302,
-        headers: {
-          ...corsHeaders,
-          'Location': `${APP_URL}/settings?calendar=error&reason=encryption_failed`
-        }
-      })
-    }
-
-    // Encrypt refresh token
-    console.log('Encrypting refresh token...')
-    const { data: refreshVaultData, error: refreshVaultError } = await supabase
-      .rpc('store_encrypted_token', {
-        p_secret: refresh_token,
-        p_name: `calendar_refresh_${userId}_google`
-      })
-
-    if (refreshVaultError || !refreshVaultData) {
-      console.error('Failed to encrypt refresh token:', refreshVaultError)
-      return new Response(null, {
-        status: 302,
-        headers: {
-          ...corsHeaders,
-          'Location': `${APP_URL}/settings?calendar=error&reason=encryption_failed`
-        }
-      })
-    }
-
-    console.log('Tokens encrypted, storing connection...')
-
-    // Store connection with vault IDs
+    // Store connection with encrypted tokens
     const { error: dbError } = await supabase
       .from('user_calendar_connections')
       .upsert({
         user_id: userId,
         provider: 'google',
-        access_token_vault_id: accessVaultData,
-        refresh_token_vault_id: refreshVaultData,
+        access_token_encrypted: encryptedAccess.ciphertext,
+        access_token_iv: encryptedAccess.iv,
+        refresh_token_encrypted: encryptedRefresh.ciphertext,
+        refresh_token_iv: encryptedRefresh.iv,
         token_expires_at: tokenExpiresAt.toISOString(),
         calendar_id: primaryCalendar.id,
         calendar_email: primaryCalendar.id,
@@ -217,7 +203,7 @@ serve(async (req) => {
       })
     }
 
-    console.log('Connection stored successfully!')
+    console.log('Connection stored successfully with encrypted tokens!')
 
     // Redirect back to app with success
     return new Response(null, {

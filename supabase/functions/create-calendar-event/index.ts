@@ -9,8 +9,30 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// AES-256-GCM encrypt
+async function encryptToken(plaintext: string, base64Key: string): Promise<{ ciphertext: string; iv: string }> {
+  const rawKey = Uint8Array.from(atob(base64Key), c => c.charCodeAt(0))
+  const key = await crypto.subtle.importKey('raw', rawKey, { name: 'AES-GCM', length: 256 }, false, ['encrypt'])
+  const iv = crypto.getRandomValues(new Uint8Array(12))
+  const encoded = new TextEncoder().encode(plaintext)
+  const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, encoded)
+  return {
+    ciphertext: btoa(String.fromCharCode(...new Uint8Array(encrypted))),
+    iv: btoa(String.fromCharCode(...iv))
+  }
+}
+
+// AES-256-GCM decrypt
+async function decryptToken(ciphertext: string, ivBase64: string, base64Key: string): Promise<string> {
+  const rawKey = Uint8Array.from(atob(base64Key), c => c.charCodeAt(0))
+  const key = await crypto.subtle.importKey('raw', rawKey, { name: 'AES-GCM', length: 256 }, false, ['decrypt'])
+  const iv = Uint8Array.from(atob(ivBase64), c => c.charCodeAt(0))
+  const encrypted = Uint8Array.from(atob(ciphertext), c => c.charCodeAt(0))
+  const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, encrypted)
+  return new TextDecoder().decode(decrypted)
+}
+
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
@@ -18,8 +40,17 @@ serve(async (req) => {
   try {
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
     const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!
+    const TOKEN_ENCRYPTION_KEY = Deno.env.get('TOKEN_ENCRYPTION_KEY') || ''
+    const GOOGLE_CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID') || ''
+    const GOOGLE_CLIENT_SECRET = Deno.env.get('GOOGLE_CLIENT_SECRET') || ''
 
-    // Get authorization header
+    if (!TOKEN_ENCRYPTION_KEY) {
+      return new Response(JSON.stringify({ error: 'Server configuration error', code: 'CONFIG_ERROR' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      })
+    }
+
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
       return new Response(JSON.stringify({ error: 'Missing authorization' }), {
@@ -28,7 +59,6 @@ serve(async (req) => {
       })
     }
 
-    // Parse request body
     const {
       provider,
       resourceId,
@@ -42,7 +72,6 @@ serve(async (req) => {
       timezone
     } = await req.json()
 
-    // Validate required fields
     if (!provider || !resourceId || !eventDate || !eventTime) {
       return new Response(JSON.stringify({
         error: 'Missing required fields',
@@ -53,12 +82,10 @@ serve(async (req) => {
       })
     }
 
-    // Create Supabase client
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       global: { headers: { Authorization: authHeader } }
     })
 
-    // Get current user
     const { data: { user }, error: userError } = await supabase.auth.getUser()
     if (userError || !user) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
@@ -69,7 +96,6 @@ serve(async (req) => {
 
     console.log('Creating calendar event for user:', user.id)
 
-    // Get calendar connection
     const { data: connection, error: connectionError } = await supabase
       .from('user_calendar_connections')
       .select('*')
@@ -78,49 +104,101 @@ serve(async (req) => {
       .single()
 
     if (connectionError || !connection) {
-      return new Response(JSON.stringify({
-        error: 'Calendar not connected',
-        code: 'NOT_CONNECTED'
-      }), {
+      return new Response(JSON.stringify({ error: 'Calendar not connected', code: 'NOT_CONNECTED' }), {
         status: 404,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
     }
 
-    // Check if token is expired
-    const tokenExpiry = new Date(connection.token_expires_at)
-    const now = new Date()
-
-    // If token expires in < 5 minutes, refresh it
-    if (tokenExpiry.getTime() - now.getTime() < 5 * 60 * 1000) {
-      console.log('Token expiring soon, refreshing...')
-      // TODO: Call refresh-calendar-token function
-      // For now, return error asking user to reconnect
+    // Decrypt access token
+    let accessToken: string
+    try {
+      if (!connection.access_token_iv) {
+        accessToken = connection.access_token_encrypted
+        console.log('Using legacy plaintext token')
+      } else {
+        accessToken = await decryptToken(
+          connection.access_token_encrypted,
+          connection.access_token_iv,
+          TOKEN_ENCRYPTION_KEY
+        )
+        console.log('Token decrypted successfully')
+      }
+    } catch (decryptErr) {
+      console.error('Failed to decrypt token:', decryptErr)
       return new Response(JSON.stringify({
-        error: 'Token expired, please reconnect your calendar',
-        code: 'TOKEN_EXPIRED'
+        error: 'Failed to decrypt token, please reconnect your calendar',
+        code: 'DECRYPT_ERROR'
       }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       })
     }
 
-    // Decrypt access token from vault
-    console.log('Decrypting access token from vault...')
-    const { data: accessToken, error: decryptError } = await supabase
-      .rpc('read_encrypted_token', {
-        p_vault_id: connection.access_token_vault_id
-      })
+    // Refresh token if expiring within 5 minutes
+    const tokenExpiry = new Date(connection.token_expires_at)
+    const now = new Date()
+    if (tokenExpiry.getTime() - now.getTime() < 5 * 60 * 1000) {
+      console.log('Token expiring soon, refreshing...')
+      try {
+        let refreshToken: string
+        if (!connection.refresh_token_iv) {
+          refreshToken = connection.refresh_token_encrypted
+        } else {
+          refreshToken = await decryptToken(
+            connection.refresh_token_encrypted,
+            connection.refresh_token_iv,
+            TOKEN_ENCRYPTION_KEY
+          )
+        }
 
-    if (decryptError || !accessToken) {
-      console.error('Failed to decrypt access token:', decryptError)
-      return new Response(JSON.stringify({
-        error: 'Failed to decrypt token, please reconnect your calendar',
-        code: 'DECRYPTION_FAILED'
-      }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      })
+        const refreshResponse = await fetch('https://oauth2.googleapis.com/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            client_id: GOOGLE_CLIENT_ID,
+            client_secret: GOOGLE_CLIENT_SECRET,
+            refresh_token: refreshToken,
+            grant_type: 'refresh_token'
+          })
+        })
+
+        const refreshData = await refreshResponse.json()
+
+        if (!refreshResponse.ok || refreshData.error) {
+          console.error('Token refresh failed:', refreshData)
+          return new Response(JSON.stringify({
+            error: 'Session expired, please reconnect your calendar',
+            code: 'TOKEN_EXPIRED'
+          }), {
+            status: 401,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          })
+        }
+
+        const encryptedNew = await encryptToken(refreshData.access_token, TOKEN_ENCRYPTION_KEY)
+        await supabase
+          .from('user_calendar_connections')
+          .update({
+            access_token_encrypted: encryptedNew.ciphertext,
+            access_token_iv: encryptedNew.iv,
+            token_expires_at: new Date(Date.now() + refreshData.expires_in * 1000).toISOString()
+          })
+          .eq('user_id', user.id)
+          .eq('provider', provider)
+
+        accessToken = refreshData.access_token
+        console.log('Token refreshed and saved successfully')
+      } catch (refreshErr) {
+        console.error('Token refresh error:', refreshErr)
+        return new Response(JSON.stringify({
+          error: 'Session expired, please reconnect your calendar',
+          code: 'TOKEN_EXPIRED'
+        }), {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        })
+      }
     }
 
     // Build event start/end times
@@ -128,9 +206,8 @@ serve(async (req) => {
     const durationMinutes = duration || 30
     const endDateTime = new Date(new Date(startDateTime).getTime() + durationMinutes * 60000)
       .toISOString()
-      .slice(0, 16)
+      .slice(0, 19)
 
-    // Build event data
     const eventTitle = `${resourceTitle} - Surgical Technique Review`
     const eventDescription = `
 ${resourceDescription || 'Review surgical technique resource'}
@@ -159,15 +236,14 @@ View resource: ${resourceUrl}
       reminders: {
         useDefault: false,
         overrides: [
-          { method: 'popup', minutes: 24 * 60 }, // 1 day before
-          { method: 'popup', minutes: 60 }        // 1 hour before
+          { method: 'popup', minutes: 24 * 60 },
+          { method: 'popup', minutes: 60 }
         ]
       }
     }
 
     console.log('Creating event in Google Calendar:', eventData)
 
-    // Create event via Google Calendar API
     const calendarResponse = await fetch(
       `https://www.googleapis.com/calendar/v3/calendars/${connection.calendar_id}/events`,
       {
@@ -196,7 +272,6 @@ View resource: ${resourceUrl}
     const createdEvent = await calendarResponse.json()
     console.log('Event created successfully:', createdEvent.id)
 
-    // Store event in calendar_events table (optional, for tracking)
     const { error: trackingError } = await supabase
       .from('calendar_events')
       .insert({
@@ -216,7 +291,6 @@ View resource: ${resourceUrl}
       console.warn('Failed to track event (non-blocking):', trackingError)
     }
 
-    // Return success
     return new Response(JSON.stringify({
       success: true,
       eventId: createdEvent.id,
@@ -229,10 +303,7 @@ View resource: ${resourceUrl}
 
   } catch (error) {
     console.error('Unexpected error:', error)
-    return new Response(JSON.stringify({
-      error: 'Internal server error',
-      details: error.message
-    }), {
+    return new Response(JSON.stringify({ error: 'Internal server error', details: error.message }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })

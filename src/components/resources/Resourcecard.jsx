@@ -411,7 +411,12 @@ function ResourceCard({
   const formatCalendarEventDisplay = () => {
     if (!calendarEvent) return '';
     try {
-      const eventDate = new Date(calendarEvent.event_start);
+      // Parse as local time by splitting parts — new Date('YYYY-MM-DDTHH:MM:SS')
+      // treats the string as UTC, which shifts the displayed time by timezone offset.
+      const [datePart, timePart] = calendarEvent.event_start.split('T');
+      const [year, month, day] = datePart.split('-').map(Number);
+      const [hours, minutes] = timePart.split(':').map(Number);
+      const eventDate = new Date(year, month - 1, day, hours, minutes);
       const options = {
         month: 'short',
         day: 'numeric',
