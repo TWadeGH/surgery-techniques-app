@@ -43,6 +43,8 @@ serve(async (req) => {
     const TOKEN_ENCRYPTION_KEY = Deno.env.get('TOKEN_ENCRYPTION_KEY') || ''
     const GOOGLE_CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID') || ''
     const GOOGLE_CLIENT_SECRET = Deno.env.get('GOOGLE_CLIENT_SECRET') || ''
+    const MICROSOFT_CLIENT_ID = Deno.env.get('MICROSOFT_CLIENT_ID') || ''
+    const MICROSOFT_CLIENT_SECRET = Deno.env.get('MICROSOFT_CLIENT_SECRET') || ''
 
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
@@ -134,12 +136,18 @@ serve(async (req) => {
             )
           }
 
-          const refreshResponse = await fetch('https://oauth2.googleapis.com/token', {
+          const refreshUrl = event.provider === 'microsoft'
+            ? 'https://login.microsoftonline.com/common/oauth2/v2.0/token'
+            : 'https://oauth2.googleapis.com/token'
+          const refreshClientId = event.provider === 'microsoft' ? MICROSOFT_CLIENT_ID : GOOGLE_CLIENT_ID
+          const refreshClientSecret = event.provider === 'microsoft' ? MICROSOFT_CLIENT_SECRET : GOOGLE_CLIENT_SECRET
+
+          const refreshResponse = await fetch(refreshUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: new URLSearchParams({
-              client_id: GOOGLE_CLIENT_ID,
-              client_secret: GOOGLE_CLIENT_SECRET,
+              client_id: refreshClientId,
+              client_secret: refreshClientSecret,
               refresh_token: refreshToken,
               grant_type: 'refresh_token'
             })
@@ -173,22 +181,23 @@ serve(async (req) => {
 
       if (accessToken) {
         try {
-          const calendarResponse = await fetch(
-            `https://www.googleapis.com/calendar/v3/calendars/${connection.calendar_id}/events/${event.external_event_id}`,
-            {
-              method: 'DELETE',
-              headers: { 'Authorization': `Bearer ${accessToken}` }
-            }
-          )
+          const deleteUrl = event.provider === 'microsoft'
+            ? `https://graph.microsoft.com/v1.0/me/events/${event.external_event_id}`
+            : `https://www.googleapis.com/calendar/v3/calendars/${connection.calendar_id}/events/${event.external_event_id}`
+
+          const calendarResponse = await fetch(deleteUrl, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${accessToken}` }
+          })
 
           if (!calendarResponse.ok && calendarResponse.status !== 404) {
             const errorData = await calendarResponse.json().catch(() => ({}))
-            console.error('Google Calendar API error:', errorData)
+            console.error('Calendar API error:', errorData)
           } else {
-            console.log('Event deleted from Google Calendar successfully')
+            console.log('Event deleted from calendar successfully')
           }
         } catch (apiError) {
-          console.error('Failed to delete from Google Calendar (non-blocking):', apiError)
+          console.error('Failed to delete from calendar (non-blocking):', apiError)
         }
       }
     }

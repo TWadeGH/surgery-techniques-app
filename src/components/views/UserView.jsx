@@ -90,6 +90,7 @@ function UserView({
   onCreateCalendarEvent,
   onDeleteCalendarEvent,
   isCalendarConnected = false,
+  calendarConnections = [],
 }) {
   // Organize categories hierarchically
   const organizedCategories = useMemo(() => {
@@ -472,6 +473,7 @@ function UserView({
                       onCreateCalendarEvent={onCreateCalendarEvent}
                       onDeleteCalendarEvent={onDeleteCalendarEvent}
                       isCalendarConnected={isCalendarConnected}
+                      calendarConnections={calendarConnections}
                     />
                   </div>
                 </div>
@@ -629,6 +631,7 @@ function UserView({
             onCreateCalendarEvent={onCreateCalendarEvent}
             onDeleteCalendarEvent={onDeleteCalendarEvent}
             isCalendarConnected={isCalendarConnected}
+            calendarConnections={calendarConnections}
           />
 
           {/* Pagination: [Next] when >10 resources; [Previous] and [Next] when on page 2+ */}

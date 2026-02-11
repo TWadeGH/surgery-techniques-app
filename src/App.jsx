@@ -99,7 +99,7 @@ function SurgicalTechniquesApp() {
   } = useUpcomingCases(userId);
 
   // Calendar Connection & Events
-  const { isConnected: isCalendarConnected } = useCalendarConnection(userId);
+  const { isConnected: isCalendarConnected, connections: calendarConnections } = useCalendarConnection(userId);
   const {
     events: calendarEvents,
     createEvent: createCalendarEvent,
@@ -1636,7 +1636,8 @@ function SurgicalTechniquesApp() {
             getCalendarEvent={getEventForResource}
             onCreateCalendarEvent={createCalendarEvent}
             onDeleteCalendarEvent={deleteCalendarEvent}
-            isCalendarConnected={isCalendarConnected('google')}
+            isCalendarConnected={isCalendarConnected('google') || isCalendarConnected('microsoft')}
+            calendarConnections={calendarConnections}
           />
         ) : currentView === VIEW_MODES.REP && isRep ? (
           <RepView

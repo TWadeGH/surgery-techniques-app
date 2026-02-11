@@ -43,6 +43,8 @@ serve(async (req) => {
     const TOKEN_ENCRYPTION_KEY = Deno.env.get('TOKEN_ENCRYPTION_KEY') || ''
     const GOOGLE_CLIENT_ID = Deno.env.get('GOOGLE_CLIENT_ID') || ''
     const GOOGLE_CLIENT_SECRET = Deno.env.get('GOOGLE_CLIENT_SECRET') || ''
+    const MICROSOFT_CLIENT_ID = Deno.env.get('MICROSOFT_CLIENT_ID') || ''
+    const MICROSOFT_CLIENT_SECRET = Deno.env.get('MICROSOFT_CLIENT_SECRET') || ''
 
     if (!TOKEN_ENCRYPTION_KEY) {
       return new Response(JSON.stringify({ error: 'Server configuration error', code: 'CONFIG_ERROR' }), {
@@ -152,12 +154,18 @@ serve(async (req) => {
           )
         }
 
-        const refreshResponse = await fetch('https://oauth2.googleapis.com/token', {
+        const refreshUrl = provider === 'microsoft'
+          ? 'https://login.microsoftonline.com/common/oauth2/v2.0/token'
+          : 'https://oauth2.googleapis.com/token'
+        const refreshClientId = provider === 'microsoft' ? MICROSOFT_CLIENT_ID : GOOGLE_CLIENT_ID
+        const refreshClientSecret = provider === 'microsoft' ? MICROSOFT_CLIENT_SECRET : GOOGLE_CLIENT_SECRET
+
+        const refreshResponse = await fetch(refreshUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: new URLSearchParams({
-            client_id: GOOGLE_CLIENT_ID,
-            client_secret: GOOGLE_CLIENT_SECRET,
+            client_id: refreshClientId,
+            client_secret: refreshClientSecret,
             refresh_token: refreshToken,
             grant_type: 'refresh_token'
           })
@@ -222,43 +230,75 @@ Created via Surgical Techniques App
 View resource: ${resourceUrl}
     `.trim()
 
-    const eventData = {
-      summary: eventTitle,
-      description: eventDescription,
-      start: {
-        dateTime: startDateTime,
-        timeZone: timezone || 'America/Los_Angeles'
-      },
-      end: {
-        dateTime: endDateTime,
-        timeZone: timezone || 'America/Los_Angeles'
-      },
-      reminders: {
-        useDefault: false,
-        overrides: [
-          { method: 'popup', minutes: 24 * 60 },
-          { method: 'popup', minutes: 60 }
-        ]
+    let calendarResponse: Response
+    if (provider === 'microsoft') {
+      const msEventData = {
+        subject: eventTitle,
+        body: {
+          contentType: 'text',
+          content: eventDescription
+        },
+        start: {
+          dateTime: startDateTime,
+          timeZone: timezone || 'America/Los_Angeles'
+        },
+        end: {
+          dateTime: endDateTime,
+          timeZone: timezone || 'America/Los_Angeles'
+        },
+        isReminderOn: true,
+        reminderMinutesBeforeStart: 60
       }
-    }
 
-    console.log('Creating event in Google Calendar:', eventData)
+      console.log('Creating event in Microsoft Outlook Calendar')
 
-    const calendarResponse = await fetch(
-      `https://www.googleapis.com/calendar/v3/calendars/${connection.calendar_id}/events`,
-      {
+      calendarResponse = await fetch('https://graph.microsoft.com/v1.0/me/events', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(eventData)
+        body: JSON.stringify(msEventData)
+      })
+    } else {
+      const googleEventData = {
+        summary: eventTitle,
+        description: eventDescription,
+        start: {
+          dateTime: startDateTime,
+          timeZone: timezone || 'America/Los_Angeles'
+        },
+        end: {
+          dateTime: endDateTime,
+          timeZone: timezone || 'America/Los_Angeles'
+        },
+        reminders: {
+          useDefault: false,
+          overrides: [
+            { method: 'popup', minutes: 24 * 60 },
+            { method: 'popup', minutes: 60 }
+          ]
+        }
       }
-    )
+
+      console.log('Creating event in Google Calendar')
+
+      calendarResponse = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/${connection.calendar_id}/events`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(googleEventData)
+        }
+      )
+    }
 
     if (!calendarResponse.ok) {
       const errorData = await calendarResponse.json()
-      console.error('Google Calendar API error:', errorData)
+      console.error('Calendar API error:', errorData)
       return new Response(JSON.stringify({
         error: 'Failed to create calendar event',
         code: 'API_ERROR',
@@ -272,6 +312,9 @@ View resource: ${resourceUrl}
     const createdEvent = await calendarResponse.json()
     console.log('Event created successfully:', createdEvent.id)
 
+    // Microsoft uses .webLink, Google uses .htmlLink
+    const eventUrl = provider === 'microsoft' ? createdEvent.webLink : createdEvent.htmlLink
+
     const { error: trackingError } = await supabase
       .from('calendar_events')
       .insert({
@@ -284,7 +327,7 @@ View resource: ${resourceUrl}
         event_start: startDateTime,
         event_end: endDateTime,
         event_notes: notes,
-        event_url: createdEvent.htmlLink
+        event_url: eventUrl
       })
 
     if (trackingError) {
@@ -294,8 +337,10 @@ View resource: ${resourceUrl}
     return new Response(JSON.stringify({
       success: true,
       eventId: createdEvent.id,
-      eventUrl: createdEvent.htmlLink,
-      calendarLink: `https://calendar.google.com/calendar/r/eventedit/${createdEvent.id}`
+      eventUrl,
+      calendarLink: provider === 'microsoft'
+        ? eventUrl
+        : `https://calendar.google.com/calendar/r/eventedit/${createdEvent.id}`
     }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }

@@ -159,8 +159,7 @@ export default function Header({
             <p className="text-purple-200 text-xs sm:text-sm mono">
               Vetted Surgeon Resource Hub
             </p>
-            {/* TEMP VERSION TAG — remove after confirming subcategory fix works */}
-            <p className="text-yellow-300 text-xs font-bold">v2026-02-10-subcategory</p>
+
           </div>
 
           {/* Navigation & Controls */}

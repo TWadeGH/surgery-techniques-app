@@ -103,6 +103,50 @@ export function useCalendarConnection(userId) {
     }
   }, []);
 
+  // Initiate OAuth flow for Microsoft Outlook Calendar
+  const connectMicrosoft = useCallback(async () => {
+    try {
+      // Get current user session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error('Not authenticated');
+      }
+
+      // Generate state parameter with user ID for callback identification
+      // Format: "userId:randomUUID" - userId lets callback know who to save for
+      const randomPart = crypto.randomUUID();
+      const state = `${session.user.id}:${randomPart}`;
+      sessionStorage.setItem('oauth_state', randomPart);
+
+      // Build Microsoft OAuth URL
+      const supabaseUrl = 'https://bufnygjdkdemacqbxcrh.supabase.co';
+      const MICROSOFT_CLIENT_ID = 'b80af4dd-7465-4163-bb5b-66818102969c';
+
+      const redirectUri = `${supabaseUrl}/functions/v1/outlook-oauth-callback`;
+
+      const msAuthUrl = new URL('https://login.microsoftonline.com/common/oauth2/v2.0/authorize');
+      msAuthUrl.searchParams.set('client_id', MICROSOFT_CLIENT_ID);
+      msAuthUrl.searchParams.set('redirect_uri', redirectUri);
+      msAuthUrl.searchParams.set('response_type', 'code');
+      msAuthUrl.searchParams.set('scope', 'Calendars.ReadWrite offline_access User.Read');
+      msAuthUrl.searchParams.set('state', state);
+      msAuthUrl.searchParams.set('response_mode', 'query');
+
+      console.log('=== MICROSOFT OAUTH DEBUG ===');
+      console.log('User ID:', session.user.id);
+      console.log('Redirect URI:', redirectUri);
+      console.log('State:', state);
+      console.log('=============================');
+
+      // Redirect to Microsoft OAuth
+      window.location.href = msAuthUrl.toString();
+    } catch (err) {
+      console.error('Error initiating Microsoft OAuth:', err);
+      setError(err.message);
+      throw err;
+    }
+  }, []);
+
   // Disconnect a calendar
   const disconnect = useCallback(async (provider) => {
     try {
@@ -150,6 +194,7 @@ export function useCalendarConnection(userId) {
     isConnected,
     getConnection,
     connectGoogle,
+    connectMicrosoft,
     disconnect,
     reload: loadConnections
   };

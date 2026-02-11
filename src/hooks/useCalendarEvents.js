@@ -90,7 +90,7 @@ export function useCalendarEvents(userId) {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          provider: 'google',
+          provider: eventData.provider || 'google',
           resourceId: eventData.resourceId,
           resourceTitle: eventData.resourceTitle,
           resourceUrl: eventData.resourceUrl,

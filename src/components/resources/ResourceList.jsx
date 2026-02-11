@@ -131,6 +131,7 @@ function ResourceList({
   onCreateCalendarEvent,
   onDeleteCalendarEvent,
   isCalendarConnected = false,
+  calendarConnections = [],
 }) {
   // Show loading skeleton while loading
   if (loading) {
@@ -216,6 +217,7 @@ function ResourceList({
           onCreateCalendarEvent={onCreateCalendarEvent}
           onDeleteCalendarEvent={onDeleteCalendarEvent}
           isCalendarConnected={isCalendarConnected}
+          calendarConnections={calendarConnections}
         />
       ))}
     </div>

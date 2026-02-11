@@ -213,7 +213,8 @@ function ResourceCard({
   calendarEvent = null,
   onCreateCalendarEvent,
   onDeleteCalendarEvent,
-  isCalendarConnected = false
+  isCalendarConnected = false,
+  calendarConnections = []
 }) {
   const toast = useToast();
   const [showNoteInput, setShowNoteInput] = useState(false);
@@ -817,6 +818,7 @@ function ResourceCard({
             // Modal will close automatically on success
           }}
           onCreateEvent={onCreateCalendarEvent}
+          connections={calendarConnections}
         />
       )}
     </div>
@@ -835,5 +837,6 @@ export default memo(ResourceCard, (prevProps, nextProps) => (
   prevProps.onContactRep === nextProps.onContactRep &&
   prevProps.companyIsActive === nextProps.companyIsActive &&
   prevProps.calendarEvent?.id === nextProps.calendarEvent?.id &&
-  prevProps.isCalendarConnected === nextProps.isCalendarConnected
+  prevProps.isCalendarConnected === nextProps.isCalendarConnected &&
+  prevProps.calendarConnections?.length === nextProps.calendarConnections?.length
 ));
