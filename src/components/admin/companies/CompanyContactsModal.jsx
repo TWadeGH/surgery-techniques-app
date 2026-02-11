@@ -94,7 +94,7 @@ function CompanyContactsModal({ company, onClose }) {
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
       <div
         className="fixed inset-0 bg-black/50 transition-opacity"
@@ -103,9 +103,8 @@ function CompanyContactsModal({ company, onClose }) {
       />
 
       {/* Modal */}
-      <div className="flex min-h-full items-center justify-center p-4">
-        <div
-          className="relative w-full max-w-lg bg-white dark:bg-gray-800 rounded-2xl shadow-xl"
+      <div
+        className="relative w-full max-w-lg bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-h-[90vh] overflow-y-auto"
           role="dialog"
           aria-modal="true"
           aria-labelledby="contacts-modal-title"
@@ -303,7 +302,6 @@ function CompanyContactsModal({ company, onClose }) {
             </button>
           </div>
         </div>
-      </div>
     </div>
   );
 }
