@@ -67,6 +67,7 @@ function SurgicalTechniquesApp() {
   const {
     currentUser,
     loading: authLoading,
+    profileLoaded,
     updateProfile,
     signOut,
     refreshSession,
@@ -165,9 +166,11 @@ function SurgicalTechniquesApp() {
   // Check onboarding status.
   // If onboarding_complete === true (from DB), skip onboarding (e.g. Podiatry has no subspecialty).
   // Otherwise require specialty and subspecialty so Podiatry/null-subspecialty users aren't stuck in onboarding.
-  // Don't set showOnboarding while auth is loading to avoid flash when returning to tab (TOKEN_REFRESHED).
+  // Wait for profileLoaded before checking: avoids flash caused by minimal user (no specialty/onboardingComplete)
+  // that exists briefly before the full profile arrives from the DB.
   useEffect(() => {
     if (loading) return;
+    if (!profileLoaded) return; // Full profile not yet loaded — don't flash onboarding
     if (currentUser) {
       const hasOnboardingCompleteFlag = currentUser.onboardingComplete === true;
       const hasSpecialtyAndSubspecialty = currentUser.specialtyId && currentUser.subspecialtyId;
@@ -181,7 +184,7 @@ function SurgicalTechniquesApp() {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, currentUser?.id, currentUser?.specialtyId, currentUser?.subspecialtyId, currentUser?.onboardingComplete]);
+  }, [loading, profileLoaded, currentUser?.id, currentUser?.specialtyId, currentUser?.subspecialtyId, currentUser?.onboardingComplete]);
 
   const handleOnboardingComplete = useCallback(async () => {
     setShowOnboarding(false);
@@ -454,15 +457,19 @@ function SurgicalTechniquesApp() {
 
   const loadAllData = useCallback(async () => {
     try {
-      // Load resources
-      const { data: resourcesData } = await supabase
-        .from('resources')
-        .select('*')
-        .order('created_at', { ascending: false });
+      // Load resources and categories in parallel to avoid flash where resources appear
+      // before categories are loaded (which would show all subspecialties' resources briefly).
+      const [resourcesResult, categoryResult] = await Promise.all([
+        supabase.from('resources').select('*').order('created_at', { ascending: false }),
+        fetchCategoriesAndProceduresForUser(currentUser, browsingSubspecialtyId)
+      ]);
 
+      const resourcesData = resourcesResult.data;
+      const { categoriesData, proceduresData } = categoryResult;
+
+      // Set all data in one synchronous block so React batches into a single render,
+      // preventing the intermediate state where resources exist but categories are empty.
       setResources(resourcesData || []);
-
-      const { categoriesData, proceduresData } = await fetchCategoriesAndProceduresForUser(currentUser, browsingSubspecialtyId);
       setCategories(categoriesData);
       setProcedures(proceduresData);
 
@@ -500,6 +507,7 @@ function SurgicalTechniquesApp() {
 
   // Load data when user is authenticated (moved after loadAllData definition)
   // Re-run when profile gains specialty/subspecialty so categories match (e.g. after profile load after timeout)
+  // Waits for profileLoaded to prevent showing all subspecialties briefly while the minimal user is active.
   const dataLoadedRef = useRef(false);
   const lastLoadedProfileRef = useRef({ specialtyId: null, subspecialtyId: null });
   useEffect(() => {
@@ -510,6 +518,9 @@ function SurgicalTechniquesApp() {
       setAvailableSubspecialties([]);
       return;
     }
+    // Don't load data until the full profile is available so we filter correctly from the start.
+    // profileLoaded becomes true after loadUserProfile completes the first time.
+    if (!profileLoaded) return;
     const hasProfile = currentUser.specialtyId != null || currentUser.subspecialtyId != null;
     const last = lastLoadedProfileRef.current;
     const profileChanged = last.specialtyId !== currentUser.specialtyId || last.subspecialtyId !== currentUser.subspecialtyId;
@@ -523,7 +534,7 @@ function SurgicalTechniquesApp() {
       loadAvailableSubspecialties();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser?.id, currentUser?.specialtyId, currentUser?.subspecialtyId]);
+  }, [currentUser?.id, currentUser?.specialtyId, currentUser?.subspecialtyId, profileLoaded]);
 
   // Load suggested and reported resources when switching to Admin view
   useEffect(() => {
@@ -1383,53 +1394,50 @@ function SurgicalTechniquesApp() {
   }, []);
 
   // Load active companies for Contact Rep feature
-  // A company is "active" when it has at least one contact in subspecialty_company_contacts
+  // A company is "active" when it has at least one contact in subspecialty_company_contacts.
+  // Load ALL active companies (no subspecialty filter) so the Contact Rep button appears
+  // correctly regardless of which subspecialty the resource was registered under.
   const loadCompanies = useCallback(async () => {
     try {
-      const effectiveSubspecialtyId = browsingSubspecialtyId || currentUser?.subspecialtyId;
-      
-      if (!effectiveSubspecialtyId) {
+      if (!currentUser?.id) {
         setCompanies([]);
         return;
       }
-      
-      // Query subspecialty_companies with their contacts
+
       const { data, error } = await supabase
         .from('subspecialty_companies')
         .select(`
           id,
           company_name,
-          subspecialty_id,
           subspecialty_company_contacts(id)
         `)
-        .eq('subspecialty_id', effectiveSubspecialtyId)
         .order('company_name');
-      
+
       if (error) {
         console.error('Error loading companies:', error);
         setCompanies([]);
         return;
       }
-      
+
       // A company is active if it has at least one contact
       const activeCompanies = (data || [])
         .filter(c => c.subspecialty_company_contacts && c.subspecialty_company_contacts.length > 0)
         .map(c => ({ id: c.id, name: c.company_name }));
-      
-      console.log('🏢 Active companies for subspecialty:', activeCompanies);
+
+      console.log('🏢 Active companies loaded:', activeCompanies.length);
       setCompanies(activeCompanies);
     } catch (error) {
       console.error('Error loading companies:', error);
       setCompanies([]);
     }
-  }, [browsingSubspecialtyId, currentUser?.subspecialtyId]);
+  }, [currentUser?.id]);
 
-  // Load companies when subspecialty changes (either browsing or profile)
+  // Load companies once on login (and on userId change)
   useEffect(() => {
     if (currentUser?.id) {
       loadCompanies();
     }
-  }, [currentUser?.id, browsingSubspecialtyId, currentUser?.subspecialtyId, loadCompanies]);
+  }, [currentUser?.id, loadCompanies]);
 
   // Handle contact rep click
   const handleContactRep = useCallback((resource) => {

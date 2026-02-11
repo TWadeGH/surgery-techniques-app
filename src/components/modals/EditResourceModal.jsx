@@ -5,7 +5,7 @@
  * Extracted from App.jsx as part of refactoring effort
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Upload, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { processResourceImage, createImagePreview, validateImageFile } from '../../lib/imageUtils';
@@ -65,21 +65,22 @@ export default function EditResourceModal({ resource, currentUser, onSubmit, onC
   const [selectedSubcategory, setSelectedSubcategory] = useState(null);
   const [subcategories, setSubcategories] = useState([]);
   const [loadingData, setLoadingData] = useState(true);
-  const isInitialLoad = useRef(true);
 
   // Load initial data - get category, subspecialty hierarchy for prepopulation
   useEffect(() => {
     loadInitialData();
   }, [resource.id]);
 
+  // Reload subspecialties whenever specialty changes (user interaction or initial load)
   useEffect(() => {
-    if (selectedSpecialty && !isInitialLoad.current) {
+    if (selectedSpecialty) {
       loadSubspecialties(selectedSpecialty);
     }
   }, [selectedSpecialty]);
 
+  // Reload categories whenever subspecialty changes (user interaction or initial load)
   useEffect(() => {
-    if (selectedSubspecialty && !isInitialLoad.current) {
+    if (selectedSubspecialty) {
       loadCategories(selectedSubspecialty);
     }
   }, [selectedSubspecialty]);
@@ -93,7 +94,6 @@ export default function EditResourceModal({ resource, currentUser, onSubmit, onC
 
   async function loadInitialData() {
     try {
-      isInitialLoad.current = true;
       setLoadingData(true);
       
       // Load all specialties
@@ -216,13 +216,11 @@ export default function EditResourceModal({ resource, currentUser, onSubmit, onC
         }
       }
       
-      isInitialLoad.current = false;
     } catch (error) {
       console.error('Error loading initial data:', error);
       toast.error('Error loading category data: ' + error.message);
     } finally {
       setLoadingData(false);
-      isInitialLoad.current = false;
     }
   }
 

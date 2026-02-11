@@ -1,6 +1,6 @@
 SURGICAL TECHNIQUES APP - Progress Tracker
 ==========================================
-Last Updated: 2026-02-09
+Last Updated: 2026-02-10
 
 ## Current State
 - Web app: DEPLOYED to Cloudflare Pages (surgicaltechniques.app)
@@ -34,7 +34,16 @@ Last Updated: 2026-02-09
   - Phase 2: AES-256-GCM encryption + token refresh implemented
   - Phase 3: Vault artifacts dropped (functions, trigger, columns)
 
+## Completed This Session (2026-02-10)
+- [x] Fixed Contact Rep button not showing (loadCompanies was filtering by subspecialty — removed filter, now loads all active companies)
+- [x] Fixed onboarding flash on login (added profileLoaded gate so onboarding check waits for full profile from DB)
+- [x] Fixed website showing all subspecialties' resources on login (gated loadAllData on profileLoaded; resources + categories now load in parallel)
+- [x] Fixed scroll/re-render on tab switch (added deep-compare in loadUserProfile to skip setCurrentUser if profile data unchanged)
+- [x] Fixed Admin Add Resource specialty/subspecialty not prepopulated (removed isInitialLoad ref guard so useEffects always fire)
+- [x] Fixed category dropdown not appearing (same fix as above — selectedSubspecialty effect now always calls loadCategories)
+
 ## In Progress
+- Microsoft Outlook calendar integration (blocked on Azure app registration)
 - Android build setup (need Android Studio installation)
 
 ## Blocked

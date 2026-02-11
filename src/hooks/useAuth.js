@@ -86,6 +86,7 @@ export function useAuth() {
   // State
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [profileLoaded, setProfileLoaded] = useState(false);
   const [error, setError] = useState(null);
   const [isRep, setIsRep] = useState(false);
   const [repCompanies, setRepCompanies] = useState([]);
@@ -348,6 +349,17 @@ export function useAuth() {
       setCurrentUser(prevUser => {
         // Only update if user ID matches or we don't have a user yet
         if (!prevUser || prevUser.id === transformedProfile.id) {
+          // Skip re-render if no profile fields actually changed (e.g. TOKEN_REFRESHED)
+          // Prevents unnecessary re-renders that reset scroll position and cause flashes
+          if (prevUser &&
+            prevUser.specialtyId === transformedProfile.specialtyId &&
+            prevUser.subspecialtyId === transformedProfile.subspecialtyId &&
+            prevUser.onboardingComplete === transformedProfile.onboardingComplete &&
+            prevUser.role === transformedProfile.role &&
+            prevUser.userType === transformedProfile.userType &&
+            prevUser.email === transformedProfile.email) {
+            return prevUser; // No change — bail out to avoid re-render
+          }
           console.log('✅ Updating user state with full profile'); // Security: Removed PII (email)
           return transformedProfile;
         }
@@ -356,6 +368,7 @@ export function useAuth() {
       });
       setError(null);
       setLoading(false); // Ensure loading is false after profile update
+      setProfileLoaded(true); // Signal that the full profile has been loaded from DB
       console.log('✅ User state updated with profile successfully');
       
       // Initialize analytics session (Surgeon and Resident/Fellow only)
@@ -539,6 +552,7 @@ export function useAuth() {
           console.log('User signed out');
           setCurrentUser(null);
           setLoading(false);
+          setProfileLoaded(false);
           setShowPasswordReset(false);
           endAnalyticsSession();
         } else if (event === 'INITIAL_SESSION') {
@@ -833,6 +847,7 @@ export function useAuth() {
     // State
     currentUser,
     loading,
+    profileLoaded,
     error,
     isAuthenticated: !!currentUser,
     isRep,

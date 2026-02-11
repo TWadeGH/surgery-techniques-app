@@ -5,7 +5,7 @@
  * Extracted from App.jsx as part of refactoring effort
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Edit, Upload, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { processResourceImage, createImagePreview, validateImageFile } from '../../lib/imageUtils';
@@ -54,21 +54,22 @@ export default function AddResourceModal({ currentUser, onSubmit, onClose }) {
   const [showNewCategoryInput, setShowNewCategoryInput] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [addingCategory, setAddingCategory] = useState(false);
-  const isInitialLoad = useRef(true);
 
   // Initialize with user's specialty/subspecialty
   useEffect(() => {
     loadInitialData();
   }, [currentUser]);
 
+  // Reload subspecialties whenever specialty changes (user interaction or initial load)
   useEffect(() => {
-    if (selectedSpecialty && !isInitialLoad.current) {
+    if (selectedSpecialty) {
       loadSubspecialties(selectedSpecialty);
     }
   }, [selectedSpecialty]);
 
+  // Reload categories whenever subspecialty changes (user interaction or initial load)
   useEffect(() => {
-    if (selectedSubspecialty && !isInitialLoad.current) {
+    if (selectedSubspecialty) {
       loadCategories(selectedSubspecialty);
     }
   }, [selectedSubspecialty]);
@@ -123,8 +124,6 @@ export default function AddResourceModal({ currentUser, onSubmit, onClose }) {
           setSelectedSubspecialty(String(currentUser.subspecialtyId));
         }
       }
-      
-      isInitialLoad.current = false;
     } catch (error) {
       console.error('Error loading initial data:', error);
       const errorMessage = error.message || 'Unknown error occurred';
@@ -132,7 +131,6 @@ export default function AddResourceModal({ currentUser, onSubmit, onClose }) {
       toast.error(`Error loading form data: ${errorMessage}. Please check the browser console for more details.`);
     } finally {
       setLoadingData(false);
-      isInitialLoad.current = false;
     }
   }
 
