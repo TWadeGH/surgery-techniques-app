@@ -151,6 +151,7 @@ export default function Onboarding({ user, onComplete }) {
         user_type: userType,
         onboarding_complete: true
       };
+      // Require specialty/subspecialty for surgeon and app
       if (userType === 'surgeon' || userType === 'app') {
         if (!specialtyId) {
           alert('Please select a specialty.');
@@ -162,9 +163,10 @@ export default function Onboarding({ user, onComplete }) {
           setLoading(false);
           return;
         }
-        updateData.primary_specialty_id = specialtyId;
-        updateData.primary_subspecialty_id = subspecialtyId;
       }
+      // Save specialty/subspecialty for all user types when provided
+      if (specialtyId) updateData.primary_specialty_id = specialtyId;
+      if (subspecialtyId) updateData.primary_subspecialty_id = subspecialtyId;
       if (userType === 'surgeon') {
         if (!practiceSetting || !primaryORSetting || !yearsPracticing || !annualCaseVolume) {
           alert('Please answer all practice and volume questions.');
@@ -222,7 +224,7 @@ export default function Onboarding({ user, onComplete }) {
         </div>
         <div style={styles.stepIndicator}>
           <div style={styles.stepDot(step === 1)} />
-          {(userType === 'surgeon' || userType === 'app') && (
+          {userType && (
             <>
               <div style={styles.stepDot(step === 2)} />
               <div style={styles.stepDot(step === 3)} />
@@ -250,8 +252,7 @@ export default function Onboarding({ user, onComplete }) {
             ].map(({ id, title, desc }) => (
               <div key={id} style={{ ...styles.card, ...(userType === id ? styles.cardSelected : {}) }} onClick={() => {
                 setUserType(id);
-                if (id === 'surgeon' || id === 'app') { setTimeout(() => setStep(2), 200); }
-                else { setTimeout(() => handleComplete(), 200); }
+                setTimeout(() => setStep(2), 200);
               }}>
                 <div style={styles.cardTitle}>{title}</div>
                 <div style={styles.cardDescription}>{desc}</div>
