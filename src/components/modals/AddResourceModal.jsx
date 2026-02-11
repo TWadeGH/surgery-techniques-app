@@ -49,6 +49,8 @@ export default function AddResourceModal({ currentUser, onSubmit, onClose }) {
   const [selectedSpecialty, setSelectedSpecialty] = useState(null);
   const [selectedSubspecialty, setSelectedSubspecialty] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState(null);
+  const [selectedSubcategory, setSelectedSubcategory] = useState(null);
+  const [subcategories, setSubcategories] = useState([]);
   const [canEditSpecialty, setCanEditSpecialty] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
   const [showNewCategoryInput, setShowNewCategoryInput] = useState(false);
@@ -156,20 +158,40 @@ export default function AddResourceModal({ currentUser, onSubmit, onClose }) {
       .eq('subspecialty_id', subspecialtyId)
       .is('parent_category_id', null)
       .order('order');
-    
+
     setCategories(data || []);
+    setSubcategories([]);
+    setSelectedSubcategory(null);
+  }
+
+  async function loadSubcategories(categoryId) {
+    if (!categoryId) {
+      setSubcategories([]);
+      setSelectedSubcategory(null);
+      return;
+    }
+    const { data } = await supabase
+      .from('categories')
+      .select('*')
+      .eq('parent_category_id', categoryId)
+      .order('order');
+    setSubcategories(data || []);
   }
 
   const handleSpecialtyChange = (specialtyId) => {
     setSelectedSpecialty(specialtyId);
     setSelectedSubspecialty(null);
     setSelectedCategory(null);
+    setSelectedSubcategory(null);
+    setSubcategories([]);
     loadSubspecialties(specialtyId);
   };
 
   const handleSubspecialtyChange = (subspecialtyId) => {
     setSelectedSubspecialty(subspecialtyId);
     setSelectedCategory(null);
+    setSelectedSubcategory(null);
+    setSubcategories([]);
     loadCategories(subspecialtyId);
   };
 
@@ -177,10 +199,18 @@ export default function AddResourceModal({ currentUser, onSubmit, onClose }) {
     if (categoryId === 'add_new') {
       setShowNewCategoryInput(true);
       setSelectedCategory(null);
+      setSelectedSubcategory(null);
+      setSubcategories([]);
       return;
     }
     setShowNewCategoryInput(false);
     setSelectedCategory(categoryId);
+    setSelectedSubcategory(null);
+    loadSubcategories(categoryId);
+  };
+
+  const handleSubcategoryChange = (subcategoryId) => {
+    setSelectedSubcategory(subcategoryId && subcategoryId !== '' ? subcategoryId : null);
   };
 
   async function handleAddNewCategory() {
@@ -296,8 +326,9 @@ export default function AddResourceModal({ currentUser, onSubmit, onClose }) {
     }
 
     setImageError('');
-    // Include category_id in the submission
-    onSubmit({ ...formData, category_id: selectedCategory }, imageFile);
+    // Use subcategory if selected, otherwise use top-level category
+    const finalCategoryId = selectedSubcategory || selectedCategory;
+    onSubmit({ ...formData, category_id: finalCategoryId }, imageFile);
   };
 
   if (!currentUser) {
@@ -447,10 +478,27 @@ export default function AddResourceModal({ currentUser, onSubmit, onClose }) {
               </div>
             )}
 
+            {/* Subcategory Selection - only show if selected category has subcategories */}
+            {selectedCategory && subcategories.length > 0 && !showNewCategoryInput && (
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Subcategory (Optional)</label>
+                <select
+                  value={selectedSubcategory || ''}
+                  onChange={(e) => handleSubcategoryChange(e.target.value)}
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors"
+                >
+                  <option value="">No subcategory</option>
+                  {subcategories.map(subcat => (
+                    <option key={subcat.id} value={subcat.id}>{subcat.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             {/* Image Upload */}
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Resource Image * 
+                Resource Image *
                 <span className="text-xs font-normal text-gray-500 ml-2">(Max 2MB, will be resized to 800x800px - square format)</span>
               </label>
               

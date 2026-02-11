@@ -111,6 +111,8 @@ export default function SuggestResourceModal({ currentUser, onSubmit, onClose })
   const [selectedSpecialty, setSelectedSpecialty] = useState(null);
   const [selectedSubspecialty, setSelectedSubspecialty] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState(null);
+  const [selectedSubcategory, setSelectedSubcategory] = useState(null);
+  const [subcategories, setSubcategories] = useState([]);
   const [canEditSpecialty, setCanEditSpecialty] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
   const [showNewCategoryInput, setShowNewCategoryInput] = useState(false);
@@ -267,8 +269,24 @@ export default function SuggestResourceModal({ currentUser, onSubmit, onClose })
       .eq('subspecialty_id', subspecialtyId)
       .is('parent_category_id', null)
       .order('order');
-    
+
     setCategories(data || []);
+    setSubcategories([]);
+    setSelectedSubcategory(null);
+  }
+
+  async function loadSubcategories(categoryId) {
+    if (!categoryId) {
+      setSubcategories([]);
+      setSelectedSubcategory(null);
+      return;
+    }
+    const { data } = await supabase
+      .from('categories')
+      .select('*')
+      .eq('parent_category_id', categoryId)
+      .order('order');
+    setSubcategories(data || []);
   }
 
   async function loadFootAnkleCategories() {
@@ -285,7 +303,9 @@ export default function SuggestResourceModal({ currentUser, onSubmit, onClose })
     setSelectedSpecialty(specialtyId);
     setSelectedSubspecialty(null);
     setSelectedCategory(null);
-    
+    setSelectedSubcategory(null);
+    setSubcategories([]);
+
     // Check if Podiatry
     const specialty = specialties.find(s => String(s.id) === String(specialtyId));
     if (specialty && specialty.name.toLowerCase().includes(SPECIALTY_SUBSPECIALTY.PODIATRY)) {
@@ -300,6 +320,8 @@ export default function SuggestResourceModal({ currentUser, onSubmit, onClose })
   const handleSubspecialtyChange = (subspecialtyId) => {
     setSelectedSubspecialty(subspecialtyId);
     setSelectedCategory(null);
+    setSelectedSubcategory(null);
+    setSubcategories([]);
     loadCategories(subspecialtyId);
   };
 
@@ -307,10 +329,18 @@ export default function SuggestResourceModal({ currentUser, onSubmit, onClose })
     if (categoryId === 'suggest_new') {
       setShowNewCategoryInput(true);
       setSelectedCategory(null);
+      setSelectedSubcategory(null);
+      setSubcategories([]);
       return;
     }
     setShowNewCategoryInput(false);
     setSelectedCategory(categoryId);
+    setSelectedSubcategory(null);
+    loadSubcategories(categoryId);
+  };
+
+  const handleSubcategoryChange = (subcategoryId) => {
+    setSelectedSubcategory(subcategoryId && subcategoryId !== '' ? subcategoryId : null);
   };
 
   // Users can suggest a category, but cannot create it directly
@@ -448,9 +478,11 @@ export default function SuggestResourceModal({ currentUser, onSubmit, onClose })
       }
 
       // Include category_id (if selected), suggested_category_name (if suggested), specialty_id, and subspecialty_id in the submission
-      await onSubmit({ 
-        ...formData, 
-        category_id: selectedCategory || null,
+      // Use subcategory if selected, otherwise use top-level category
+      const finalCategoryId = selectedSubcategory || selectedCategory || null;
+      await onSubmit({
+        ...formData,
+        category_id: finalCategoryId,
         suggested_category_name: newCategoryName.trim() || null,
         specialty_id: finalSpecialtyId,
         subspecialty_id: finalSubspecialtyId
@@ -470,6 +502,8 @@ export default function SuggestResourceModal({ currentUser, onSubmit, onClose })
       setImageFile(null);
       setImagePreview(null);
       setSelectedCategory(null);
+      setSelectedSubcategory(null);
+      setSubcategories([]);
       setSelectedSubspecialty(null);
       setSelectedSpecialty(null);
       setIsPodiatry(false);
@@ -669,10 +703,27 @@ export default function SuggestResourceModal({ currentUser, onSubmit, onClose })
               </div>
             )}
 
+            {/* Subcategory Selection - only show if selected category has subcategories */}
+            {selectedCategory && subcategories.length > 0 && !showNewCategoryInput && (
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Subcategory (Optional)</label>
+                <select
+                  value={selectedSubcategory || ''}
+                  onChange={(e) => handleSubcategoryChange(e.target.value)}
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-purple-500 focus:outline-none transition-colors"
+                >
+                  <option value="">No subcategory</option>
+                  {subcategories.map(subcat => (
+                    <option key={subcat.id} value={subcat.id}>{subcat.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             {/* Image Upload */}
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Resource Image * 
+                Resource Image *
                 <span className="text-xs font-normal text-gray-500 ml-2">(Max 2MB, will be resized to 800x800px - square format)</span>
               </label>
               
