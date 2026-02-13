@@ -1,11 +1,11 @@
 SURGICAL TECHNIQUES APP - Progress Tracker
 ==========================================
-Last Updated: 2026-02-10
+Last Updated: 2026-02-11
 
 ## Current State
 - Web app: DEPLOYED to Cloudflare Pages (surgicaltechniques.app)
 - iOS app: BUILD SUCCESSFUL, tested in simulator
-- Android app: Pending (Android Studio not yet installed)
+- Android app: BUILD SUCCESSFUL, tested in emulator (Medium_Phone_API_36.1, API 36)
 - Backend: Supabase (free tier)
 
 ## What's Built
@@ -17,9 +17,29 @@ Last Updated: 2026-02-10
 - Favorites, notes, upcoming cases for users
 - Legal pages with contact emails configured
 - Onboarding flow
-- Mobile app via Capacitor (iOS tested, Android ready)
+- Mobile app via Capacitor (iOS tested, Android tested in emulator)
+- Custom app icons (scalpel logo, all densities for iOS + Android)
+- Custom splash screens (full-bleed, all densities for iOS + Android)
 - Google Calendar integration (connect, create events, delete events, disconnect)
 - Subspecialty Companies + Rep Platform (Contact Rep button, RepView, inquiry management)
+
+## Completed This Session (2026-02-11)
+- [x] Set up ANDROID_HOME + JAVA_HOME in ~/.zshrc (uses Android Studio's bundled JDK 21)
+- [x] Built debug APK via Gradle — BUILD SUCCESSFUL (93 tasks)
+- [x] Tested Android app in emulator (Medium_Phone_API_36.1, API 36)
+- [x] Generated custom app icons for Android (12 sizes, ldpi→xxxhdpi, square + round) and iOS
+- [x] Generated custom splash screens — full-bleed design (logo fills entire screen)
+  - Android: 13 sizes (portrait + landscape, ldpi→xxxhdpi)
+  - iOS: 3 sizes (@1x, @2x, @3x universal)
+- [x] Created assets/ folder as canonical source for icons + splash (icon-only.png, splash.png)
+- [x] ResourceCard: "View Implant Info" → "Additional Implant Information"
+- [x] SuggestedResourcesModal: grouped by specialty/subspecialty with counters (super_admin and specialty_admin views)
+- [x] TermsAcceptanceModal: Back button + Decline button added (Back returns to onboarding; Decline signs out)
+- [x] Podiatry renamed "Podiatric Surgery" + subtitle in Onboarding and SettingsModal
+- [x] Onboarding step 7 bug fixed (React state closure — value now passed directly)
+- [x] SettingsModal: user type change dropdown added
+- [x] Security hardening: allowlist validation added for surgeon onboarding options and user type update
+- [x] tasks/todo.md updated, LESSONS.md updated (3 new lessons)
 
 ## Completed This Session (2026-02-09)
 - [x] Restored working Google Calendar OAuth (was broken by failed Supabase Vault attempt)
@@ -29,10 +49,7 @@ Last Updated: 2026-02-10
 - [x] Fixed calendar event end time bug (slice 0,16 → 0,19 was causing 400 from Google API)
 - [x] Fixed calendar tooltip showing wrong time (UTC parse bug → now uses local time parts)
 - [x] Confirmed Rep Platform and Contact Rep button working end-to-end
-- [x] Completed CALENDAR_ENCRYPTION_FIX_PLAN.md — all 3 phases done:
-  - Phase 1: Calendar restored (plaintext rollback)
-  - Phase 2: AES-256-GCM encryption + token refresh implemented
-  - Phase 3: Vault artifacts dropped (functions, trigger, columns)
+- [x] Completed CALENDAR_ENCRYPTION_FIX_PLAN.md — all 3 phases done
 
 ## Completed This Session (2026-02-10)
 - [x] Fixed Contact Rep button not showing (loadCompanies was filtering by subspecialty — removed filter, now loads all active companies)
@@ -40,23 +57,30 @@ Last Updated: 2026-02-10
 - [x] Fixed website showing all subspecialties' resources on login (gated loadAllData on profileLoaded; resources + categories now load in parallel)
 - [x] Fixed scroll/re-render on tab switch (added deep-compare in loadUserProfile to skip setCurrentUser if profile data unchanged)
 - [x] Fixed Admin Add Resource specialty/subspecialty not prepopulated (removed isInitialLoad ref guard so useEffects always fire)
-- [x] Fixed category dropdown not appearing (same fix as above — selectedSubspecialty effect now always calls loadCategories)
+- [x] Fixed category dropdown not appearing (selectedSubspecialty effect now always calls loadCategories)
+
+## Completed This Session (2026-02-04)
+- [x] Updated privacy policy age from 13 to 18
+- [x] Added subspecialty admin peer messaging within same specialty
+- [x] Added contact emails (privacy@, support@, legal@surgicaltechniques.app)
+- [x] Set jurisdiction to Harris County, Texas
+- [x] Updated CLAUDE.md with comprehensive coding session guidelines
+- [x] Created full documentation suite (10 files)
+- [x] Built and synced iOS app via Capacitor
+- [x] Successfully ran iOS app in Xcode simulator
+- [x] Moved search bar above categories on browse page (UX improvement)
 
 ## In Progress
 - Microsoft Outlook calendar integration (blocked on Azure app registration)
-- Android build setup (need Android Studio installation)
 
 ## Blocked
-- Android build: Need Android Studio installed
+- (nothing currently blocked)
 
 ## What's Next
-1. Install Android Studio and test Android build
-2. Create custom app icons (1024x1024 PNG)
-3. Create custom splash screens
-4. Set up Apple Developer account ($99/yr)
-5. Set up Google Play Console ($25 one-time)
-6. Prepare app store metadata and screenshots
-7. Submit to App Store and Google Play
+1. Set up Apple Developer account ($99/yr)
+2. Set up Google Play Console ($25 one-time)
+3. Prepare app store metadata and screenshots
+4. Submit to App Store and Google Play
 
 ## Architecture Note
 Single codebase serves three platforms:

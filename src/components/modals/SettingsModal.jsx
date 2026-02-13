@@ -28,10 +28,19 @@ export default function SettingsModal({
   onUpdateProfile, 
   onClose 
 }) {
+  const USER_TYPE_OPTIONS = [
+    { value: 'surgeon', label: 'Surgeon / Attending' },
+    { value: 'trainee', label: 'Resident / Fellow' },
+    { value: 'app', label: 'Advanced Practice Provider (APP)' },
+    { value: 'industry', label: 'Medical Industry' },
+    { value: 'student', label: 'Student / Other' },
+  ];
+
   const [specialties, setSpecialties] = useState([]);
   const [subspecialties, setSubspecialties] = useState([]);
   const [selectedSpecialty, setSelectedSpecialty] = useState(currentUser?.specialtyId || '');
   const [selectedSubspecialty, setSelectedSubspecialty] = useState(currentUser?.subspecialtyId || '');
+  const [selectedUserType, setSelectedUserType] = useState(currentUser?.userType || '');
   const [loadingSubspecialties, setLoadingSubspecialties] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
@@ -326,10 +335,18 @@ export default function SettingsModal({
         }
       }
       
+      // Security: Validate user type against allowlist before including in update
+      if (selectedUserType && !USER_TYPE_OPTIONS.map(o => o.value).includes(selectedUserType)) {
+        setMessage('Error: Invalid user type selection. Please try again.');
+        setSaving(false);
+        return;
+      }
+
       // Prepare update data
       const updateData = {
         specialtyId: selectedSpecialty || null,
         subspecialtyId: selectedSubspecialty || null,
+        ...(selectedUserType && { userType: selectedUserType }),
       };
       
       // Security: Mask user ID in logs
@@ -406,6 +423,23 @@ export default function SettingsModal({
               />
             </button>
           </div>
+        </div>
+
+        {/* User Type */}
+        <div className="mb-6 pb-6 border-b border-gray-200 dark:border-gray-700">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-1">User Type</h3>
+          <p className="text-sm text-gray-600 dark:text-gray-300 mb-3">Update your role — for example, if you've transitioned from resident to attending.</p>
+          <select
+            value={selectedUserType}
+            onChange={(e) => setSelectedUserType(e.target.value)}
+            className="w-full px-4 py-3 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border-2 border-gray-200 dark:border-gray-600 rounded-xl focus:border-purple-500 dark:focus:border-purple-400 focus:outline-none transition-colors"
+            disabled={saving}
+          >
+            <option value="">— No change —</option>
+            {USER_TYPE_OPTIONS.map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
         </div>
 
         {/* Password Management */}
@@ -723,9 +757,14 @@ export default function SettingsModal({
                   disabled={saving}
                 >
                   <option value="">Select Specialty</option>
-                  {specialties.map(specialty => (
-                    <option key={specialty.id} value={specialty.id}>{specialty.name}</option>
-                  ))}
+                  {specialties.map(specialty => {
+                    const isPod = specialty.name.toLowerCase().includes('podiatry');
+                    return (
+                      <option key={specialty.id} value={specialty.id}>
+                        {isPod ? 'Podiatric Surgery' : specialty.name}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
 

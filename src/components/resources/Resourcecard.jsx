@@ -23,7 +23,8 @@ import {
   Flag,
   MessageSquare,
   Calendar,
-  Trash2
+  Trash2,
+  Package
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { trackResourceCoview, trackRatingEvent, trackResourceLinkClick } from '../../lib/analytics';
@@ -556,14 +557,28 @@ function ResourceCard({
 
           {/* View on [Source] button — opens confirmation modal then external link */}
           {safeResourceHref ? (
-            <button
-              type="button"
-              onClick={handleViewExternalClick}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-all active:scale-95 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 mb-2"
-            >
-              <ArrowRight size={16} />
-              {getViewOnLabel(resource)}
-            </button>
+            <div className="flex flex-wrap gap-2 mb-2">
+              <button
+                type="button"
+                onClick={handleViewExternalClick}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-all active:scale-95 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2"
+              >
+                <ArrowRight size={16} />
+                {getViewOnLabel(resource)}
+              </button>
+              {/* Additional Implant Information - optional 2nd button, only when implant_info_url exists */}
+              {resource.implant_info_url && (
+                <a
+                  href={resource.implant_info_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-all active:scale-95"
+                >
+                  <Package size={16} />
+                  Additional Implant Information
+                </a>
+              )}
+            </div>
           ) : (
             <p className="text-xs text-gray-500 dark:text-gray-400 mb-2 italic">
               External link not available for this resource

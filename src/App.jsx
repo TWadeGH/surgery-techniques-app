@@ -379,7 +379,9 @@ function SurgicalTechniquesApp() {
             email,
             primary_specialty_id,
             primary_subspecialty_id
-          )
+          ),
+          user_specialty:specialties!user_specialty_id(id, name),
+          user_subspecialty:subspecialties!user_subspecialty_id(id, name)
         `)
         .eq('status', 'pending')
         .order('created_at', { ascending: false });
@@ -1576,6 +1578,13 @@ function SurgicalTechniquesApp() {
         onAccept={async () => {
           await updateProfile({ termsAcceptedAt: new Date().toISOString() });
           await refreshProfile();
+        }}
+        onBack={async () => {
+          await updateProfile({ onboardingComplete: false });
+          await refreshProfile();
+        }}
+        onDecline={async () => {
+          await signOut();
         }}
       />
     );

@@ -137,7 +137,7 @@ export default function Onboarding({ user, onComplete }) {
     }
   }
 
-  async function handleComplete() {
+  async function handleComplete(caseVolumeOverride) {
     try {
       setLoading(true);
       let specialtyId = selectedSpecialty;
@@ -168,15 +168,30 @@ export default function Onboarding({ user, onComplete }) {
       if (specialtyId) updateData.primary_specialty_id = specialtyId;
       if (subspecialtyId) updateData.primary_subspecialty_id = subspecialtyId;
       if (userType === 'surgeon') {
-        if (!practiceSetting || !primaryORSetting || !yearsPracticing || !annualCaseVolume) {
+        // Use caseVolumeOverride if provided (avoids stale closure when called directly from onClick)
+        const resolvedCaseVolume = caseVolumeOverride || annualCaseVolume;
+        if (!practiceSetting || !primaryORSetting || !yearsPracticing || !resolvedCaseVolume) {
           alert('Please answer all practice and volume questions.');
+          setLoading(false);
+          return;
+        }
+        // Security: allowlist check — reject values not in the hardcoded options
+        const validCaseVolumes = ANNUAL_CASE_VOLUME_OPTIONS.map(o => o.value);
+        const validPracticeSettings = PRACTICE_SETTING_OPTIONS.map(o => o.value);
+        const validORSettings = PRIMARY_OR_OPTIONS.map(o => o.value);
+        const validYears = YEARS_PRACTICING_OPTIONS.map(o => o.value);
+        if (!validCaseVolumes.includes(resolvedCaseVolume) ||
+            !validPracticeSettings.includes(practiceSetting) ||
+            !validORSettings.includes(primaryORSetting) ||
+            !validYears.includes(yearsPracticing)) {
+          alert('Invalid selection. Please try again.');
           setLoading(false);
           return;
         }
         updateData.practice_setting = practiceSetting;
         updateData.primary_or_setting = primaryORSetting;
         updateData.years_practicing = yearsPracticing;
-        updateData.annual_case_volume = annualCaseVolume;
+        updateData.annual_case_volume = resolvedCaseVolume;
       }
       console.log('Onboarding update:', { userId: user.id, updateData });
       const { data, error } = await supabase
@@ -281,7 +296,14 @@ export default function Onboarding({ user, onComplete }) {
                       setTimeout(() => setStep(3), 200);
                     }
                   }}>
-                  <div style={styles.cardTitle}>{specialty.name}</div>
+                  <div style={styles.cardTitle}>
+                    {isPod ? 'Podiatric Surgery' : specialty.name}
+                  </div>
+                  {isPod && (
+                    <div style={{ fontSize: '11px', color: '#888', marginTop: '2px' }}>
+                      Shared resources with Orthopedic Foot &amp; Ankle Surgery
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -374,9 +396,10 @@ export default function Onboarding({ user, onComplete }) {
           <div>
             <h2 style={{ marginBottom: '20px', fontSize: '24px' }}>What is your approximate annual case volume?</h2>
             {ANNUAL_CASE_VOLUME_OPTIONS.map((opt) => (
-              <div key={opt.value} style={{ ...styles.card, ...(annualCaseVolume === opt.value ? styles.cardSelected : {}) }} onClick={() => {
+              <div key={opt.value} style={{ ...styles.card, ...(annualCaseVolume === opt.value ? styles.cardSelected : {}), ...(loading ? { pointerEvents: 'none', opacity: 0.6 } : {}) }} onClick={() => {
+                if (loading) return;
                 setAnnualCaseVolume(opt.value);
-                setTimeout(() => handleComplete(), 200);
+                handleComplete(opt.value);
               }}>
                 <div style={styles.cardTitle}>{opt.label}</div>
               </div>
@@ -398,6 +421,7 @@ export default function Onboarding({ user, onComplete }) {
               setShowTermsAcceptance(false);
               onComplete();
             }}
+            onBack={() => setShowTermsAcceptance(false)}
           />
         )}
       </div>

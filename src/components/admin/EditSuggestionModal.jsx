@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { processResourceImage, createImagePreview, validateImageFile } from '../../lib/imageUtils';
+import { CompanyProductSelector } from '../common';
 
 export default function EditSuggestionModal({ suggestion, onSave, onClose }) {
   // Parse duration_seconds into hours, minutes, seconds if it exists
@@ -20,7 +21,12 @@ export default function EditSuggestionModal({ suggestion, onSave, onClose }) {
   const [url, setUrl] = useState(suggestion.url || '');
   const [resourceType, setResourceType] = useState(suggestion.resource_type || 'video');
   const [keywords, setKeywords] = useState(suggestion.keywords || '');
-  
+  const [yearPublished, setYearPublished] = useState(suggestion.year_published || '');
+
+  // Company/Product names - initialize from suggestion
+  const [companyName, setCompanyName] = useState(suggestion.company_name || '');
+  const [productName, setProductName] = useState(suggestion.product_name || '');
+
   const [currentImageUrl, setCurrentImageUrl] = useState(suggestion.image_url || '');
   const [newImageFile, setNewImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
@@ -202,6 +208,9 @@ export default function EditSuggestionModal({ suggestion, onSave, onClose }) {
         subspecialty_id: selectedSubspecialty || null,
         category_id: selectedCategory || null,
         image_url: finalImageUrl,
+        year_published: yearPublished ? parseInt(yearPublished) : null,
+        company_name: companyName.trim() || null,
+        product_name: productName.trim() || null,
       });
     } catch (error) {
       console.error('Error saving:', error);
@@ -280,6 +289,24 @@ export default function EditSuggestionModal({ suggestion, onSave, onClose }) {
             />
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
               Separate keywords with commas
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Year Published (Optional)
+            </label>
+            <input
+              type="number"
+              min="1900"
+              max={new Date().getFullYear()}
+              value={yearPublished}
+              onChange={(e) => setYearPublished(e.target.value)}
+              className="w-32 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-purple-500 dark:bg-gray-800 dark:text-white"
+              placeholder="e.g., 2024"
+            />
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              The year the video or article was published
             </p>
           </div>
 
@@ -504,6 +531,14 @@ export default function EditSuggestionModal({ suggestion, onSave, onClose }) {
               </select>
             </div>
           )}
+
+          {/* Company/Product Names */}
+          <CompanyProductSelector
+            companyName={companyName}
+            productName={productName}
+            onCompanyNameChange={setCompanyName}
+            onProductNameChange={setProductName}
+          />
 
           <div className="flex gap-3 pt-4">
             <button
