@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { ToastProvider, useToast } from './Toast';
 
 // Test component that uses toast
@@ -38,34 +38,32 @@ describe('Toast Component', () => {
     expect(screen.getByText('Test')).toBeInTheDocument();
   });
 
-  it('should show success toast', async () => {
+  it('should show success toast', () => {
     render(
       <ToastProvider>
         <TestComponent />
       </ToastProvider>
     );
 
-    const button = screen.getByRole('button', { name: /success/i });
-    button.click();
-
-    await waitFor(() => {
-      expect(screen.getByText('Success message')).toBeInTheDocument();
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: /success/i }));
     });
+
+    expect(screen.getByText('Success message')).toBeInTheDocument();
   });
 
-  it('should show error toast', async () => {
+  it('should show error toast', () => {
     render(
       <ToastProvider>
         <TestComponent />
       </ToastProvider>
     );
 
-    const button = screen.getByRole('button', { name: /error/i });
-    button.click();
-
-    await waitFor(() => {
-      expect(screen.getByText('Error message')).toBeInTheDocument();
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: /error/i }));
     });
+
+    expect(screen.getByText('Error message')).toBeInTheDocument();
   });
 
   it('should auto-dismiss toast after duration', async () => {
@@ -75,40 +73,37 @@ describe('Toast Component', () => {
       </ToastProvider>
     );
 
-    const button = screen.getByRole('button', { name: /success/i });
-    button.click();
-
-    await waitFor(() => {
-      expect(screen.getByText('Success message')).toBeInTheDocument();
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: /success/i }));
     });
 
-    // Fast-forward time
-    vi.advanceTimersByTime(4000);
+    expect(screen.getByText('Success message')).toBeInTheDocument();
 
-    await waitFor(() => {
-      expect(screen.queryByText('Success message')).not.toBeInTheDocument();
+    // Advance past the 4000ms auto-dismiss duration and flush React updates
+    await act(async () => {
+      vi.advanceTimersByTime(4500);
     });
+
+    expect(screen.queryByText('Success message')).not.toBeInTheDocument();
   });
 
-  it('should close toast when close button clicked', async () => {
+  it('should close toast when close button clicked', () => {
     render(
       <ToastProvider>
         <TestComponent />
       </ToastProvider>
     );
 
-    const button = screen.getByRole('button', { name: /success/i });
-    button.click();
-
-    await waitFor(() => {
-      expect(screen.getByText('Success message')).toBeInTheDocument();
+    act(() => {
+      fireEvent.click(screen.getByRole('button', { name: /success/i }));
     });
 
-    const closeButton = screen.getByLabelText('Close notification');
-    closeButton.click();
+    expect(screen.getByText('Success message')).toBeInTheDocument();
 
-    await waitFor(() => {
-      expect(screen.queryByText('Success message')).not.toBeInTheDocument();
+    act(() => {
+      fireEvent.click(screen.getByLabelText('Close notification'));
     });
+
+    expect(screen.queryByText('Success message')).not.toBeInTheDocument();
   });
 });

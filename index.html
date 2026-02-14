@@ -8,26 +8,30 @@
     <!-- In production, configure CSP via Cloudflare Pages headers if needed -->
     <!-- For development, this allows Vite HMR to work properly -->
     <title>Surgical Techniques App</title>
-    <meta name="description" content="Surgical Techniques App is a curated reference platform for healthcare professionals, medical trainees, and industry staff to access procedure-specific surgical educational content." />
+    <meta name="description" content="Surgical Techniques App is a curated reference platform for healthcare professionals to access surgical educational content and sync upcoming cases with Google Calendar and Microsoft Outlook Calendar." />
     <link rel="privacy-policy" href="https://surgicaltechniques.app/privacy.html" />
   </head>
   <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-    <!-- Site footer: always in DOM for crawlers, visually hidden once React mounts -->
-    <footer id="static-footer" style="font-family:sans-serif;padding:16px 24px;text-align:center;font-size:13px;color:#6b7280;border-top:1px solid #e5e7eb;">
-      <p style="margin:0 0 6px;">
-        <strong style="color:#111827;">Surgical Techniques App</strong> &mdash;
+    <!-- Static content block: always in DOM for OAuth branding verification and no-JS environments.
+         Explicitly describes app purpose and calendar integrations for Google's branding checker. -->
+    <div id="static-content" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;padding:16px 24px;border-bottom:1px solid #e5e7eb;background:#fff;">
+      <h1 style="font-size:18px;font-weight:700;color:#111827;margin:0 0 8px;">Surgical Techniques App</h1>
+      <p style="font-size:14px;line-height:1.6;color:#374151;margin:0 0 8px;">
         A curated reference platform for healthcare professionals, medical trainees, and industry
-        staff to access procedure-specific surgical educational content.
+        staff to access procedure-specific surgical educational content. This app integrates with
+        <strong>Google Calendar</strong> and <strong>Microsoft Outlook Calendar</strong> to help
+        users schedule and track upcoming surgical cases &mdash; creating and managing calendar
+        events on behalf of authenticated users.
       </p>
-      <p style="margin:0;">
+      <p style="font-size:12px;color:#6b7280;margin:0;">
         <a href="https://surgicaltechniques.app/privacy.html" style="color:#7c3aed;text-decoration:none;">Privacy Policy</a>
         &nbsp;&middot;&nbsp;
         <a href="https://surgicaltechniques.app/terms.html" style="color:#7c3aed;text-decoration:none;">Terms &amp; Conditions</a>
         &nbsp;&middot;&nbsp;
         &copy; 2026 TWH Systems, LLC
       </p>
-    </footer>
+    </div>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

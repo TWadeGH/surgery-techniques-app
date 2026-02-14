@@ -48,11 +48,12 @@ describe('Button Component', () => {
   it('should apply variant classes', () => {
     const { rerender } = render(<Button variant="primary">Primary</Button>);
     let button = screen.getByRole('button');
-    expect(button.className).toMatch(/primary/i);
+    // Button maps variants to Tailwind classes, not literal variant names
+    expect(button.className).toMatch(/bg-purple-600/);
 
     rerender(<Button variant="danger">Danger</Button>);
     button = screen.getByRole('button');
-    expect(button.className).toMatch(/danger/i);
+    expect(button.className).toMatch(/bg-red-600/);
   });
 
   it('should apply size classes', () => {

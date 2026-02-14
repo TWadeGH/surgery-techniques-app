@@ -76,6 +76,7 @@ export function includeInAnalytics(user) {
 export function formatDate(date) {
   if (!date) return '';
   const d = new Date(date);
+  if (isNaN(d.getTime())) return '';
   return d.toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'short',
@@ -91,6 +92,7 @@ export function formatDate(date) {
 export function formatDateTime(date) {
   if (!date) return '';
   const d = new Date(date);
+  if (isNaN(d.getTime())) return '';
   return d.toLocaleString('en-US', {
     year: 'numeric',
     month: 'short',
