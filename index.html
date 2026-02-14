@@ -13,26 +13,20 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
-    <!-- Static content for crawlers: visible before JavaScript loads -->
-    <noscript>
-      <div style="font-family:sans-serif;max-width:600px;margin:40px auto;padding:0 24px;color:#374151;">
-        <h1 style="font-size:24px;font-weight:700;color:#111827;">Surgical Techniques App</h1>
-        <p style="margin:12px 0;line-height:1.6;">
-          A curated reference platform for healthcare professionals, medical trainees, and industry
-          staff to access procedure-specific surgical educational content. Organized by specialty
-          and subspecialty, with favorites, upcoming cases, and Google Calendar integration.
-        </p>
-        <p style="margin:12px 0;">
-          <a href="/privacy.html" style="color:#7c3aed;">Privacy Policy</a>
-          &nbsp;·&nbsp;
-          <a href="/terms.html" style="color:#7c3aed;">Terms &amp; Conditions</a>
-          &nbsp;·&nbsp;
-          <a href="mailto:support@surgicaltechniques.app" style="color:#7c3aed;">Contact</a>
-        </p>
-        <p style="margin:12px 0;font-size:14px;color:#6b7280;">
-          &copy; 2026 TWH Systems, LLC &mdash; surgicaltechniques.app
-        </p>
-      </div>
-    </noscript>
+    <!-- Site footer: always in DOM for crawlers, visually hidden once React mounts -->
+    <footer id="static-footer" style="font-family:sans-serif;padding:16px 24px;text-align:center;font-size:13px;color:#6b7280;border-top:1px solid #e5e7eb;">
+      <p style="margin:0 0 6px;">
+        <strong style="color:#111827;">Surgical Techniques App</strong> &mdash;
+        A curated reference platform for healthcare professionals, medical trainees, and industry
+        staff to access procedure-specific surgical educational content.
+      </p>
+      <p style="margin:0;">
+        <a href="/privacy.html" style="color:#7c3aed;text-decoration:none;">Privacy Policy</a>
+        &nbsp;&middot;&nbsp;
+        <a href="/terms.html" style="color:#7c3aed;text-decoration:none;">Terms &amp; Conditions</a>
+        &nbsp;&middot;&nbsp;
+        &copy; 2026 TWH Systems, LLC
+      </p>
+    </footer>
   </body>
 </html>
