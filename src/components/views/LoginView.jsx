@@ -516,6 +516,33 @@ export default function LoginView({ onLogin }) {
             </button>
           </p>
         </div>
+
+        {/* App description + legal links — visible to crawlers for Google OAuth verification */}
+        <div className="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700 text-center">
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+            Surgical Techniques App is a curated reference platform for healthcare professionals,
+            medical trainees, and industry staff to access procedure-specific educational content.
+          </p>
+          <div className="flex justify-center gap-4 text-xs text-gray-400 dark:text-gray-500">
+            <a
+              href="/privacy.html"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-purple-600 dark:hover:text-purple-400 transition-colors"
+            >
+              Privacy Policy
+            </a>
+            <span>·</span>
+            <a
+              href="/terms.html"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-purple-600 dark:hover:text-purple-400 transition-colors"
+            >
+              Terms &amp; Conditions
+            </a>
+          </div>
+        </div>
       </div>
     </div>
   );
