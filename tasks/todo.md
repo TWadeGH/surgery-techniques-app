@@ -35,27 +35,30 @@
 
 ---
 
-## Session: 2026-02-10 — Microsoft Outlook Calendar Integration
+## Session: 2026-02-10 — Microsoft Outlook Calendar Integration ✅ COMPLETE
 
-### Goal
-Add Microsoft Outlook as a second calendar provider alongside Google Calendar.
+### Completed (2026-02-14)
+- [x] Register app in Microsoft Azure Portal (App ID: b80af4dd-7465-4163-bb5b-66818102969c)
+- [x] Set redirect URI to Supabase outlook-oauth-callback function
+- [x] MICROSOFT_CLIENT_ID + MICROSOFT_CLIENT_SECRET saved in Supabase secrets
+- [x] Edge Function: `outlook-oauth-callback`
+- [x] Edge Function: `create-calendar-event` (Microsoft branch)
+- [x] Edge Function: `delete-calendar-event` (Microsoft branch)
+- [x] Hook: `useCalendarConnection.js` — `connectMicrosoft()` implemented
+- [x] Hook: `useCalendarEvents.js` — multi-provider support
+- [x] UI: `SettingsModal.jsx` — Outlook connect button + connected state
+- [x] UI: `CalendarEventModal.jsx` — provider selector when both connected
+- [x] All 5 Edge Functions deployed to Supabase (with --no-verify-jwt on OAuth callbacks)
+- [x] End-to-end test passed — Outlook connection successful
 
-### Prerequisites (User action required before code can be written)
-- [ ] Register app in Microsoft Azure Portal → App registrations
-- [ ] Set redirect URI: `https://bufnygjdkdemacqbxcrh.supabase.co/functions/v1/outlook-oauth-callback`
-- [ ] Note Application (client) ID + create a Client Secret
-- [ ] Add to Supabase secrets: `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET`
-
-### Tasks
-- [ ] Edge Function: `outlook-oauth-callback` (new)
-- [ ] Edge Function: `create-calendar-event` (add Microsoft branch)
-- [ ] Edge Function: `delete-calendar-event` (add Microsoft branch)
-- [ ] Hook: `useCalendarConnection.js` — add `connectMicrosoft()`
-- [ ] Hook: `useCalendarEvents.js` — remove hardcoded `provider: 'google'`
-- [ ] UI: `SettingsModal.jsx` — add Outlook connect button + connected state
-- [ ] UI: `CalendarEventModal.jsx` — add provider selector if both connected
-- [ ] End-to-end test
-- [ ] Push to GitHub
+### Deferred — Microsoft Publisher Verification
+- [ ] Enroll in Microsoft AI Cloud Partner Program at partner.microsoft.com
+  - Select "Build" (ISV) → then "Microsoft AI Cloud Partner Program"
+  - Must sign in with a work account (not personal outlook.com)
+  - After enrollment: verify surgicaltechniques.app domain via DNS TXT
+  - Get PartnerID → Azure → App Registrations → Branding → Add MPN ID
+  - Removes "Unverified" label from Outlook consent screen
+  - Not urgent — no user cap, only affects work/school Microsoft 365 accounts
 
 ---
 
@@ -79,7 +82,9 @@ Add Microsoft Outlook as a second calendar provider alongside Google Calendar.
 - [ ] #8 Company name search — requires subspecialty_companies join to resources query; investigate schema before implementing
 
 ### Known Issues (Pre-existing)
-- 13 test failures in helpers.test.js, users.test.js, Toast.test.jsx — all pre-existing, none in changed files
+- ~~13 test failures~~ — fixed 2026-02-14, 75/75 passing
+- ~~RLS missing on resource_history and analytics_insights~~ — fixed 2026-02-14
+- ~~SECURITY DEFINER function search paths mutable~~ — fixed 2026-02-14
 - Pre-commit hooks not configured (.pre-commit-config.yaml missing)
 - semgrep, gitleaks, snyk not installed — security scanners needed
 - Main bundle chunk size warning (pre-existing)

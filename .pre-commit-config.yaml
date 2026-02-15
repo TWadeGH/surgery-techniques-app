@@ -1,0 +1,31 @@
+# Pre-commit configuration — Security Scanner Stack
+# Referenced in CLAUDE.md Phase 3: Automated Scanner Stack
+#
+# Git hooks are enforced via husky (.husky/pre-commit):
+#   - ESLint on staged files (lint-staged)
+#   - Full vitest run
+#
+# The tools below require separate installation before use:
+#   brew install gitleaks
+#   pip install semgrep
+#   npm install -g snyk && snyk auth
+#
+# To run manually:
+#   gitleaks detect --verbose
+#   semgrep scan --config=auto
+#   snyk test
+
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
+        name: Detect hardcoded secrets
+        description: Scans for API keys, tokens, passwords in staged files
+
+  - repo: https://github.com/semgrep/semgrep
+    rev: v1.107.0
+    hooks:
+      - id: semgrep
+        name: OWASP Top 10 scan
+        args: ["--config=auto", "--error"]
