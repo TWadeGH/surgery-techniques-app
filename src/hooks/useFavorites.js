@@ -187,22 +187,25 @@ export function useFavorites(userId, options = {}) {
   }, []);
 
   /**
-   * Check if a resource is favorited (memoized for performance)
+   * Check if a resource is favorited (stabilized with ref for performance)
    */
+  const favoritesRef = useRef(favorites);
+  favoritesRef.current = favorites;
+
   const isFavorited = useCallback(
     (resourceId) => {
-      const result = favorites.includes(resourceId);
+      const result = favoritesRef.current.includes(resourceId);
       // Debug logging (only log occasionally to avoid spam)
       if (Math.random() < 0.01) { // Log 1% of calls
         console.log('🔍 useFavorites: isFavorited check', {
           resourceIdPrefix: resourceId?.substring(0, 8) + '...',
           isFavorited: result,
-          favoritesCount: favorites.length
+          favoritesCount: favoritesRef.current.length
         });
       }
       return result;
     },
-    [favorites]
+    []
   );
 
   /**

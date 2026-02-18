@@ -1692,6 +1692,9 @@ function SurgicalTechniquesApp() {
         {/* Legal Footer */}
         <footer className="border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 mt-auto">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
+            <p className="text-center text-xs text-gray-500 dark:text-gray-400 mb-2">
+              This app integrates with <strong>Google Calendar</strong> and <strong>Microsoft Outlook Calendar</strong> to help users schedule and track upcoming surgical cases — creating and managing calendar events on behalf of authenticated users.
+            </p>
             <p className="text-center text-sm text-gray-600 dark:text-gray-400 mb-2">
               © 2026 TWH Systems, LLC.
             </p>

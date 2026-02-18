@@ -160,7 +160,7 @@ function ResourceList({
       return isFavorited(resourceId);
     }
     return favorites.includes(resourceId);
-  }, [isFavorited, favorites]);
+  }, [isFavorited]);
 
   // Memoized helper to get note
   const getNoteText = useCallback((resourceId) => {
