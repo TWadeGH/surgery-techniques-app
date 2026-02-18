@@ -1,6 +1,6 @@
 SURGICAL TECHNIQUES APP - Progress Tracker
 ==========================================
-Last Updated: 2026-02-11
+Last Updated: 2026-02-17
 
 ## Current State
 - Web app: DEPLOYED to Cloudflare Pages (surgicaltechniques.app)
@@ -21,7 +21,13 @@ Last Updated: 2026-02-11
 - Custom app icons (scalpel logo, all densities for iOS + Android)
 - Custom splash screens (full-bleed, all densities for iOS + Android)
 - Google Calendar integration (connect, create events, delete events, disconnect)
+- Microsoft Outlook Calendar integration (connect, create events, delete events, disconnect)
 - Subspecialty Companies + Rep Platform (Contact Rep button, RepView, inquiry management)
+
+## Completed This Session (2026-02-17)
+- [x] Fixed favorites heart button re-render glitch (stabilized isFavorited with useRef)
+- [x] Removed stale favorites dep from ResourceList checkIsFavorited callback
+- [x] Added Google Calendar / Outlook integration disclosure to footer for OAuth verification
 
 ## Completed This Session (2026-02-11)
 - [x] Set up ANDROID_HOME + JAVA_HOME in ~/.zshrc (uses Android Studio's bundled JDK 21)
@@ -41,6 +47,25 @@ Last Updated: 2026-02-11
 - [x] Security hardening: allowlist validation added for surgeon onboarding options and user type update
 - [x] tasks/todo.md updated, LESSONS.md updated (3 new lessons)
 
+## Completed This Session (2026-02-10)
+- [x] Fixed Contact Rep button not showing (loadCompanies was filtering by subspecialty — removed filter, now loads all active companies)
+- [x] Fixed onboarding flash on login (added profileLoaded gate so onboarding check waits for full profile from DB)
+- [x] Fixed website showing all subspecialties' resources on login (gated loadAllData on profileLoaded; resources + categories now load in parallel)
+- [x] Fixed scroll/re-render on tab switch (added deep-compare in loadUserProfile to skip setCurrentUser if profile data unchanged)
+- [x] Fixed Admin Add Resource specialty/subspecialty not prepopulated (removed isInitialLoad ref guard so useEffects always fire)
+- [x] Fixed category dropdown not appearing (selectedSubspecialty effect now always calls loadCategories)
+- [x] Microsoft Outlook Calendar integration — fully implemented and verified end-to-end:
+  - outlook-oauth-callback edge function (MS Graph API, urlencoded token exchange, email fetch)
+  - Microsoft branches added to create-calendar-event and delete-calendar-event edge functions
+  - connectMicrosoft() added to useCalendarConnection hook (Azure App ID hardcoded)
+  - Provider fix in useCalendarEvents (eventData.provider || 'google' — was hardcoded 'google')
+  - SettingsModal: multi-provider display (both/either/neither connected states, Outlook button)
+  - CalendarEventModal: provider radio selector shown when both Google + Outlook connected
+  - calendarConnections threaded through App → UserView → ResourceList → ResourceCard
+  - Removed temp version tag from Header
+  - Deployed outlook-oauth-callback to Supabase, JWT verification disabled (required for OAuth callbacks)
+  - Deployed frontend to production via GitHub → Cloudflare Pages
+
 ## Completed This Session (2026-02-09)
 - [x] Restored working Google Calendar OAuth (was broken by failed Supabase Vault attempt)
 - [x] Implemented AES-256-GCM application-level token encryption in all 4 Edge Functions
@@ -50,14 +75,6 @@ Last Updated: 2026-02-11
 - [x] Fixed calendar tooltip showing wrong time (UTC parse bug → now uses local time parts)
 - [x] Confirmed Rep Platform and Contact Rep button working end-to-end
 - [x] Completed CALENDAR_ENCRYPTION_FIX_PLAN.md — all 3 phases done
-
-## Completed This Session (2026-02-10)
-- [x] Fixed Contact Rep button not showing (loadCompanies was filtering by subspecialty — removed filter, now loads all active companies)
-- [x] Fixed onboarding flash on login (added profileLoaded gate so onboarding check waits for full profile from DB)
-- [x] Fixed website showing all subspecialties' resources on login (gated loadAllData on profileLoaded; resources + categories now load in parallel)
-- [x] Fixed scroll/re-render on tab switch (added deep-compare in loadUserProfile to skip setCurrentUser if profile data unchanged)
-- [x] Fixed Admin Add Resource specialty/subspecialty not prepopulated (removed isInitialLoad ref guard so useEffects always fire)
-- [x] Fixed category dropdown not appearing (selectedSubspecialty effect now always calls loadCategories)
 
 ## Completed This Session (2026-02-04)
 - [x] Updated privacy policy age from 13 to 18
@@ -71,16 +88,25 @@ Last Updated: 2026-02-11
 - [x] Moved search bar above categories on browse page (UX improvement)
 
 ## In Progress
-- Microsoft Outlook calendar integration (blocked on Azure app registration)
+- Google Calendar OAuth verification (reapplying to move out of test mode)
 
 ## Blocked
 - (nothing currently blocked)
 
 ## What's Next
-1. Set up Apple Developer account ($99/yr)
-2. Set up Google Play Console ($25 one-time)
-3. Prepare app store metadata and screenshots
-4. Submit to App Store and Google Play
+1. Move Google Calendar OAuth app out of test mode → production verification (Google Cloud Console)
+2. Microsoft Outlook — submit for publisher verification (unverified app warning shown to users)
+3. Set up Apple Developer account ($99/yr)
+4. Set up Google Play Console ($25 one-time)
+5. Prepare app store metadata and screenshots
+6. Submit to App Store and Google Play
+
+## Calendar OAuth Production Readiness
+- Google Calendar: currently in test mode (max 100 users, shows "unverified app" warning)
+  → Fix: Google Cloud Console → OAuth consent screen → publish app / submit for verification
+- Microsoft Outlook: currently unverified (shows "needs admin approval" for org accounts)
+  → Fix: Microsoft Partner Center → publisher verification (adds verified checkmark)
+  → Enterprise org users (hospital accounts) will always need IT admin pre-approval regardless
 
 ## Architecture Note
 Single codebase serves three platforms:
